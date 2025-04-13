@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────
+# PROJECT: VMwareClassroomManager
+# DESCRIPTION: Ignore patterns for Python + PowerShell project
+# ─────────────────────────────────────────────
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+
+# === PyCharm / JetBrains ===
+.idea/
+*.iml
+
+# === VSCode ===
+.vscode/
+
+# === MacOS System Files ===
+.DS_Store
+
+# === Logs / Temp / Cache Files ===
+*.log
+*.tmp
+*.bak
+*.swp
+
+# === PowerShell Artifacts ===
+*.ps1~
+*.psm1~
+*.psd1~
+*.ps1xml
+
+# === Sensitive Files / Data Files ===
+GetCredentials.ps1
+AllUserLoginTimes.csv
+AllUserLoginTimes.ps1
+
+# === Optional: scripts that are destructive/test-only ===
+DeleteOphanFilesFromDatastore.ps1
+deleteNetwork.ps1
+deleteNetworks.ps1
+addNetwork.ps1
+addNetworks.ps1
+
+# === Explicitly track essential scripts ===
+!createStudentFolders.ps1
+!VmFunctions.psm1
