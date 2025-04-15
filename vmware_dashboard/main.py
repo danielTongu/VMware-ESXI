@@ -29,6 +29,7 @@ class VMwareESXiApp(ctk.CTk):
         # Sidebar for navigation.
         self.sidebar = ctk.CTkFrame(self, width=200)
         self.sidebar.pack(side="left", fill="y")
+
         ctk.CTkLabel(self.sidebar, text="Menu", font=("Segoe UI", 20)).pack(pady=20)
         ctk.CTkButton(self.sidebar, text="Dashboard", command=self.show_dashboard).pack(pady=10, padx=20)
         ctk.CTkButton(self.sidebar, text="Classes", command=self.show_classes).pack(pady=10, padx=20)

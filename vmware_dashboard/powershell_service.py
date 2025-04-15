@@ -25,6 +25,7 @@ def run_powershell_script(script_name: str, args: str = "") -> str:
     script_path = os.path.join(SCRIPT_DIR, script_name)
     script_abs = os.path.abspath(script_path)
     command = f'pwsh -File "{script_abs}" {args}'
+
     try:
         output = subprocess.check_output(command, shell=True, text=True)
         return output

@@ -13,9 +13,9 @@ Holds:
 """
 
 class ClassGroup:
-    def __init__(self, name: str, quarter: str = "", course: str = "",
-                 students: list = None, template: str = "", datastore: str = "",
-                 network_adapters: list = None):
+    def __init__(self, name: str, quarter: str = "", course: str = "", students: list = None,
+                 template: str = "", datastore: str = "", network_adapters: list = None):
+
         self.name = name
         self.quarter = quarter
         self.course = course

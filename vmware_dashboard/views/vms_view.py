@@ -54,20 +54,24 @@ class VMsView(ctk.CTkFrame):
     def toggle_vm(self, index: int):
         """Toggles the power state of a VM; simulate via local change, or call a script."""
         vm = self.vm_list[index]
+
         if vm.power_state == "PoweredOn":
             self._stop_vm(vm)
         else:
             self._start_vm(vm)
+
         self.refresh_vms()
 
     def power_on_all(self):
         for vm in self.vm_list:
             self._start_vm(vm)
+
         self.refresh_vms()
 
     def power_off_all(self):
         for vm in self.vm_list:
             self._stop_vm(vm)
+
         self.refresh_vms()
 
     def restart_all_vms(self):
@@ -77,6 +81,7 @@ class VMsView(ctk.CTkFrame):
         for vm in self.vm_list:
             self._stop_vm(vm)
             self._start_vm(vm)
+
         self.refresh_vms()
 
     def _start_vm(self, vm_obj: VMInfo):
