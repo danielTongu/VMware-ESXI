@@ -7,8 +7,8 @@ This is a simple persistent storage solution.
 
 import json
 import os
-from models.classgroup import ClassGroup
-from models.student import Student
+from vmware_dashboard.models.classgroup import ClassGroup
+from vmware_dashboard.models.student import Student
 
 # Define the file path for storage.
 STORAGE_FILE = os.path.join(os.path.dirname(__file__), "data.json")

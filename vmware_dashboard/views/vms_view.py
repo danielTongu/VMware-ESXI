@@ -12,7 +12,7 @@ In a production system, VM information would be retrieved with PowerCLI.
 """
 
 import customtkinter as ctk
-from ..models.vm_info import VMInfo
+from vmware_dashboard.models.vm_info import VMInfo
 from vmware_dashboard.powershell_service import run_powershell_script
 
 class VMsView(ctk.CTkFrame):

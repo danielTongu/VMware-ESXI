@@ -11,10 +11,10 @@ Creates the main window with a sidebar for navigation to:
 
 import customtkinter as ctk
 
-from .views.dashboard import Dashboard
-from .views.classes_view import ClassesView
-from .views.vms_view import VMsView
-from .views.logs_view import LogsView
+from vmware_dashboard.views.dashboard import Dashboard
+from vmware_dashboard.views.classes_view import ClassesView
+from vmware_dashboard.views.vms_view import VMsView
+from vmware_dashboard.views.logs_view import LogsView
 
 # Set appearance and theme.
 ctk.set_appearance_mode("light")       # Options: "light", "dark", "system"

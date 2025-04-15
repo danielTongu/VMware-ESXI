@@ -15,9 +15,9 @@ Duplicate class names are rejected.
 import customtkinter as ctk
 
 
-from ..models.classgroup import ClassGroup
-from ..utils.storage import load_classes, save_classes
-from ..components.detail_views import ClassEditDialog
+from vmware_dashboard.models.classgroup import ClassGroup
+from vmware_dashboard.utils.storage import load_classes, save_classes
+from vmware_dashboard.components.detail_views import ClassEditDialog
 
 
 class ClassesView(ctk.CTkFrame):
