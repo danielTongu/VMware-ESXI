@@ -12,7 +12,7 @@ All widgets are arranged in a responsive, scrollable layout.
 """
 
 import customtkinter as ctk
-from vmware_dashboard.powershell_service import run_powershell_script
+from ..powershell_service import run_powershell_script
 
 RESPONSIVE_THRESHOLD = 700  # Pixel width threshold for switching layout
 

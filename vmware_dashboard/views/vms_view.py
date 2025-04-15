@@ -12,8 +12,8 @@ In a production system, VM information would be retrieved with PowerCLI.
 """
 
 import customtkinter as ctk
-from models.vm_info import VMInfo
-from powershell_service import run_powershell_script
+from ..models.vm_info import VMInfo
+from vmware_dashboard.powershell_service import run_powershell_script
 
 class VMsView(ctk.CTkFrame):
     def __init__(self, master):

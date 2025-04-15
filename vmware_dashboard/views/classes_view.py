@@ -11,10 +11,13 @@ Allows:
 Duplicate class names are rejected.
 """
 
+
 import customtkinter as ctk
-from models.classgroup import ClassGroup
-from utils.storage import load_classes, save_classes
-from components.detail_views import ClassEditDialog
+
+
+from ..models.classgroup import ClassGroup
+from ..utils.storage import load_classes, save_classes
+from ..components.detail_views import ClassEditDialog
 
 
 class ClassesView(ctk.CTkFrame):
@@ -36,6 +39,8 @@ class ClassesView(ctk.CTkFrame):
         self.class_objects = load_classes() or []
         self.refresh_list()
 
+
+
     def refresh_list(self):
         """Clears and repopulates the class list as clickable buttons."""
         for widget in self.list_frame.winfo_children():
@@ -45,9 +50,13 @@ class ClassesView(ctk.CTkFrame):
                                 command=lambda i=idx: self.open_edit_class_dialog(i))
             btn.pack(fill="x", padx=10, pady=2)
 
+
+
     def open_add_class_dialog(self):
         """Opens the dialog for adding a new class."""
         ClassEditDialog(self, callback=self.add_class)
+
+
 
     def add_class(self, class_data: dict):
         """
@@ -74,10 +83,14 @@ class ClassesView(ctk.CTkFrame):
         self.class_objects.append(new_class)
         self.refresh_list()
 
+
+
     def open_edit_class_dialog(self, index: int):
         """Opens the dialog to edit an existing class."""
         selected = self.class_objects[index]
         ClassEditDialog(self, callback=self.update_class, class_object=selected)
+
+
 
     def update_class(self, class_data: dict):
         """
@@ -109,6 +122,8 @@ class ClassesView(ctk.CTkFrame):
         target.network_adapters = class_data['network_adapters']
         target.students = class_data['students']
         self.refresh_list()
+
+
 
     def save_data(self):
         """Saves current classes to disk."""
