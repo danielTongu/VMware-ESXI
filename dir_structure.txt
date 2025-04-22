@@ -1,0 +1,41 @@
+VMware-ESXI/
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── docs/
+│   └── UseCasesRD.pdf               # Your use‑case definitions
+├── ESXi_Scripts/                    # All your PowerCLI/PowerShell scripts
+│   ├── createStudentFolders.ps1
+│   ├── addNetwork.ps1
+│   ├── addNetworks.ps1
+│   ├── deleteNetwork.ps1
+│   ├── deleteNetworks.ps1
+│   ├── DeleteOphanFilesFromDatastore.ps1
+│   ├── ShowAllPoweredOnVMs.ps1
+│   ├── PowerOffClassVMs.ps1
+│   ├── VmFunctions.psm1
+│   └── …                            # any other supporting scripts/modules
+└── vmware_dashboard/                # Python GUI & logic
+    ├── main.py                      # Entry point; handles login → dashboard
+    ├── dashboard.py                 # Sidebar navigation & content swapping
+    ├── powershell_service.py        # Helper to call PowerShell scripts
+    ├── utils/
+    │   ├── __init__.py
+    │   ├── storage.py               # JSON load/save for real data
+    │   └── mock_data.py             # Mock providers for rapid prototyping
+    ├── models/
+    │   ├── __init__.py
+    │   ├── classgroup.py            # ClassGroup data model
+    │   ├── student.py               # Student data model
+    │   └── vm_info.py               # VMInfo data model
+    ├── views/
+    │   ├── __init__.py
+    │   ├── login_view.py            # CWU credential entry
+    │   ├── classes_view.py          # List/Add/Edit/Delete classes
+    │   ├── template_manager.py      # View/mock‐manage VM templates
+    │   ├── student_folders.py       # Mock student folder/VM listings
+    │   ├── vm_tasks.py              # Simulate VM power operations
+    │   └── logs_view.py             # Display logs or VM/IP info
+    └── components/
+        ├── __init__.py
+        └── detail_views.py          # Class/Student/VM detail & edit dialogs

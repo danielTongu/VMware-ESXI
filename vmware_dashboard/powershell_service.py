@@ -1,33 +1,31 @@
 """
 powershell_service.py
 ----------------------
-Provides a helper function to execute PowerShell scripts (PowerCLI) using PowerShell Core (pwsh).
-Adjust the SCRIPT_DIR variable to point to the folder containing your PowerShell scripts.
+Executes PowerShell scripts via pwsh, or returns mock output if USE_MOCK.
 """
 
 import subprocess
 import os
+from vmware_dashboard.utils.config import USE_MOCK
 
-# Path to the folder where PowerShell scripts reside.
-SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "ESXi_Scripts")
+# Folder where your .ps1 scripts live (adjust as needed).
+SCRIPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ESXi_Scripts"))
 
 def run_powershell_script(script_name: str, args: str = "") -> str:
     """
-    Executes a PowerShell script with the given arguments.
+    Runs a PowerShell script with the given args, or returns a mock message.
 
-    Args:
-        script_name (str): The script file name (relative to SCRIPT_DIR).
-        args (str, optional): Additional arguments to pass to the script.
-
-    Returns:
-        str: The output from the script, or an error message.
+    @param script_name: Filename of the .ps1 script in SCRIPT_DIR.
+    @param args:        Arguments string to pass to the script.
+    @return:            Script stdout or mock info.
     """
-    script_path = os.path.join(SCRIPT_DIR, script_name)
-    script_abs = os.path.abspath(script_path)
-    command = f'pwsh -File "{script_abs}" {args}'
+    if USE_MOCK:
+        return f"[MOCK] {script_name} {args}"
 
+    script_path = os.path.join(SCRIPT_DIR, script_name)
+    command = f'powershell -NoProfile -ExecutionPolicy Bypass -File "{script_path}" {args}'
     try:
         output = subprocess.check_output(command, shell=True, text=True)
         return output
     except subprocess.CalledProcessError as e:
-        return f"ERROR executing {script_abs}: {e.output}"
+        return f"ERROR executing {script_path}: {e.output}"
