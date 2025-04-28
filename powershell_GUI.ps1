@@ -118,7 +118,7 @@ $restartAllButton.Location = New-Object System.Drawing.Point(370, 700)
 $restartAllButton.Visible = $false
 $contentPanel.Controls.Add($restartAllButton)
 
-# Hardcoded sample data for visualization
+# Sample data initialization (moved here to run only once)
 function Initialize-SampleData {
     $sampleClass = $classTreeView.Nodes.Add("CS101")
     $sampleStudent = $sampleClass.Nodes.Add("John Doe")
@@ -129,7 +129,7 @@ function Initialize-SampleData {
     $sampleStudent.Nodes.AddRange(@("Windows VM", "Ubuntu VM"))
 }
 
-# Delete Dialog (Displays confirmation dialog for deleting a class)
+# Delete Dialog with confirmation message
 function Show-DeleteClassDialog {
     $deleteForm = New-Object System.Windows.Forms.Form
     $deleteForm.Text = "Delete Class"
@@ -147,28 +147,33 @@ function Show-DeleteClassDialog {
     $comboBox.Size = New-Object System.Drawing.Size(260, 30)
     $comboBox.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     
-	# Populate dropdown with the existing classes
     foreach ($node in $classTreeView.Nodes) {
         $comboBox.Items.Add($node.Text) | Out-Null
     }
     
     $deleteForm.Controls.Add($comboBox)
 
-	# Confirmation Button
     $okButton = New-Object System.Windows.Forms.Button
     $okButton.Text = "Delete"
     $okButton.Location = New-Object System.Drawing.Point(100, 80)
     $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $deleteForm.AcceptButton = $okButton
     $deleteForm.Controls.Add($okButton)
-	
-	# Confirmation Dialog
+    
     $result = $deleteForm.ShowDialog()
     
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        $selectedClass = $classTreeView.Nodes | Where-Object { $_.Text -eq $comboBox.Text }
+        $className = $comboBox.Text
+        $selectedClass = $classTreeView.Nodes | Where-Object { $_.Text -eq $className }
         if ($selectedClass) {
             $classTreeView.Nodes.Remove($selectedClass)
+            # Show confirmation message
+            [System.Windows.Forms.MessageBox]::Show(
+                "'$className' was deleted.", 
+                "Class Deleted", 
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
         }
     }
 }
@@ -181,16 +186,14 @@ function Hide-AllExtras {
     $basicLabel.Visible = $false
     $vmConfigLabel.Visible = $false
     $advancedLabel.Visible = $false
-	
-	# Hide VM Section
+    
     $refreshVMsButton.Visible = $false
     $powerOnAllButton.Visible = $false
     $powerOffAllButton.Visible = $false
     $restartAllButton.Visible = $false
 }
 
-
-# Function to update the content area
+# Function to update the content area (removed Initialize-SampleData call)
 function Set-Content {
     param ([string]$title)
     $contentLabel.Text = $title
@@ -200,17 +203,16 @@ function Set-Content {
         $classTreeView.Visible = $true
         $newClassButton.Visible = $true
         $deleteClassButton.Visible = $true
-        Initialize-SampleData
     }
     elseif ($title -eq "Virtual Machines") {
         $refreshVMsButton.Visible = $true
         $powerOnAllButton.Visible = $true
         $powerOffAllButton.Visible = $true
-        $restartAllButton.Visible = $true
+        $restartAllButton.visible = $true
     }
 }
 
-# New Clas
+# New Class Button Click Handler
 $newClassButton.Add_Click({
     $className = [Microsoft.VisualBasic.Interaction]::InputBox("Enter class name:", "New Class")
     if ($className) {
@@ -245,6 +247,9 @@ Add-MenuButton "Classes" 70 { Set-Content "Classes" }
 Add-MenuButton "Virtual Machines" 120 { Set-Content "Virtual Machines" }
 Add-MenuButton "Logs" 170 { Set-Content "Logs" }
 Add-MenuButton "Exit" 700 { $form.Close() }
+
+# Initialize sample data once when the form loads
+Initialize-SampleData
 
 # Run the form
 [System.Windows.Forms.Application]::Run($form)
