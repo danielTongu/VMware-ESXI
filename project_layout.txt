@@ -1,0 +1,27 @@
+VMware-ESXI/
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── docs/
+│   └── UseCasesRD.pdf               # Your use‑case definitions
+├── ESXi_Scripts/                    # All your PowerCLI/PowerShell scripts
+│   ├── createStudentFolders.ps1
+│   ├── addNetwork.ps1
+│   ├── addNetworks.ps1
+│   ├── deleteNetwork.ps1
+│   ├── deleteNetworks.ps1
+│   ├── DeleteOphanFilesFromDatastore.ps1
+│   ├── ShowAllPoweredOnVMs.ps1
+│   ├── PowerOffClassVMs.ps1
+│   ├── VmFunctions.psm1
+│   └── …                            # any other supporting scripts/modules
+├── VMwareDashboard/
+    ├─ Main.ps1
+    ├─ Modules/
+    │   └─ VMwareScripts.psm1
+    └─ Views/
+        ├─ DashboardView.ps1
+        ├─ ClassesView.ps1
+        ├─ VMsView.ps1
+        ├─ NetworksView.ps1
+        └─ LogsView.ps1
