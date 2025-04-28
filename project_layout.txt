@@ -1,24 +1,36 @@
 VMware-ESXI/
 ├── .gitignore
 ├── README.md
-├── requirements.txt
-├── docs/
-│   └── UseCasesRD.pdf               # Your use‑case definitions
-├── ESXi_Scripts/                    # All your PowerCLI/PowerShell scripts
+├── project_layout.txt
+│
+├── ESXi_Scripts/
 │   ├── createStudentFolders.ps1
-│   ├── addNetwork.ps1
-│   ├── addNetworks.ps1
-│   ├── deleteNetwork.ps1
-│   ├── deleteNetworks.ps1
-│   ├── DeleteOphanFilesFromDatastore.ps1
-│   ├── ShowAllPoweredOnVMs.ps1
-│   ├── PowerOffClassVMs.ps1
+│   ├── GetCredential.ps1
 │   ├── VmFunctions.psm1
-│   └── …                            # any other supporting scripts/modules
-├── VMwareDashboard/
+│   │
+│   └── GenericScripts/
+│       ├── AllUserLoginTimes.csv
+│       ├── addNetwork.ps1
+│       ├── addNetworks.ps1
+│       ├── deleteNetwork.ps1
+│       ├── deleteNetworks.ps1
+│       ├── DeleteOphanFilesFromDatastore.ps1
+│       ├── ShowAllPoweredOnVMs.ps1
+│       ├── RestartAllPoweredOnVMs.ps1
+│       ├── PowerOffAllVMs.ps1
+│       ├── PowerOffClassVMs.ps1
+│       ├── PowerOffSpecificClassVMs.ps1
+│       ├── PowerOnSpecificClassVMs.ps1
+│       ├── removeHosts.ps1
+│       └── Remove-CourseFolderVMs.ps1
+│
+└── VMwareDashboard/
     ├─ Main.ps1
+    ├─ Main.psm1
+    │
     ├─ Modules/
     │   └─ VMwareScripts.psm1
+    │
     └─ Views/
         ├─ DashboardView.ps1
         ├─ ClassesView.ps1
