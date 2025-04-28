@@ -30,10 +30,14 @@ __pycache__/
 *.psm1~
 *.psd1~
 
+# Ignore all ESXi backend scripts locally
+ESXi Scripts/
+ESXi_Scripts/
+
 # --- Sensitive / Local-only data (do NOT commit) ---
-ESXi_Scripts/GetCredential.ps1
-ESXi_Scripts/GenericScripts/AllUserLoginTimes.csv
-ESXi_Scripts/GenericScripts/AllUserLoginTimes.ps1
+#ESXi_Scripts/GetCredential.ps1
+#ESXi_Scripts/GenericScripts/AllUserLoginTimes.csv
+#ESXi_Scripts/GenericScripts/AllUserLoginTimes.ps1
 
 # --- Optional: destructive/test-only scripts ---
 # Uncomment if you prefer to keep them out of the main branch
