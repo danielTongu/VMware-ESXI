@@ -3,7 +3,7 @@ VMware-ESXI/
 ├── README.md
 ├── project_layout.txt
 │
-├── ESXi_Scripts/
+├── ESXi_Scripts/       # Existing backend scripts
 │   ├── createStudentFolders.ps1
 │   ├── GetCredential.ps1
 │   ├── VmFunctions.psm1
@@ -24,12 +24,12 @@ VMware-ESXI/
 │       ├── removeHosts.ps1
 │       └── Remove-CourseFolderVMs.ps1
 │
-└── VMwareDashboard/
-    ├─ Main.ps1
-    ├─ Main.psm1
+└── VMwareDashboard/    # The GUI project
+    ├─ Main.ps1     # Bootstrap script
+    ├─ Main.psm1     # Module exposing Start-VMwareDashboard
     │
     ├─ Modules/
-    │   └─ VMwareScripts.psm1
+    │   └─ VMwareScripts.psm1       # Wraps all ESXi_Scripts
     │
     └─ Views/
         ├─ DashboardView.ps1
