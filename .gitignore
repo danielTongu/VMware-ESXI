@@ -3,6 +3,18 @@
 # DESCRIPTION: Ignore patterns for Python + PowerShell project
 # ─────────────────────────────────────────────
 
+# Windows
+Thumbs.db
+Desktop.ini
+
+# PowerShell artifacts
+*.ps1xml
+*.psd1
+*.psm1
+
+# VSCode
+.vscode/
+
 # === Python ===
 __pycache__/
 *.py[cod]
