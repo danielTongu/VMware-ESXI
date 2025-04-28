@@ -37,10 +37,28 @@ VMwareDashboard/
 2. **Populate** your ESXi scripts (outside this folder):
    ```text
    VMware-ESXI/
-   └─ ESXi_Scripts/
-      ├─ createStudentFolders.ps1
-      └─ GenericScripts/
-         └─ …your existing scripts…
+   └── ESXi_Scripts/
+         ├── createStudentFolders.ps1
+         ├── GetCredential.ps1
+         ├── VmFunctions.psm1
+         │
+         └── GenericScripts/
+             ├── AllUserLoginTimes.csv
+             ├── addNetwork.ps1
+             ├── addNetworks.ps1
+             ├── deleteNetwork.ps1
+             ├── deleteNetworks.ps1
+             ├── DeleteOphanFilesFromDatastore.ps1
+             ├── ShowAllPoweredOnVMs.ps1
+             ├── RestartAllPoweredOnVMs.ps1
+             ├── PowerOffAllVMs.ps1
+             ├── PowerOffClassVMs.ps1
+             ├── PowerOffSpecificClassVMs.ps1
+             ├── PowerOnSpecificClassVMs.ps1
+             ├── removeHosts.ps1
+             ├── Remove-CourseFolderVMs.ps1
+             │
+             └── …your existing scripts…
    ```
 3. **Unblock** all scripts (Windows security):
    ```powershell
