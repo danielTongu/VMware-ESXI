@@ -31,7 +31,7 @@ VMwareDashboard/
 
 1. **Clone** this repository:
    ```powershell
-   git clone https://github.com/your-org/VMware-ESXI.git
+   git clone https://github.com/danielTongu/VMware-ESXI/tree/Daniel_guiprototype
    cd VMware-ESXI/VMwareDashboard
    ```
 2. **Populate** your ESXi scripts (outside this folder):
