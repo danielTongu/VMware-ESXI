@@ -2,18 +2,16 @@
 .SYNOPSIS
     Main UI shell for the VMware Dashboard.
 .DESCRIPTION
-    Implements a two-pane WinForms layout:
-    - Left: vertical navigation menu
-    - Right: dynamic content panel for views (Dashboard, Classes, Networks, VMs)
-    - Includes logout functionality that returns user to login screen
+    Uses a SplitContainer to separate the navigation (left) and content (right).
+    Navigation buttons load each view dynamically.
+    Includes logout functionality and optional login enforcement.
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # -------------------------------------------------------------------
-# Loads a view script dynamically into the content panel.
-# Looks for Show-View or Show-VMsView function in that script.
+# Dynamically load a view script and render it inside the content panel
 # -------------------------------------------------------------------
 function Load-ViewIntoPanel {
     param (
@@ -21,13 +19,13 @@ function Load-ViewIntoPanel {
         [System.Windows.Forms.Panel]$TargetPanel
     )
 
-    # Clear current UI elements from panel
+    # Clear previous controls from the panel
     $TargetPanel.Controls.Clear()
 
-    # Dot-source the target script
+    # Dot-source the view script
     . $ScriptPath
 
-    # Check and call correct function to render view
+    # Run known view entry point (Show-View or Show-VMsView)
     if (Get-Command Show-View -ErrorAction SilentlyContinue) {
         Show-View -ParentPanel $TargetPanel
     }
@@ -35,13 +33,15 @@ function Load-ViewIntoPanel {
         Show-VMsView -ContentPanel $TargetPanel
     }
     else {
-        [System.Windows.Forms.MessageBox]::Show("Invalid view script: no Show-View or Show-VMsView found.","Load Error")
+        [System.Windows.Forms.MessageBox]::Show(
+            "Invalid view script: no Show-View or Show-VMsView defined.",
+            "View Load Error"
+        )
     }
 }
 
 # -------------------------------------------------------------------
-# Wrapper for displaying the login dialog.
-# Returns $true if login succeeded, $false otherwise.
+# Wraps login logic using LoginView.ps1
 # -------------------------------------------------------------------
 function Show-Login {
     . "$PSScriptRoot\LoginView.ps1"
@@ -49,102 +49,105 @@ function Show-Login {
 }
 
 # -------------------------------------------------------------------
-# Builds and displays the main navigation shell.
-# Only invoked after successful login.
+# Creates and displays the main UI shell with navigation and content
 # -------------------------------------------------------------------
 function Show-MainShell {
-    # Create main window
+    # Create main application form
     $form = New-Object Windows.Forms.Form
-    $form.Text = "VMware ESXi Dashboard"
-    $form.Size = New-Object Drawing.Size(1000, 640)
-    $form.StartPosition = "CenterScreen"
+    $form.Text            = "VMware ESXi Dashboard"
+    $form.Size            = New-Object Drawing.Size(1100, 700)
+    $form.StartPosition   = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
-    $form.MaximizeBox = $false
+    $form.MaximizeBox     = $false
 
-    # Left navigation panel
-    $navPanel = New-Object Windows.Forms.Panel
-    $navPanel.Dock = 'Left'
-    $navPanel.Width = 180
-    $navPanel.BackColor = [Drawing.Color]::SteelBlue
-    $form.Controls.Add($navPanel)
+    # Setup split container layout
+    $split = New-Object Windows.Forms.SplitContainer
+    $split.Dock              = 'Fill'
+    $split.Orientation       = 'Vertical'
+    $split.SplitterDistance  = 200
+    $split.IsSplitterFixed   = $true
+    $form.Controls.Add($split)
 
-    # Right dynamic content panel
-    $contentPanel = New-Object Windows.Forms.Panel
-    $contentPanel.Dock = 'Fill'
-    $contentPanel.BackColor = [Drawing.Color]::WhiteSmoke
-    $form.Controls.Add($contentPanel)
+    # Style navigation panel (Panel1)
+    $split.Panel1.BackColor = [Drawing.Color]::SteelBlue
 
-    # Reusable button factory for nav buttons
+    # Style content area (Panel2)
+    $split.Panel2.BackColor = [Drawing.Color]::WhiteSmoke
+
+    # Helper to create a nav button
     function New-NavButton {
         param (
             [string]$text,
             [int]$top
         )
-
         $btn = New-Object Windows.Forms.Button
-        $btn.Text = $text
-        $btn.Size = New-Object Drawing.Size(150, 40)
-        $btn.Location = New-Object Drawing.Point(15, $top)
-        $btn.Font = New-Object Drawing.Font("Segoe UI", 10)
+        $btn.Text     = $text
+        $btn.Size     = New-Object Drawing.Size(160, 40)
+        $btn.Location = New-Object Drawing.Point(20, $top)
+        $btn.Font     = New-Object Drawing.Font("Segoe UI", 10)
         return $btn
     }
 
-    # Create all navigation buttons
-    $btnDashboard = New-NavButton "Dashboard" 30
-    $btnClass     = New-NavButton "Classes" 80
+    # Define all navigation buttons
+    $btnDashboard = New-NavButton "Dashboard"        30
+    $btnClass     = New-NavButton "Classes"          80
     $btnVMs       = New-NavButton "Virtual Machines" 130
-    $btnNetwork   = New-NavButton "Networks" 180
-    $btnLogout    = New-NavButton "Logout" 250
+    $btnNetwork   = New-NavButton "Networks"         180
+    $btnLogout    = New-NavButton "Logout"           250
     $btnLogout.BackColor = [Drawing.Color]::IndianRed
     $btnLogout.ForeColor = [Drawing.Color]::White
 
-    # Add buttons to nav panel
-    $navPanel.Controls.AddRange(@(
+    # Add buttons to the nav panel
+    $split.Panel1.Controls.AddRange(@(
         $btnDashboard, $btnClass, $btnVMs, $btnNetwork, $btnLogout
     ))
 
-    # Event: Load Dashboard
+    # Button click: Dashboard
     $btnDashboard.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $contentPanel
+        Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $split.Panel2
     })
 
-    # Event: Load Class Manager
+    # Button click: Class Manager
     $btnClass.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\ClassManagerView.ps1" $contentPanel
+        Load-ViewIntoPanel "$PSScriptRoot\ClassManagerView.ps1" $split.Panel2
     })
 
-    # Event: Load VMs view
+    # Button click: VM Manager
     $btnVMs.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\VMsView.ps1" $contentPanel
+        Load-ViewIntoPanel "$PSScriptRoot\VMsView.ps1" $split.Panel2
     })
 
-    # Event: Load Network Manager
+    # Button click: Network Manager
     $btnNetwork.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\NetworkManagerView.ps1" $contentPanel
+        Load-ViewIntoPanel "$PSScriptRoot\NetworkManagerView.ps1" $split.Panel2
     })
 
-    # Event: Logout and return to login screen
+    # Button click: Logout and restart MainView
     $btnLogout.Add_Click({
         $form.Close()
         Show-MainView
     })
 
-    # Load default view (Dashboard)
-    Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $contentPanel
+    # Load default view (Dashboard) on start
+    Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $split.Panel2
 
-    # Display window
+    # Show the form
     $form.Topmost = $true
     $form.Add_Shown({ $form.Activate() })
     $form.ShowDialog()
 }
 
 # -------------------------------------------------------------------
-# Entry Point: Show login first, then main UI if successful
+# Entry Point: show login (optional) then shell
 # -------------------------------------------------------------------
 function Show-MainView {
-    if (Show-Login) {
-        Show-MainShell
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Login cancelled. Exiting.","Authentication")
-    }
+    # For production:
+    # if (Show-Login) {
+    #     Show-MainShell
+    # } else {
+    #     [System.Windows.Forms.MessageBox]::Show("Login cancelled. Exiting.","Authentication")
+    # }
+
+    # For development:
+    Show-MainShell
 }

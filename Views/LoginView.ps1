@@ -23,69 +23,81 @@ function Show-LoginView {
     Add-Type -AssemblyName 'System.Windows.Forms'
     Add-Type -AssemblyName 'System.Drawing'
 
-    # Create the login form
+    # -----------------------------
+    # Create the login form window
+    # -----------------------------
     $form = New-Object System.Windows.Forms.Form
     $form.Text            = 'Please Sign In'
-    $form.Size            = [System.Drawing.Size]::new(400,300)
+    $form.Size            = [System.Drawing.Size]::new(400, 300)
     $form.StartPosition   = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox     = $false
     $form.MinimizeBox     = $false
     $form.Topmost         = $true
 
-    # Email label & textbox
+    # -----------------------------
+    # Email label and textbox
+    # -----------------------------
     $lblEmail = New-Object System.Windows.Forms.Label
     $lblEmail.Text     = 'Email:'
-    $lblEmail.Location = [System.Drawing.Point]::new(50,50)
+    $lblEmail.Location = [System.Drawing.Point]::new(50, 50)
     $lblEmail.AutoSize = $true
-    $lblEmail.Font     = [System.Drawing.Font]::new('Segoe UI',10)
+    $lblEmail.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($lblEmail)
 
     $txtEmail = New-Object System.Windows.Forms.TextBox
-    $txtEmail.Location = [System.Drawing.Point]::new(50,75)
+    $txtEmail.Location = [System.Drawing.Point]::new(50, 75)
     $txtEmail.Width    = 300
-    $txtEmail.Font     = [System.Drawing.Font]::new('Segoe UI',10)
+    $txtEmail.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($txtEmail)
 
-    # Password label & textbox
+    # -----------------------------
+    # Password label and textbox
+    # -----------------------------
     $lblPass = New-Object System.Windows.Forms.Label
     $lblPass.Text     = 'Password:'
-    $lblPass.Location = [System.Drawing.Point]::new(50,115)
+    $lblPass.Location = [System.Drawing.Point]::new(50, 115)
     $lblPass.AutoSize = $true
-    $lblPass.Font     = [System.Drawing.Font]::new('Segoe UI',10)
+    $lblPass.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($lblPass)
 
     $txtPass = New-Object System.Windows.Forms.TextBox
-    $txtPass.Location              = [System.Drawing.Point]::new(50,140)
+    $txtPass.Location              = [System.Drawing.Point]::new(50, 140)
     $txtPass.Width                 = 300
     $txtPass.UseSystemPasswordChar = $true
-    $txtPass.Font                  = [System.Drawing.Font]::new('Segoe UI',10)
+    $txtPass.Font                  = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($txtPass)
 
+    # -----------------------------
     # Sign In and Cancel buttons
+    # -----------------------------
     $btnOK = New-Object System.Windows.Forms.Button
     $btnOK.Text     = 'Sign In'
-    $btnOK.Size     = [System.Drawing.Size]::new(100,30)
-    $btnOK.Location = [System.Drawing.Point]::new(80,200)
-    $btnOK.Font     = [System.Drawing.Font]::new('Segoe UI',10)
+    $btnOK.Size     = [System.Drawing.Size]::new(100, 30)
+    $btnOK.Location = [System.Drawing.Point]::new(80, 200)
+    $btnOK.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($btnOK)
 
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text     = 'Cancel'
-    $btnCancel.Size     = [System.Drawing.Size]::new(100,30)
-    $btnCancel.Location = [System.Drawing.Point]::new(220,200)
-    $btnCancel.Font     = [System.Drawing.Font]::new('Segoe UI',10)
+    $btnCancel.Size     = [System.Drawing.Size]::new(100, 30)
+    $btnCancel.Location = [System.Drawing.Point]::new(220, 200)
+    $btnCancel.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
     $form.Controls.Add($btnCancel)
 
-    # Flag to track login success
+    # -----------------------------
+    # Result flag
+    # -----------------------------
     $script:Success = $false
 
-    # Sign In handler
+    # -----------------------------
+    # Sign In click handler
+    # -----------------------------
     $btnOK.Add_Click({
         $email    = $txtEmail.Text.Trim()
         $password = $txtPass.Text
 
-        # Basic hardcoded authentication
+        # Simple hardcoded validation
         if ($email -eq 'admin@example.com' -and $password -eq 'admin123') {
             $script:Success = $true
             $form.Close()
@@ -99,14 +111,15 @@ function Show-LoginView {
         }
     })
 
-    # Cancel button closes the form without login
+    # Cancel click handler
     $btnCancel.Add_Click({
         $form.Close()
     })
 
-    # Show the dialog modally
+    # -----------------------------
+    # Show the form modally
+    # -----------------------------
     $form.ShowDialog() | Out-Null
-
     return $script:Success
 }
 

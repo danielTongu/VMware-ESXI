@@ -4,48 +4,30 @@
 .DESCRIPTION
     On import, shows a login dialog (from Views/LoginView.ps1).
     If the user cancels or fails, the module throws and stops loading.
-    Otherwise, exports:
-      - ConnectTo-VMServer()
-      - VMwareNetwork (singleton)
-      - VMwareVM
-      - CourseManager
-      - SessionReporter
-      - OrphanCleaner
+    Otherwise, exposes key classes and the ConnectTo-VMServer() helper.
 #>
-
-
-
 
 # -------------------------------------------------------------------
 # 1) Force user to authenticate before anything else in this module
 # -------------------------------------------------------------------
 
-# Resolve absolute paths relative to the .psm1 file
+# Resolve paths
 $RootPath  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ViewsPath = Join-Path $RootPath 'Views'
 
-# Load the login dialog script
+# Load and display login view
 . (Join-Path $ViewsPath 'LoginView.ps1')
-
-# Prompt for login; exit if login fails or canceled
 if (-not (Show-LoginView)) {
     throw 'Authentication failed or cancelled. VMwareModels module will not load.'
 }
 
-
-
-
 # -------------------------------------------------------------------
-# 2) Connection helper
+# 2) ConnectTo-VMServer
 # -------------------------------------------------------------------
-
 function ConnectTo-VMServer {
     <#
     .SYNOPSIS
-        Connects to the vSphere server using stored credentials.
-    .DESCRIPTION
-        Reads a CLI‐XML credential file from Google Drive, then
-        calls Connect-VIServer. Throws on failure.
+        Connects to vSphere using stored credentials.
     #>
     [CmdletBinding()]
     param()
@@ -56,30 +38,16 @@ function ConnectTo-VMServer {
     }
 
     $creds = Import-CliXml -Path $credFile
-    Connect-VIServer -Server 'csvcsa.cs.cwu.edu' `
-                     -Credential $creds `
-                     -ErrorAction Stop | Out-Null
+    Connect-VIServer -Server 'csvcsa.cs.cwu.edu' -Credential $creds -ErrorAction Stop | Out-Null
 }
-
-
-
 
 # -------------------------------------------------------------------
 # 3) VMwareNetwork (Singleton)
 # -------------------------------------------------------------------
 class VMwareNetwork {
     [string]$VmHost
+    static hidden [VMwareNetwork]$_Instance
 
-    # Private static field to hold singleton instance
-    hidden static [VMwareNetwork]$_Instance
-
-    <#
-    .SYNOPSIS
-        Gets the singleton instance of VMwareNetwork.
-    .DESCRIPTION
-        If the instance is not initialized, creates one and stores it.
-        Always returns the same instance.
-    #>
     static [VMwareNetwork] GetInstance() {
         if (-not [VMwareNetwork]::_Instance) {
             [VMwareNetwork]::_Instance = [VMwareNetwork]::new()
@@ -87,34 +55,23 @@ class VMwareNetwork {
         return [VMwareNetwork]::_Instance
     }
 
-    <#
-    .SYNOPSIS
-        Constructor: ensures a vSphere connection and stores the host.
-    #>
     VMwareNetwork() {
         ConnectTo-VMServer
         $this.VmHost = (Get-VMHost).Name
     }
 
-    <#
-    .SYNOPSIS
-        Lists all port-groups available on the host.
-    .OUTPUTS
-        [string[]]
-    #>
     static [string[]] ListNetworks() {
         ConnectTo-VMServer
         try {
-            return Get-VirtualPortGroup -VMHost (Get-VMHost) |
-                   Select-Object -ExpandProperty Name
+            return Get-VirtualPortGroup -VMHost (Get-VMHost) | Select-Object -ExpandProperty Name
         } catch {
-            return @() # Return empty list on failure
+            return @()
         }
     }
 
     [void] AddNetwork([string]$NetworkName) {
-        New-VirtualSwitch    -Name $NetworkName -VMHost $this.VmHost            | Out-Null
-        New-VirtualPortGroup -Name $NetworkName -VirtualSwitch $NetworkName     | Out-Null
+        New-VirtualSwitch -Name $NetworkName -VMHost $this.VmHost | Out-Null
+        New-VirtualPortGroup -Name $NetworkName -VirtualSwitch $NetworkName | Out-Null
     }
 
     [void] RemoveNetwork([string]$NetworkName) {
@@ -141,14 +98,9 @@ class VMwareNetwork {
     }
 }
 
-
-
-
-
 # -------------------------------------------------------------------
 # 4) VMwareVM
 # -------------------------------------------------------------------
-
 class VMwareVM {
     [string]  $Name
     [string]  $ClassFolder
@@ -157,23 +109,12 @@ class VMwareVM {
     [string]  $Datastore
     [string[]]$Adapters
 
-    <#
-    .SYNOPSIS
-        Lists all powered-on VMs (Name + IP).
-    .OUTPUTS
-        PSCustomObject[]
-    #>
     static [PSCustomObject[]] ListPoweredOn() {
         ConnectTo-VMServer
-        $poweredOnVMs = Get-VM | Where-Object PowerState -eq 'PoweredOn' |
-                        Select-Object Name,@{n='IP';e={$_.Guest.IPAddress[0]}}
-        return $poweredOnVMs
+        return Get-VM | Where-Object PowerState -eq 'PoweredOn' |
+               Select-Object Name, @{n='IP'; e={$_.Guest.IPAddress[0]}}
     }
 
-    <#
-    .SYNOPSIS
-        Constructor: sets all identifying properties.
-    #>
     VMwareVM(
         [string]  $Name,
         [string]  $ClassFolder,
@@ -190,10 +131,6 @@ class VMwareVM {
         $this.Adapters    = $Adapters
     }
 
-    <#
-    .SYNOPSIS
-        Builds (creates & powers on) this VM under the student’s folder.
-    #>
     [void] Build() {
         ConnectTo-VMServer
         $folderName = "$($this.ClassFolder)_$($this.Student)"
@@ -202,54 +139,37 @@ class VMwareVM {
             $parent = Get-Folder -Name $this.ClassFolder
             $folder = New-Folder -Name $folderName -Location $parent
         }
-        New-VM -Name $this.Name `
-               -Datastore $this.Datastore `
-               -VMHost (Get-VMHost) `
-               -Template $this.Template `
+
+        New-VM -Name $this.Name -Datastore $this.Datastore `
+               -VMHost (Get-VMHost) -Template $this.Template `
                -Location $folder | Out-Null
 
         $i = 1
         foreach ($pg in $this.Adapters) {
             Get-VM -Name $this.Name -Location $folder |
-              Get-NetworkAdapter -Name "Network Adapter $i" |
-              Set-NetworkAdapter -PortGroup $pg -Confirm:$false | Out-Null
+                Get-NetworkAdapter -Name "Network Adapter $i" |
+                Set-NetworkAdapter -PortGroup $pg -Confirm:$false | Out-Null
             $i++
         }
 
         Start-VM -VM $this.Name -Confirm:$false | Out-Null
     }
 
-    <#
-    .SYNOPSIS
-        Powers off this VM.
-    #>
     [void] PowerOff() {
         ConnectTo-VMServer
         Stop-VM -VM $this.Name -Confirm:$false | Out-Null
     }
 
-    <#
-    .SYNOPSIS
-        Powers on this VM.
-    #>
     [void] PowerOn() {
         ConnectTo-VMServer
         Start-VM -VM $this.Name -Confirm:$false | Out-Null
     }
 
-    <#
-    .SYNOPSIS
-        Restarts this VM.
-    #>
     [void] Restart() {
         $this.PowerOff()
         Start-VM -VM $this.Name -Confirm:$false | Out-Null
     }
 
-    <#
-    .SYNOPSIS
-        Deletes this VM and its student folder.
-    #>
     [void] Remove() {
         ConnectTo-VMServer
         Stop-VM -VM $this.Name -Confirm:$false | Out-Null
@@ -259,30 +179,16 @@ class VMwareVM {
     }
 }
 
-
-
-
 # -------------------------------------------------------------------
 # 5) CourseManager
 # -------------------------------------------------------------------
-
 class CourseManager {
-    <#
-    .SYNOPSIS
-        Lists all class folders.
-    .OUTPUTS
-        String[]
-    #>
     static [string[]] ListClasses() {
         ConnectTo-VMServer
         $folders = Get-Folder -Name '*' | Select-Object -ExpandProperty Name
-        return $folders -ne $null ? $folders : @()
+        return if ($folders) { $folders } else { @() }
     }
 
-    <#
-    .SYNOPSIS
-        Builds VMs for every student in a course.
-    #>
     static [void] NewCourseVMs([PSCustomObject]$info) {
         foreach ($student in $info.students) {
             $vm = [VMwareVM]::new(
@@ -297,42 +203,35 @@ class CourseManager {
         }
     }
 
-    <#
-    .SYNOPSIS
-        Deletes all VMs & folders for a class.
-    #>
-    static [void] RemoveCourseVMs([string]$cf,[int]$s,[int]$e) {
-        for ($i=$s; $i -le $e; $i++) {
+    static [void] RemoveCourseVMs([string]$cf, [int]$s, [int]$e) {
+        for ($i = $s; $i -le $e; $i++) {
             $folder = "$cf`_S$i"
             Stop-VM -Location $folder -Confirm:$false | Out-Null
             Remove-VM -Location $folder -DeletePermanently -Confirm:$false | Out-Null
-            Remove-Folder -Folder (Get-Folder -Name $folder) `
-                          -Confirm:$false -DeletePermanently | Out-Null
+            Remove-Folder -Folder (Get-Folder -Name $folder) -Confirm:$false -DeletePermanently | Out-Null
         }
     }
 }
 
-
-
-
 # -------------------------------------------------------------------
 # 6) SessionReporter & OrphanCleaner
 # -------------------------------------------------------------------
-
 class SessionReporter {
     static [void] ExportLoginTimes([string]$path) {
         ConnectTo-VMServer
-        $mgr   = Get-View (Get-VIServer).ExtensionData.Content.SessionManager
-        $curr  = $mgr.CurrentSession.Key
-        $list  = $mgr.SessionList |
-                 Where-Object { $_.UserName -notmatch 'vpxd-extension' -and $_.Key -ne $curr } |
-                 ForEach-Object {
-                     [PSCustomObject]@{
-                         Username  = $_.UserName
-                         IpAddress = $_.IpAddress
-                         LoginTime = $_.LoginTime
-                     }
-                 }
+        $mgr  = Get-View (Get-VIServer).ExtensionData.Content.SessionManager
+        $curr = $mgr.CurrentSession.Key
+
+        $list = $mgr.SessionList |
+            Where-Object { $_.UserName -notmatch 'vpxd-extension' -and $_.Key -ne $curr } |
+            ForEach-Object {
+                [PSCustomObject]@{
+                    Username  = $_.UserName
+                    IpAddress = $_.IpAddress
+                    LoginTime = $_.LoginTime
+                }
+            }
+
         $list | Export-Csv -Path $path -NoTypeInformation
     }
 }
@@ -345,13 +244,9 @@ class OrphanCleaner {
     }
 }
 
-
-
-
 # -------------------------------------------------------------------
-# 7) Export
+# 7) Export Public Members
 # -------------------------------------------------------------------
-
 Export-ModuleMember `
-  -Function ConnectTo-VMServer `
-  -Class VMwareNetwork,VMwareVM,CourseManager,SessionReporter,OrphanCleaner
+    -Function ConnectTo-VMServer `
+    -Class VMwareNetwork, VMwareVM, CourseManager, SessionReporter, OrphanCleaner

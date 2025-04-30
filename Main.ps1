@@ -2,18 +2,26 @@
 .SYNOPSIS
     Entry point for the VMware ESXi Dashboard GUI.
 .DESCRIPTION
-    Launches login. On success, opens the main UI with navigation and view loading.
+    Launches login (if enabled) and loads the main split-view UI with navigation and content panel.
 #>
 
-# Load WinForms UI support
+# -------------------------------------------------------------------
+# Load required UI libraries
+# -------------------------------------------------------------------
 Add-Type -AssemblyName 'System.Windows.Forms'
 Add-Type -AssemblyName 'System.Drawing'
 
-# Import models and services
+# -------------------------------------------------------------------
+# Import backend models and services
+# -------------------------------------------------------------------
 Import-Module ".\VMwareModels.psm1" -ErrorAction Stop
 
-# Load the main view logic (navigation + view loader)
+# -------------------------------------------------------------------
+# Load the MainView.ps1 script that defines Show-MainView
+# -------------------------------------------------------------------
 . ".\Views\MainView.ps1"
 
-# Launch application
+# -------------------------------------------------------------------
+# Launch the UI (Main shell or login + shell)
+# -------------------------------------------------------------------
 Show-MainView
