@@ -1,14 +1,11 @@
 <#
-Views/LoginView.ps1
-
 .SYNOPSIS
     Displays a WinForms login dialog and returns whether authentication succeeded.
 
 .DESCRIPTION
-    Presents Email and Password fields along with Sign In / Cancel buttons.
-    Uses AuthModel.ValidateUser to check credentials.
-    If the user clicks Cancel or closes the window, returns $false.
-    On successful sign-in returns $true.
+    Presents Email and Password fields with Sign In / Cancel buttons.
+    Validates credentials directly within this script (no AuthModel required).
+    Returns $true on success, $false on failure or cancel.
 
 .EXAMPLE
     if (Show-LoginView) {
@@ -17,6 +14,7 @@ Views/LoginView.ps1
         "Login failed or cancelled" | Write-Host
     }
 #>
+
 function Show-LoginView {
     [CmdletBinding()]
     param()
@@ -25,9 +23,7 @@ function Show-LoginView {
     Add-Type -AssemblyName 'System.Windows.Forms'
     Add-Type -AssemblyName 'System.Drawing'
 
-    #------------------------------------------------------------------------
-    # 1) Create the form
-    #------------------------------------------------------------------------
+    # Create the login form
     $form = New-Object System.Windows.Forms.Form
     $form.Text            = 'Please Sign In'
     $form.Size            = [System.Drawing.Size]::new(400,300)
@@ -37,9 +33,7 @@ function Show-LoginView {
     $form.MinimizeBox     = $false
     $form.Topmost         = $true
 
-    #------------------------------------------------------------------------
-    # 2) Email label & textbox
-    #------------------------------------------------------------------------
+    # Email label & textbox
     $lblEmail = New-Object System.Windows.Forms.Label
     $lblEmail.Text     = 'Email:'
     $lblEmail.Location = [System.Drawing.Point]::new(50,50)
@@ -53,9 +47,7 @@ function Show-LoginView {
     $txtEmail.Font     = [System.Drawing.Font]::new('Segoe UI',10)
     $form.Controls.Add($txtEmail)
 
-    #------------------------------------------------------------------------
-    # 3) Password label & textbox
-    #------------------------------------------------------------------------
+    # Password label & textbox
     $lblPass = New-Object System.Windows.Forms.Label
     $lblPass.Text     = 'Password:'
     $lblPass.Location = [System.Drawing.Point]::new(50,115)
@@ -64,15 +56,13 @@ function Show-LoginView {
     $form.Controls.Add($lblPass)
 
     $txtPass = New-Object System.Windows.Forms.TextBox
-    $txtPass.Location               = [System.Drawing.Point]::new(50,140)
-    $txtPass.Width                  = 300
-    $txtPass.UseSystemPasswordChar  = $true
-    $txtPass.Font                   = [System.Drawing.Font]::new('Segoe UI',10)
+    $txtPass.Location              = [System.Drawing.Point]::new(50,140)
+    $txtPass.Width                 = 300
+    $txtPass.UseSystemPasswordChar = $true
+    $txtPass.Font                  = [System.Drawing.Font]::new('Segoe UI',10)
     $form.Controls.Add($txtPass)
 
-    #------------------------------------------------------------------------
-    # 4) Sign In and Cancel buttons
-    #------------------------------------------------------------------------
+    # Sign In and Cancel buttons
     $btnOK = New-Object System.Windows.Forms.Button
     $btnOK.Text     = 'Sign In'
     $btnOK.Size     = [System.Drawing.Size]::new(100,30)
@@ -87,20 +77,19 @@ function Show-LoginView {
     $btnCancel.Font     = [System.Drawing.Font]::new('Segoe UI',10)
     $form.Controls.Add($btnCancel)
 
-    #------------------------------------------------------------------------
-    # 5) Result flag
-    #------------------------------------------------------------------------
+    # Flag to track login success
     $script:Success = $false
 
-    #------------------------------------------------------------------------
-    # 6) Wire up button clicks
-    #------------------------------------------------------------------------
+    # Sign In handler
     $btnOK.Add_Click({
-        if ([AuthModel]::ValidateUser($txtEmail.Text, $txtPass.Text)) {
+        $email    = $txtEmail.Text.Trim()
+        $password = $txtPass.Text
+
+        # Basic hardcoded authentication
+        if ($email -eq 'admin@example.com' -and $password -eq 'admin123') {
             $script:Success = $true
             $form.Close()
-        }
-        else {
+        } else {
             [System.Windows.Forms.MessageBox]::Show(
                 'Invalid email or password.',
                 'Login Failed',
@@ -110,13 +99,12 @@ function Show-LoginView {
         }
     })
 
+    # Cancel button closes the form without login
     $btnCancel.Add_Click({
         $form.Close()
     })
 
-    #------------------------------------------------------------------------
-    # 7) Display dialog
-    #------------------------------------------------------------------------
+    # Show the dialog modally
     $form.ShowDialog() | Out-Null
 
     return $script:Success
