@@ -3,25 +3,16 @@
     Renders the "Classes" management screen in the WinForms GUI.
 
 .DESCRIPTION
-    Builds the Classes view by:
-      1. Clearing existing controls from the content panel.
-      2. Declaring all UI components (labels, textboxes, groupboxes, buttons).
-      3. Configuring each component’s properties (text, size, location, behavior).
-      4. Wiring event handlers for:
-         - Building all student resources
-         - Building resources for a single student
-         - Deleting all student resources
-         - Removing a specific VM
-         - Powering on/off a specific VM
-         - Restarting all VMs for the class
-      5. Adding all components to the panel in logical order.
+    - Left pane: scrollable ListBox of existing classes.
+    - Right pane: the same "Add/Edit Class" form you had, pre-filled when a class is selected.
+    - Buttons to invoke your build/delete/power scripts.
+    - Fully commented and PS 5.1–compatible (no named ctor parameters).
 
 .PARAMETER ContentPanel
-    The System.Windows.Forms.Panel into which the Classes controls are placed.
+    The WinForms Panel into which all controls are injected.
 
 .EXAMPLE
-    # Assuming $panel is a valid WinForms Panel:
-    Show-ClassesView -ContentPanel $panel
+    Show-ClassesView -ContentPanel $mySplitContainer.Panel2
 #>
 function Show-ClassesView {
     [CmdletBinding()]
@@ -31,241 +22,260 @@ function Show-ClassesView {
     )
 
     # -------------------------------------------------------------------------
-    # 0) Clear any existing controls
+    # 0) Clear existing controls & enable scrolling if needed
     # -------------------------------------------------------------------------
     $ContentPanel.Controls.Clear()
+    $ContentPanel.AutoScroll = $true
 
     # -------------------------------------------------------------------------
-    # 1) Declare UI components
+    # 1) Declare all UI components
     # -------------------------------------------------------------------------
     # Title
-    $labelTitle       = New-Object System.Windows.Forms.Label
+    $lblTitle      = New-Object System.Windows.Forms.Label
 
-    # Basic Info group and fields
-    $groupBasic       = New-Object System.Windows.Forms.GroupBox
-    $labelName        = New-Object System.Windows.Forms.Label
-    $textboxName      = New-Object System.Windows.Forms.TextBox
-    $labelQuarter     = New-Object System.Windows.Forms.Label
-    $textboxQuarter   = New-Object System.Windows.Forms.TextBox
-    $labelCourse      = New-Object System.Windows.Forms.Label
-    $textboxCourse    = New-Object System.Windows.Forms.TextBox
-    $labelStudents    = New-Object System.Windows.Forms.Label
-    $textboxStudents  = New-Object System.Windows.Forms.TextBox
+    # Left: class list
+    $panelList     = New-Object System.Windows.Forms.Panel
+    $lstClasses    = New-Object System.Windows.Forms.ListBox
+    $btnRefresh    = New-Object System.Windows.Forms.Button
 
-    # VM Configuration group and fields
-    $groupConfig      = New-Object System.Windows.Forms.GroupBox
-    $labelTemplate    = New-Object System.Windows.Forms.Label
-    $comboTemplate    = New-Object System.Windows.Forms.ComboBox
-    $labelDatastore   = New-Object System.Windows.Forms.Label
-    $comboDatastore   = New-Object System.Windows.Forms.ComboBox
-    $labelAdapters    = New-Object System.Windows.Forms.Label
-    $checkedAdapters  = New-Object System.Windows.Forms.CheckedListBox
+    # Right: Basic Info group + fields
+    $groupBasic      = New-Object System.Windows.Forms.GroupBox
+    $lblName         = New-Object System.Windows.Forms.Label
+    $txtName         = New-Object System.Windows.Forms.TextBox
+    $lblQuarter      = New-Object System.Windows.Forms.Label
+    $txtQuarter      = New-Object System.Windows.Forms.TextBox
+    $lblCourse       = New-Object System.Windows.Forms.Label
+    $txtCourse       = New-Object System.Windows.Forms.TextBox
+    $lblStudents     = New-Object System.Windows.Forms.Label
+    $txtStudents     = New-Object System.Windows.Forms.TextBox
 
-    # Advanced Operations group and fields
-    $groupAdvanced    = New-Object System.Windows.Forms.GroupBox
-    $labelSingle      = New-Object System.Windows.Forms.Label
-    $textboxSingle    = New-Object System.Windows.Forms.TextBox
-    $labelTargetVM    = New-Object System.Windows.Forms.Label
-    $textboxTargetVM  = New-Object System.Windows.Forms.TextBox
+    # Right: VM Config group + fields
+    $groupConfig     = New-Object System.Windows.Forms.GroupBox
+    $lblTemplate     = New-Object System.Windows.Forms.Label
+    $cmbTemplate     = New-Object System.Windows.Forms.ComboBox
+    $lblDatastore    = New-Object System.Windows.Forms.Label
+    $cmbDatastore    = New-Object System.Windows.Forms.ComboBox
+    $lblAdapters     = New-Object System.Windows.Forms.Label
+    $clbAdapters     = New-Object System.Windows.Forms.CheckedListBox
 
-    # Action buttons
-    $buttonBuildAll    = New-Object System.Windows.Forms.Button
-    $buttonBuildSingle = New-Object System.Windows.Forms.Button
-    $buttonDeleteAll   = New-Object System.Windows.Forms.Button
-    $buttonRemoveVM    = New-Object System.Windows.Forms.Button
-    $buttonPowerOnVM   = New-Object System.Windows.Forms.Button
-    $buttonPowerOffVM  = New-Object System.Windows.Forms.Button
-    $buttonRestartAll  = New-Object System.Windows.Forms.Button
+    # Right: Advanced Ops group + fields/buttons
+    $groupAdv        = New-Object System.Windows.Forms.GroupBox
+    $lblSingle       = New-Object System.Windows.Forms.Label
+    $txtSingle       = New-Object System.Windows.Forms.TextBox
+    $lblTargetVM     = New-Object System.Windows.Forms.Label
+    $txtTargetVM     = New-Object System.Windows.Forms.TextBox
+    $btnBuildAll     = New-Object System.Windows.Forms.Button
+    $btnBuildSingle  = New-Object System.Windows.Forms.Button
+    $btnDeleteAll    = New-Object System.Windows.Forms.Button
+    $btnRemoveVM     = New-Object System.Windows.Forms.Button
+    $btnPowerOnVM    = New-Object System.Windows.Forms.Button
+    $btnPowerOffVM   = New-Object System.Windows.Forms.Button
+    $btnRestartAll   = New-Object System.Windows.Forms.Button
 
     # -------------------------------------------------------------------------
-    # 2) Configure component properties
+    # 2) Configure properties (text, size, location, behaviors)
     # -------------------------------------------------------------------------
 
-    ## 2.1 Title label
-    $labelTitle.Text     = 'Classes'
-    $labelTitle.Font     = [System.Drawing.Font]::new('Segoe UI',20,[System.Drawing.FontStyle]::Bold)
-    $labelTitle.AutoSize = $true
-    $labelTitle.Location = [System.Drawing.Point]::new(30,20)
+    ## Title
+    $lblTitle.Text     = 'Classes Management'
+    $lblTitle.Font     = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = [System.Drawing.Point]::new(20,20)
 
-    ## 2.2 Basic Info group
+    ## Refresh
+    $btnRefresh.Text      = 'Refresh List'
+    $btnRefresh.Size      = [System.Drawing.Size]::new(100,30)
+    $btnRefresh.Location  = [System.Drawing.Point]::new(340,18)
+
+    ## Class list panel
+    $panelList.Location   = [System.Drawing.Point]::new(20,60)
+    $panelList.Size       = [System.Drawing.Size]::new(300,550)
+    $panelList.AutoScroll = $true
+    # ListBox
+    $lstClasses.Location  = [System.Drawing.Point]::new(0,0)
+    $lstClasses.Size      = [System.Drawing.Size]::new(280,530)
+    $lstClasses.ScrollAlwaysVisible = $true
+
+    ## Basic Info group
     $groupBasic.Text     = 'Basic Info'
-    $groupBasic.Size     = [System.Drawing.Size]::new(480,200)
-    $groupBasic.Location = [System.Drawing.Point]::new(30,60)
-
-    # Class Name
-    $labelName.Text      = 'Class Name:'
-    $labelName.AutoSize  = $true
-    $labelName.Location  = [System.Drawing.Point]::new(10,30)
-    $textboxName.Size    = [System.Drawing.Size]::new(340,22)
-    $textboxName.Location= [System.Drawing.Point]::new(120,26)
-
+    $groupBasic.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $groupBasic.Size     = [System.Drawing.Size]::new(600,200)
+    $groupBasic.Location = [System.Drawing.Point]::new(340,60)
+    # Name
+    $lblName.Text      = 'Class Name:'
+    $lblName.AutoSize  = $true
+    $lblName.Location  = [System.Drawing.Point]::new(10,30)
+    $txtName.Size      = [System.Drawing.Size]::new(400,22)
+    $txtName.Location  = [System.Drawing.Point]::new(120,28)
     # Quarter
-    $labelQuarter.Text     = 'Quarter:'
-    $labelQuarter.AutoSize = $true
-    $labelQuarter.Location = [System.Drawing.Point]::new(10,70)
-    $textboxQuarter.Size   = [System.Drawing.Size]::new(200,22)
-    $textboxQuarter.Location = [System.Drawing.Point]::new(120,66)
+    $lblQuarter.Text     = 'Quarter:'
+    $lblQuarter.AutoSize = $true
+    $lblQuarter.Location = [System.Drawing.Point]::new(10,70)
+    $txtQuarter.Size    = [System.Drawing.Size]::new(200,22)
+    $txtQuarter.Location= [System.Drawing.Point]::new(120,68)
+    # Course
+    $lblCourse.Text     = 'Course Code:'
+    $lblCourse.AutoSize = $true
+    $lblCourse.Location = [System.Drawing.Point]::new(10,110)
+    $txtCourse.Size     = [System.Drawing.Size]::new(200,22)
+    $txtCourse.Location = [System.Drawing.Point]::new(120,108)
+    # Students
+    $lblStudents.Text      = 'Students (one/line):'
+    $lblStudents.AutoSize  = $true
+    $lblStudents.Location  = [System.Drawing.Point]::new(10,150)
+    $txtStudents.Multiline   = $true
+    $txtStudents.ScrollBars  = 'Vertical'
+    $txtStudents.Size        = [System.Drawing.Size]::new(530,40)
+    $txtStudents.Location    = [System.Drawing.Point]::new(10,170)
 
-    # Course Code
-    $labelCourse.Text       = 'Course Code:'
-    $labelCourse.AutoSize   = $true
-    $labelCourse.Location   = [System.Drawing.Point]::new(10,110)
-    $textboxCourse.Size     = [System.Drawing.Size]::new(200,22)
-    $textboxCourse.Location = [System.Drawing.Point]::new(120,106)
-
-    # Students textbox
-    $labelStudents.Text      = 'Students (one per line):'
-    $labelStudents.AutoSize  = $true
-    $labelStudents.Location  = [System.Drawing.Point]::new(10,150)
-    $textboxStudents.Multiline  = $true
-    $textboxStudents.ScrollBars = 'Vertical'
-    $textboxStudents.Size      = [System.Drawing.Size]::new(450,80)
-    $textboxStudents.Location  = [System.Drawing.Point]::new(10,170)
-
-    ## 2.3 VM Configuration group
+    ## VM Config group
     $groupConfig.Text     = 'VM Configuration'
-    $groupConfig.Size     = [System.Drawing.Size]::new(480,200)
-    $groupConfig.Location = [System.Drawing.Point]::new(530,60)
+    $groupConfig.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $groupConfig.Size     = [System.Drawing.Size]::new(600,140)
+    $groupConfig.Location = [System.Drawing.Point]::new(340,270)
+    # Template
+    $lblTemplate.Text       = 'Template:'
+    $lblTemplate.AutoSize   = $true
+    $lblTemplate.Location   = [System.Drawing.Point]::new(10,30)
+    $cmbTemplate.DropDownStyle = 'DropDownList'
+    $cmbTemplate.Size          = [System.Drawing.Size]::new(200,22)
+    $cmbTemplate.Location      = [System.Drawing.Point]::new(120,28)
+    $cmbTemplate.Items.AddRange(@('Template A','Template B','Template C'))
+    # Datastore
+    $lblDatastore.Text      = 'Datastore:'
+    $lblDatastore.AutoSize  = $true
+    $lblDatastore.Location  = [System.Drawing.Point]::new(10,70)
+    $cmbDatastore.DropDownStyle = 'DropDownList'
+    $cmbDatastore.Size          = [System.Drawing.Size]::new(200,22)
+    $cmbDatastore.Location      = [System.Drawing.Point]::new(120,68)
+    $cmbDatastore.Items.AddRange(@('Datastore1','Datastore2','Datastore3'))
+    # Adapters
+    $lblAdapters.Text      = 'Adapters:'
+    $lblAdapters.AutoSize  = $true
+    $lblAdapters.Location  = [System.Drawing.Point]::new(10,110)
+    $clbAdapters.Size      = [System.Drawing.Size]::new(300,20)
+    $clbAdapters.Location  = [System.Drawing.Point]::new(120,108)
+    $clbAdapters.Items.AddRange(@('Instructor','NAT','Inside'))
 
-    # Template dropdown
-    $labelTemplate.Text       = 'VM Template:'
-    $labelTemplate.AutoSize   = $true
-    $labelTemplate.Location   = [System.Drawing.Point]::new(10,30)
-    $comboTemplate.DropDownStyle = 'DropDownList'
-    $comboTemplate.Location      = [System.Drawing.Point]::new(120,26)
-    $comboTemplate.Size          = [System.Drawing.Size]::new(200,22)
-    $comboTemplate.Items.AddRange(@('Template A','Template B','Template C'))
-
-    # Datastore dropdown
-    $labelDatastore.Text      = 'Datastore:'
-    $labelDatastore.AutoSize  = $true
-    $labelDatastore.Location  = [System.Drawing.Point]::new(10,70)
-    $comboDatastore.DropDownStyle = 'DropDownList'
-    $comboDatastore.Location      = [System.Drawing.Point]::new(120,66)
-    $comboDatastore.Size          = [System.Drawing.Size]::new(200,22)
-    $comboDatastore.Items.AddRange(@('Datastore1','Datastore2','Datastore3'))
-
-    # Network adapters
-    $labelAdapters.Text       = 'Adapters:'
-    $labelAdapters.AutoSize   = $true
-    $labelAdapters.Location   = [System.Drawing.Point]::new(10,110)
-    $checkedAdapters.Location = [System.Drawing.Point]::new(120,106)
-    $checkedAdapters.Size     = [System.Drawing.Size]::new(300,60)
-    $checkedAdapters.Items.AddRange(@('Instructor','NAT','Inside'))
-
-    ## 2.4 Advanced Operations group
-    $groupAdvanced.Text     = 'Advanced Operations'
-    $groupAdvanced.Size     = [System.Drawing.Size]::new(1020,140)
-    $groupAdvanced.Location = [System.Drawing.Point]::new(30,270)
-
+    ## Advanced Ops group
+    $groupAdv.Text     = 'Advanced Operations'
+    $groupAdv.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $groupAdv.Size     = [System.Drawing.Size]::new(600,100)
+    $groupAdv.Location = [System.Drawing.Point]::new(340,420)
     # Single student
-    $labelSingle.Text       = 'Single Student:'
-    $labelSingle.AutoSize   = $true
-    $labelSingle.Location   = [System.Drawing.Point]::new(10,30)
-    $textboxSingle.Size     = [System.Drawing.Size]::new(200,22)
-    $textboxSingle.Location = [System.Drawing.Point]::new(120,26)
-
+    $lblSingle.Text      = 'Single Student:'
+    $lblSingle.AutoSize  = $true
+    $lblSingle.Location  = [System.Drawing.Point]::new(10,30)
+    $txtSingle.Size      = [System.Drawing.Size]::new(200,22)
+    $txtSingle.Location  = [System.Drawing.Point]::new(120,28)
     # Target VM
-    $labelTargetVM.Text       = 'Target VM:'
-    $labelTargetVM.AutoSize   = $true
-    $labelTargetVM.Location   = [System.Drawing.Point]::new(350,30)
-    $textboxTargetVM.Size     = [System.Drawing.Size]::new(200,22)
-    $textboxTargetVM.Location = [System.Drawing.Point]::new(430,26)
+    $lblTargetVM.Text     = 'Target VM:'
+    $lblTargetVM.AutoSize = $true
+    $lblTargetVM.Location = [System.Drawing.Point]::new(350,30)
+    $txtTargetVM.Size     = [System.Drawing.Size]::new(200,22)
+    $txtTargetVM.Location = [System.Drawing.Point]::new(430,28)
 
-    ## 2.5 Action buttons
-    # Build All
-    $buttonBuildAll.Text      = 'Build All'
-    $buttonBuildAll.Size      = [System.Drawing.Size]::new(100,30)
-    $buttonBuildAll.Location  = [System.Drawing.Point]::new(10,70)
-
-    # Build Single
-    $buttonBuildSingle.Text   = 'Build Single'
-    $buttonBuildSingle.Size   = [System.Drawing.Size]::new(100,30)
-    $buttonBuildSingle.Location = [System.Drawing.Point]::new(120,70)
-
-    # Delete All
-    $buttonDeleteAll.Text     = 'Delete All'
-    $buttonDeleteAll.Size     = [System.Drawing.Size]::new(100,30)
-    $buttonDeleteAll.Location = [System.Drawing.Point]::new(230,70)
-
-    # Remove VM
-    $buttonRemoveVM.Text      = 'Remove VM'
-    $buttonRemoveVM.Size      = [System.Drawing.Size]::new(100,30)
-    $buttonRemoveVM.Location  = [System.Drawing.Point]::new(340,70)
-
-    # Power On VM
-    $buttonPowerOnVM.Text     = 'Power On VM'
-    $buttonPowerOnVM.Size     = [System.Drawing.Size]::new(100,30)
-    $buttonPowerOnVM.Location = [System.Drawing.Point]::new(450,70)
-
-    # Power Off VM
-    $buttonPowerOffVM.Text    = 'Power Off VM'
-    $buttonPowerOffVM.Size    = [System.Drawing.Size]::new(100,30)
-    $buttonPowerOffVM.Location= [System.Drawing.Point]::new(560,70)
-
-    # Restart All
-    $buttonRestartAll.Text    = 'Restart All'
-    $buttonRestartAll.Size    = [System.Drawing.Size]::new(100,30)
-    $buttonRestartAll.Location= [System.Drawing.Point]::new(670,70)
+    # Action buttons row
+    $actions = @(
+      @{Btn=$btnBuildAll;    Text='Build All';     X=10},
+      @{Btn=$btnBuildSingle; Text='Build Single';  X=120},
+      @{Btn=$btnDeleteAll;   Text='Delete All';    X=230},
+      @{Btn=$btnRemoveVM;    Text='Remove VM';     X=340},
+      @{Btn=$btnPowerOnVM;   Text='Power On VM';   X=450},
+      @{Btn=$btnPowerOffVM;  Text='Power Off VM';  X=560},
+      @{Btn=$btnRestartAll;  Text='Restart All';   X=670}
+    )
+    foreach ($spec in $actions) {
+        $b = $spec.Btn
+        $b.Text     = $spec.Text
+        $b.Size     = [System.Drawing.Size]::new(100,30)
+        $b.Location = [System.Drawing.Point]::new($spec.X,60)
+    }
 
     # -------------------------------------------------------------------------
     # 3) Wire event handlers
     # -------------------------------------------------------------------------
-    $buttonBuildAll.Add_Click({
-        On-BuildAllClassClick $textboxName $comboTemplate $comboDatastore $checkedAdapters
-    })
-    $buttonBuildSingle.Add_Click({
-        On-BuildSingleClassClick $textboxName $textboxSingle $comboTemplate $comboDatastore $checkedAdapters
-    })
-    $buttonDeleteAll.Add_Click({
-        On-DeleteAllClassClick $textboxName
-    })
-    $buttonRemoveVM.Add_Click({
-        On-RemoveVMClick $textboxName $textboxTargetVM
-    })
-    $buttonPowerOnVM.Add_Click({
-        On-PowerOnClassVMClick $textboxName $textboxTargetVM
-    })
-    $buttonPowerOffVM.Add_Click({
-        On-PowerOffClassVMClick $textboxName $textboxTargetVM
-    })
-    $buttonRestartAll.Add_Click({
-        On-RestartClassVMsClick $textboxName
+    # Refresh list of classes
+    $btnRefresh.Add_Click({
+        $lstClasses.Items.Clear()
+        $raw = Invoke-Script -ScriptName 'ListClasses.ps1' -Args '' -ErrorAction SilentlyContinue
+        foreach ($line in $raw -split "`n" | Where-Object{ $_.Trim() }) {
+            $lstClasses.Items.Add($line.Split(',')[0]) | Out-Null
+        }
     })
 
-    # -------------------------------------------------------------------------
-    # 4) Add components to the panel
-    # -------------------------------------------------------------------------
-    # Title
-    $ContentPanel.Controls.Add($labelTitle)
+    # When a class is selected, load its details into the right-hand form
+    $lstClasses.Add_SelectedIndexChanged({
+        $sel = $lstClasses.SelectedItem
+        if ($sel) {
+            # fetch full info: Name,Quarter,Course
+            $info = Invoke-Script -ScriptName 'GetClassInfo.ps1' -Args "-Name '$sel'" -ErrorAction SilentlyContinue
+            $parts = $info.Split(',')
+            $txtName.Text    = $parts[0]
+            $txtQuarter.Text = $parts[1]
+            $txtCourse.Text  = $parts[2]
 
-    # Basic Info group
+            # fetch student list
+            $stuRaw = Invoke-Script -ScriptName 'GetClassStudents.ps1' -Args "-Name '$sel'"
+            $txtStudents.Text = ($stuRaw -split "`n") -join [Environment]::NewLine
+
+            # fetch config
+            $cfg = Invoke-Script -ScriptName 'GetClassConfig.ps1' -Args "-Name '$sel'"
+            $cfgParts = $cfg.Split(',')
+            $cmbTemplate.SelectedItem  = $cfgParts[0]
+            $cmbDatastore.SelectedItem = $cfgParts[1]
+            $clbAdapters.Items | ForEach-Object { $clbAdapters.SetItemChecked($_, $false) }
+            foreach ($ad in $cfgParts[2].Split(';')) {
+                $idx = $clbAdapters.Items.IndexOf($ad)
+                if ($idx -ge 0) { $clbAdapters.SetItemChecked($idx,$true) }
+            }
+        }
+    })
+
+    # Hook up your Build/Delete/Power button script-caller functions below:
+    $btnBuildAll.Add_Click({ On-BuildAllClassClick    $txtName $cmbTemplate $cmbDatastore $clbAdapters })
+    $btnBuildSingle.Add_Click({ On-BuildSingleClassClick $txtName $txtSingle $cmbTemplate $cmbDatastore $clbAdapters })
+    $btnDeleteAll.Add_Click({ On-DeleteAllClassClick   $txtName })
+    $btnRemoveVM.Add_Click({ On-RemoveVMClick          $txtName $txtTargetVM })
+    $btnPowerOnVM.Add_Click({ On-PowerOnClassVMClick   $txtName $txtTargetVM })
+    $btnPowerOffVM.Add_Click({ On-PowerOffClassVMClick  $txtName $txtTargetVM })
+    $btnRestartAll.Add_Click({ On-RestartClassVMsClick  $txtName })
+
+    # -------------------------------------------------------------------------
+    # 4) Layout: assemble everything
+    # -------------------------------------------------------------------------
+    $ContentPanel.Controls.Add($lblTitle)
+    $ContentPanel.Controls.Add($btnRefresh)
+
+    $panelList.Controls.Add($lstClasses)
+    $ContentPanel.Controls.Add($panelList)
+
     $groupBasic.Controls.AddRange(@(
-        $labelName, $textboxName,
-        $labelQuarter, $textboxQuarter,
-        $labelCourse, $textboxCourse,
-        $labelStudents, $textboxStudents
+        $lblName, $txtName,
+        $lblQuarter, $txtQuarter,
+        $lblCourse, $txtCourse,
+        $lblStudents, $txtStudents
     ))
     $ContentPanel.Controls.Add($groupBasic)
 
-    # VM Configuration group
     $groupConfig.Controls.AddRange(@(
-        $labelTemplate, $comboTemplate,
-        $labelDatastore, $comboDatastore,
-        $labelAdapters, $checkedAdapters
+        $lblTemplate, $cmbTemplate,
+        $lblDatastore, $cmbDatastore,
+        $lblAdapters, $clbAdapters
     ))
     $ContentPanel.Controls.Add($groupConfig)
 
-    # Advanced Operations group
-    $groupAdvanced.Controls.AddRange(@(
-        $labelSingle, $textboxSingle,
-        $labelTargetVM, $textboxTargetVM,
-        $buttonBuildAll, $buttonBuildSingle,
-        $buttonDeleteAll, $buttonRemoveVM,
-        $buttonPowerOnVM, $buttonPowerOffVM,
-        $buttonRestartAll
+    $groupAdv.Controls.AddRange(@(
+        $lblSingle, $txtSingle,
+        $lblTargetVM, $txtTargetVM
     ))
-    $ContentPanel.Controls.Add($groupAdvanced)
+    foreach ($spec in $actions) { $groupAdv.Controls.Add($spec.Btn) }
+    $ContentPanel.Controls.Add($groupAdv)
+
+    # -------------------------------------------------------------------------
+    # 5) Initial load
+    # -------------------------------------------------------------------------
+    $btnRefresh.PerformClick()
 }
 
 Export-ModuleMember -Function Show-ClassesView

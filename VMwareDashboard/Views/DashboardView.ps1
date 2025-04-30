@@ -1,12 +1,14 @@
 <#
 .SYNOPSIS
-    Renders the Dashboard “at-a-glance” overview screen.
+    Renders the Dashboard “at-a-glance” overview screen with a scrollable layout.
 
 .DESCRIPTION
     Shows summary panels for Classes, Networks, and VMs:
       - Total counts
       - Lists of items
-    Provides a single “Refresh” button to reload all sections.
+    Uses a FlowLayoutPanel inside a scrollable container so that if the window is
+    resized smaller, scrollbars appear.  Organizes the three summary panels
+    side-by-side.
 
 .PARAMETER ContentPanel
     The WinForms Panel into which dashboard controls are injected.
@@ -19,142 +21,121 @@ function Show-DashboardView {
     )
 
     # -------------------------------------------------------------------------
-    # 0) Clear existing controls
+    # 0) Clear existing controls & enable scrolling
     # -------------------------------------------------------------------------
     $ContentPanel.Controls.Clear()
+    $ContentPanel.AutoScroll = $true
 
     # -------------------------------------------------------------------------
     # 1) Declare UI components
     # -------------------------------------------------------------------------
-    # Title and refresh
-    $labelTitle           = New-Object System.Windows.Forms.Label
-    $buttonRefresh        = New-Object System.Windows.Forms.Button
+    $labelTitle        = New-Object System.Windows.Forms.Label
+    $buttonRefresh     = New-Object System.Windows.Forms.Button
+    $flowPanel         = New-Object System.Windows.Forms.FlowLayoutPanel
 
-    # Classes overview group
-    $groupClasses         = New-Object System.Windows.Forms.GroupBox
-    $labelClassCount      = New-Object System.Windows.Forms.Label
-    $listClasses          = New-Object System.Windows.Forms.ListBox
+    # Summary groups
+    $groupClasses      = New-Object System.Windows.Forms.GroupBox
+    $labelClassCount   = New-Object System.Windows.Forms.Label
+    $listClasses       = New-Object System.Windows.Forms.ListBox
 
-    # Networks overview group
-    $groupNetworks        = New-Object System.Windows.Forms.GroupBox
-    $labelNetworkCount    = New-Object System.Windows.Forms.Label
-    $listNetworks         = New-Object System.Windows.Forms.ListBox
+    $groupNetworks     = New-Object System.Windows.Forms.GroupBox
+    $labelNetworkCount = New-Object System.Windows.Forms.Label
+    $listNetworks      = New-Object System.Windows.Forms.ListBox
 
-    # VMs overview group
-    $groupVMs             = New-Object System.Windows.Forms.GroupBox
-    $labelVMCount         = New-Object System.Windows.Forms.Label
-    $listVMs              = New-Object System.Windows.Forms.ListBox
+    $groupVMs          = New-Object System.Windows.Forms.GroupBox
+    $labelVMCount      = New-Object System.Windows.Forms.Label
+    $listVMs           = New-Object System.Windows.Forms.ListBox
 
     # -------------------------------------------------------------------------
     # 2) Configure component properties
     # -------------------------------------------------------------------------
 
-    ## 2.1 Title label
+    ## Title
     $labelTitle.Text     = 'Dashboard Overview'
     $labelTitle.Font     = [System.Drawing.Font]::new('Segoe UI',24,[System.Drawing.FontStyle]::Bold)
     $labelTitle.AutoSize = $true
-    $labelTitle.Location = [System.Drawing.Point]::new(30, 20)
+    $labelTitle.Location = [System.Drawing.Point]::new(20,20)
 
-    ## 2.2 Refresh button
+    ## Refresh button
     $buttonRefresh.Text     = 'Refresh'
     $buttonRefresh.Size     = [System.Drawing.Size]::new(100,30)
-    $buttonRefresh.Location = [System.Drawing.Point]::new(360, 25)
+    $buttonRefresh.Location = [System.Drawing.Point]::new(360,25)
 
-    ## 2.3 Classes group
+    ## FlowLayoutPanel to hold the three group boxes
+    $flowPanel.Location       = [System.Drawing.Point]::new(20,80)
+    $flowPanel.Size           = [System.Drawing.Size]::new(960,260)
+    $flowPanel.AutoSize       = $false
+    $flowPanel.WrapContents   = $false
+    $flowPanel.AutoScroll     = $false
+    $flowPanel.FlowDirection  = 'LeftToRight'
+
+    ## Classes group
     $groupClasses.Text     = 'Classes'
     $groupClasses.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $groupClasses.Size     = [System.Drawing.Size]::new(300,250)
-    $groupClasses.Location = [System.Drawing.Point]::new(30, 80)
+    $groupClasses.Size     = [System.Drawing.Size]::new(300,240)
     # Count label
     $labelClassCount.AutoSize = $true
     $labelClassCount.Location = [System.Drawing.Point]::new(10,30)
-    # List of classes
+    # List
     $listClasses.Location   = [System.Drawing.Point]::new(10,60)
-    $listClasses.Size       = [System.Drawing.Size]::new(280,170)
+    $listClasses.Size       = [System.Drawing.Size]::new(280,160)
 
-    ## 2.4 Networks group
+    ## Networks group
     $groupNetworks.Text     = 'Networks'
     $groupNetworks.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $groupNetworks.Size     = [System.Drawing.Size]::new(300,250)
-    $groupNetworks.Location = [System.Drawing.Point]::new(350, 80)
-    # Count label
-    $labelNetworkCount.AutoSize   = $true
-    $labelNetworkCount.Location   = [System.Drawing.Point]::new(10,30)
-    # List of networks
-    $listNetworks.Location        = [System.Drawing.Point]::new(10,60)
-    $listNetworks.Size            = [System.Drawing.Size]::new(280,170)
+    $groupNetworks.Size     = [System.Drawing.Size]::new(300,240)
+    $labelNetworkCount.AutoSize = $true
+    $labelNetworkCount.Location = [System.Drawing.Point]::new(10,30)
+    $listNetworks.Location      = [System.Drawing.Point]::new(10,60)
+    $listNetworks.Size          = [System.Drawing.Size]::new(280,160)
 
-    ## 2.5 VMs group
+    ## VMs group
     $groupVMs.Text        = 'Powered-On VMs'
     $groupVMs.Font        = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $groupVMs.Size        = [System.Drawing.Size]::new(300,250)
-    $groupVMs.Location    = [System.Drawing.Point]::new(670, 80)
-    # Count label
+    $groupVMs.Size        = [System.Drawing.Size]::new(300,240)
     $labelVMCount.AutoSize      = $true
     $labelVMCount.Location      = [System.Drawing.Point]::new(10,30)
-    # List of VMs
     $listVMs.Location           = [System.Drawing.Point]::new(10,60)
-    $listVMs.Size               = [System.Drawing.Size]::new(280,170)
+    $listVMs.Size               = [System.Drawing.Size]::new(280,160)
 
     # -------------------------------------------------------------------------
     # 3) Wire event handlers
     # -------------------------------------------------------------------------
     $buttonRefresh.Add_Click({
         # Classes
-        try {
-            $rawClasses = Invoke-Script -ScriptName 'ListClasses.ps1' -Args ''
-            $classes    = $rawClasses -split "`n" | Where-Object { $_.Trim() }
-        } catch {
-            $classes    = @()
-        }
+        $classes = (Invoke-Script -ScriptName 'ListClasses.ps1' -Args '' -ErrorAction SilentlyContinue) -split "`n" |?{$_}
         $labelClassCount.Text = "$($classes.Count) classes"
-        $listClasses.Items.Clear()
-        $listClasses.Items.AddRange($classes)
+        $listClasses.Items.Clear(); $listClasses.Items.AddRange($classes)
 
         # Networks
-        try {
-            $rawNets    = Invoke-Script -ScriptName 'ListNetworks.ps1' -Args ''
-            $networks   = $rawNets -split "`n" | Where-Object { $_.Trim() }
-        } catch {
-            $networks   = @()
-        }
-        $labelNetworkCount.Text = "$($networks.Count) networks"
-        $listNetworks.Items.Clear()
-        $listNetworks.Items.AddRange($networks)
+        $nets = (Invoke-Script -ScriptName 'ListNetworks.ps1' -Args '' -ErrorAction SilentlyContinue) -split "`n" |?{$_}
+        $labelNetworkCount.Text = "$($nets.Count) networks"
+        $listNetworks.Items.Clear(); $listNetworks.Items.AddRange($nets)
 
         # VMs
-        try {
-            $rawVMs     = Invoke-ShowAllPoweredOnVMs -Args ''
-            $vms        = $rawVMs -split "`n" | Where-Object { $_.Trim() }
-        } catch {
-            $vms        = @()
-        }
+        $vms = (Invoke-ShowAllPoweredOnVMs -Args '' -ErrorAction SilentlyContinue) -split "`n" |?{$_}
         $labelVMCount.Text = "$($vms.Count) powered-on VMs"
-        $listVMs.Items.Clear()
-        $listVMs.Items.AddRange($vms)
+        $listVMs.Items.Clear(); $listVMs.Items.AddRange($vms)
     })
 
     # -------------------------------------------------------------------------
-    # 4) Add components to the panel
+    # 4) Add controls to their containers
     # -------------------------------------------------------------------------
+    $groupClasses.Controls.AddRange(@($labelClassCount, $listClasses))
+    $groupNetworks.Controls.AddRange(@($labelNetworkCount, $listNetworks))
+    $groupVMs.Controls.AddRange(@($labelVMCount, $listVMs))
+
+    $flowPanel.Controls.AddRange(@($groupClasses, $groupNetworks, $groupVMs))
+
     $ContentPanel.Controls.AddRange(@(
         $labelTitle,
         $buttonRefresh,
-        # Classes
-        $groupClasses,
-        $labelClassCount,
-        $listClasses,
-        # Networks
-        $groupNetworks,
-        $labelNetworkCount,
-        $listNetworks,
-        # VMs
-        $groupVMs,
-        $labelVMCount,
-        $listVMs
+        $flowPanel
     ))
 
-    # Trigger an initial load
+    # -------------------------------------------------------------------------
+    # 5) Initial load
+    # -------------------------------------------------------------------------
     $buttonRefresh.PerformClick()
 }
 
