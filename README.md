@@ -1,121 +1,114 @@
 # VMware ESXi Dashboard
 
-A modular PowerShell WinForms GUI for managing VMware ESXi resources in a classroom environment.  
-It wraps your existing ESXi scripts (class/VM/network operations, power actions, reporting) in an MVC-style interface.
+A modular **PowerShell WinForms GUI** for managing VMware ESXi resources in a classroom or training lab.  
+It wraps your existing ESXi automation scripts (VMs, classes, networks, reports) into a unified, interactive interface with login and dynamic navigation.
 
 ---
 
-## Repository Structure
+## 🗂️ Project Structure
 
 ```text
-VMwareDashboard/
-├── Main.ps1
-├── Main.psm1
-├── Modules/
-│   └── VMwareScripts.psm1
-└── Views/
-    ├── DashboardView.ps1
-    ├── ClassesView.ps1
-    ├── VMsView.ps1
-    ├── NetworksView.ps1
-    └── LogsView.ps1
+VMware-ESXI/
+├── Main.ps1                  # Entry point: shows login, then main UI
+├── VMwareModels.psm1         # Core classes, helpers (VMwareVM, CourseManager, etc.)
+├── Views/
+│   ├── MainView.ps1          # UI shell: navigation, content panel, logout
+│   ├── LoginView.ps1         # Login dialog
+│   ├── DashboardView.ps1     # Welcome screen + host/VM/network stats
+│   ├── ClassManagerView.ps1  # Create/delete class VMs
+│   ├── NetworkManagerView.ps1# Add/remove port groups (bulk + single)
+│   ├── VMsView.ps1           # Grid: list, filter, power on/off, remove VMs
 ```
-
-> **Note:**  
-> The `ESXi_Scripts/` folder (with all your backend `.ps1`/`.psm1` files) lives alongside this project but is **ignored** by Git.  
-> Copy your real scripts into `ESXi_Scripts/` before running the GUI.
 
 ---
 
-## Setup
+## ⚙️ Setup Instructions
 
-1. **Clone** this repository:
-   ```powershell
-   git clone https://github.com/danielTongu/VMware-ESXI/tree/Daniel_guiprototype
-   cd VMware-ESXI/VMwareDashboard
-   ```
-2. **Populate** your ESXi scripts (outside this folder):
-   ```text
-   VMware-ESXI/
-   └── ESXi_Scripts/
-         ├── createStudentFolders.ps1
-         ├── GetCredential.ps1
-         ├── VmFunctions.psm1
-         │
-         └── GenericScripts/
-             ├── AllUserLoginTimes.csv
-             ├── addNetwork.ps1
-             ├── addNetworks.ps1
-             ├── deleteNetwork.ps1
-             ├── deleteNetworks.ps1
-             ├── DeleteOphanFilesFromDatastore.ps1
-             ├── ShowAllPoweredOnVMs.ps1
-             ├── RestartAllPoweredOnVMs.ps1
-             ├── PowerOffAllVMs.ps1
-             ├── PowerOffClassVMs.ps1
-             ├── PowerOffSpecificClassVMs.ps1
-             ├── PowerOnSpecificClassVMs.ps1
-             ├── removeHosts.ps1
-             ├── Remove-CourseFolderVMs.ps1
-             │
-             └── …your existing scripts…
-   ```
-3. **Unblock** all scripts (Windows security):
-   ```powershell
-   Get-ChildItem -Recurse ../ESXi_Scripts | Unblock-File
-   Get-ChildItem -Recurse . | Unblock-File
-   ```
-4. **(Optional)** install Pester for testing:
-   ```powershell
-   Install-Module Pester -Scope CurrentUser
-   ```
+### 1. Clone the Repository
+
+```powershell
+git clone https://github.com/danielTongu/VMware-ESXI.git
+cd VMware-ESXI
+```
+
+### 2. Unblock Scripts (Windows SmartScreen)
+
+```powershell
+Get-ChildItem -Recurse . | Unblock-File
+```
+
+### 3. (Optional) Install Pester for Unit Testing
+
+```powershell
+Install-Module Pester -Scope CurrentUser -Force
+```
 
 ---
 
-## Usage
+## 🚀 Usage
 
-### CLI Scripts
-
-Run your existing ESXi scripts directly:
-```powershell
-cd ../ESXi_Scripts/GenericScripts
-.\addNetwork.ps1 -NetworkName "Instructor"
-```
-
-### WinForms GUI
+### 🖥️ Run the GUI
 
 ```powershell
-cd VMwareDashboard
+cd VMware-ESXI
 .\Main.ps1
 ```
 
-Use the left-hand menu to switch screens:
-
-- **Dashboard** – welcome screen  
-- **Classes** – manage classes, students & VMs  
-- **Virtual Machines** – list, power on/off, restart, report  
-- **Networks** – add/delete single or bulk networks, clean orphans  
-- **Logs** – view GUI or script output  
+- Sign in via the login screen.
+- Navigate using the **left-hand menu**.
+- Views are loaded into the **main content panel**.
+- Use **Logout** to return to login and switch user.
 
 ---
 
-## Extending & Testing
+## 🧱 Included Views
 
-- **Add new backend scripts**: place them in `ESXi_Scripts/…`, then add a wrapper in `Modules/VMwareScripts.psm1`.  
-- **Add new UI screens**: create `Views/YourView.ps1` exporting `Show-YourView`, and wire it in `Main.psm1`.  
-- **Unit tests**: Pester-test `Modules/VMwareScripts.psm1` by mocking `Invoke-Script`, and call individual `Show-*View` functions with a dummy `Panel`.
-
----
-
-## Contributing
-
-1. **Fork** the repository and create a feature branch.  
-2. **Write tests** for any new model functions (Pester).  
-3. **Add or update** view scripts in the `Views/` folder.  
-4. **Submit** a pull request with a clear description of your changes.
+| View              | Purpose                                        |
+|-------------------|------------------------------------------------|
+| **Dashboard**      | Show host, VM, and network summary stats       |
+| **Classes**        | Create/delete student VMs for a course         |
+| **Virtual Machines** | Filterable grid: power, restart, remove VMs  |
+| **Networks**       | Add/remove port groups (single or bulk)        |
+| **Logout**         | Signs out user and returns to login screen     |
 
 ---
 
-## License
+## 🧩 Extending the App
+
+### ➕ Add Backend Logic
+
+1. Write your logic inside `VMwareModels.psm1`.
+2. Keep functions clean and testable.
+
+### ➕ Add a New View
+
+1. Create `Views/NewFeatureView.ps1`.
+2. It must export a `Show-View -ParentPanel $panel` function.
+3. Wire it into `Views/MainView.ps1` navigation.
+
+---
+
+## 🧪 Testing
+
+You can unit-test logic in `VMwareModels.psm1` using Pester:
+
+```powershell
+Invoke-Pester -Script .\Tests\VMwareModels.Tests.ps1
+```
+
+For views, use a mock WinForms `Panel` object and test control creation/layout if needed.
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo and create a feature branch.
+2. Write clear, commented code with Javadoc-style summaries.
+3. Add or modify views and model logic as needed.
+4. Submit a PR with a description and screenshots (if UI-related).
+
+---
+
+## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
