@@ -1,11 +1,8 @@
 <#
-
-VMwareModels.psm1
-
 .SYNOPSIS
     Core VMware models & services module with integrated WinForms login.
 .DESCRIPTION
-    On import, shows a login dialog (from LoginView.ps1).
+    On import, shows a login dialog (from Views/LoginView.ps1).
     If the user cancels or fails, the module throws and stops loading.
     Otherwise, exports:
       - ConnectTo-VMServer()
@@ -16,20 +13,27 @@ VMwareModels.psm1
       - OrphanCleaner
 #>
 
+
+
+
 # -------------------------------------------------------------------
 # 1) Force user to authenticate before anything else in this module
 # -------------------------------------------------------------------
 
-# Load the AuthModel (must export AuthModel.ValidateUser)
-Import-Module (Join-Path $PSScriptRoot 'AuthModel.psm1') -ErrorAction Stop
+# Resolve absolute paths relative to the .psm1 file
+$RootPath  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ViewsPath = Join-Path $RootPath 'Views'
 
-# Load the Login view UI
-. (Join-Path $PSScriptRoot '..\Views\LoginView.ps1')
+# Load the login dialog script
+. (Join-Path $ViewsPath 'LoginView.ps1')
 
-# Show the dialog; if it returns $false, abort the module import
+# Prompt for login; exit if login fails or canceled
 if (-not (Show-LoginView)) {
     throw 'Authentication failed or cancelled. VMwareModels module will not load.'
 }
+
+
+
 
 # -------------------------------------------------------------------
 # 2) Connection helper
@@ -57,29 +61,35 @@ function ConnectTo-VMServer {
                      -ErrorAction Stop | Out-Null
 }
 
+
+
+
 # -------------------------------------------------------------------
 # 3) VMwareNetwork (Singleton)
 # -------------------------------------------------------------------
-
 class VMwareNetwork {
     [string]$VmHost
 
-    static [VMwareNetwork]$Instance = $null
+    # Private static field to hold singleton instance
+    hidden static [VMwareNetwork]$_Instance
 
     <#
     .SYNOPSIS
-        Returns the single shared VMwareNetwork instance.
+        Gets the singleton instance of VMwareNetwork.
+    .DESCRIPTION
+        If the instance is not initialized, creates one and stores it.
+        Always returns the same instance.
     #>
     static [VMwareNetwork] GetInstance() {
-        if (-not [VMwareNetwork]::$Instance) {
-            [VMwareNetwork]::$Instance = [VMwareNetwork]::new()
+        if (-not [VMwareNetwork]::_Instance) {
+            [VMwareNetwork]::_Instance = [VMwareNetwork]::new()
         }
-        return [VMwareNetwork]::$Instance
+        return [VMwareNetwork]::_Instance
     }
 
     <#
     .SYNOPSIS
-        Constructor: ensures a live connection and caches the host name.
+        Constructor: ensures a vSphere connection and stores the host.
     #>
     VMwareNetwork() {
         ConnectTo-VMServer
@@ -88,9 +98,9 @@ class VMwareNetwork {
 
     <#
     .SYNOPSIS
-        Lists all port‐groups on the host.
+        Lists all port-groups available on the host.
     .OUTPUTS
-        String[]
+        [string[]]
     #>
     static [string[]] ListNetworks() {
         ConnectTo-VMServer
@@ -98,44 +108,24 @@ class VMwareNetwork {
             return Get-VirtualPortGroup -VMHost (Get-VMHost) |
                    Select-Object -ExpandProperty Name
         } catch {
-            return @() # Return an empty array if an error occurs
+            return @() # Return empty list on failure
         }
     }
 
-    <#
-    .SYNOPSIS
-        Creates a vSwitch + port‐group.
-    .PARAMETER NetworkName
-        Name of switch + port‐group.
-    #>
     [void] AddNetwork([string]$NetworkName) {
-        New-VirtualSwitch   -Name $NetworkName -VMHost $this.VmHost       | Out-Null
-        New-VirtualPortGroup -Name $NetworkName -VirtualSwitch $NetworkName | Out-Null
+        New-VirtualSwitch    -Name $NetworkName -VMHost $this.VmHost            | Out-Null
+        New-VirtualPortGroup -Name $NetworkName -VirtualSwitch $NetworkName     | Out-Null
     }
 
-    <#
-    .SYNOPSIS
-        Removes a port‐group + vSwitch.
-    .PARAMETER NetworkName
-        Name to delete.
-    #>
     [void] RemoveNetwork([string]$NetworkName) {
         Get-VirtualPortGroup -VMHost $this.VmHost -Name $NetworkName |
-          Remove-VirtualPortGroup -Confirm:$false
+            Remove-VirtualPortGroup -Confirm:$false
         Get-VirtualSwitch -Name $NetworkName |
-          Remove-VirtualSwitch -Confirm:$false
+            Remove-VirtualSwitch -Confirm:$false
     }
 
-    <#
-    .SYNOPSIS
-        Bulk‐creates student networks for a course.
-    #>
-    [void] BulkAddNetworks(
-        [string]$CourseNumber,
-        [int]   $Start,
-        [int]   $End
-    ) {
-        for ($i=$Start; $i -le $End; $i++) {
+    [void] BulkAddNetworks([string]$CourseNumber, [int]$Start, [int]$End) {
+        for ($i = $Start; $i -le $End; $i++) {
             $name = "$CourseNumber`_S$i"
             if (-not (Get-VirtualSwitch -Name $name -ErrorAction SilentlyContinue)) {
                 $this.AddNetwork($name)
@@ -143,21 +133,17 @@ class VMwareNetwork {
         }
     }
 
-    <#
-    .SYNOPSIS
-        Bulk‐deletes student networks for a course.
-    #>
-    [void] BulkRemoveNetworks(
-        [int]   $Start,
-        [int]   $End,
-        [string]$CourseNumber
-    ) {
-        for ($i=$Start; $i -le $End; $i++) {
+    [void] BulkRemoveNetworks([int]$Start, [int]$End, [string]$CourseNumber) {
+        for ($i = $Start; $i -le $End; $i++) {
             $name = "$CourseNumber`_S$i"
             $this.RemoveNetwork($name)
         }
     }
 }
+
+
+
+
 
 # -------------------------------------------------------------------
 # 4) VMwareVM
@@ -273,6 +259,9 @@ class VMwareVM {
     }
 }
 
+
+
+
 # -------------------------------------------------------------------
 # 5) CourseManager
 # -------------------------------------------------------------------
@@ -323,6 +312,9 @@ class CourseManager {
     }
 }
 
+
+
+
 # -------------------------------------------------------------------
 # 6) SessionReporter & OrphanCleaner
 # -------------------------------------------------------------------
@@ -352,6 +344,9 @@ class OrphanCleaner {
         return Get-VmwOrphan -Datastore $ds
     }
 }
+
+
+
 
 # -------------------------------------------------------------------
 # 7) Export
