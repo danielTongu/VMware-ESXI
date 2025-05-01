@@ -1,92 +1,103 @@
 <#
 .SYNOPSIS
-    Displays a welcome dashboard with environment stats.
+    Dashboard overview inside the content panel.
 .DESCRIPTION
-    This view summarizes the vSphere environment:
-      - Connected host
-      - Number of total & powered-on VMs
-      - Count of virtual networks (port groups)
-    It renders inside the provided panel — not a standalone window.
+    Shows a welcome, connection status, and key vSphere stats.
+    Always defines Show-View so Load-ViewIntoPanel will find it.
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Import core models if not already present
-if (-not (Get-Command ConnectTo-VMServer -ErrorAction SilentlyContinue)) {
-    Import-Module "$PSScriptRoot\..\VMwareModels.psm1" -ErrorAction Stop
-}
+# Ensure core functions exist
+Import-Module "$PSScriptRoot\..\VMwareModels.psm1" -ErrorAction Stop -Force
 
-# -------------------------------------------------------------------
-# Helper: Gathers and returns environment statistics
-# -------------------------------------------------------------------
 function Get-DashboardStats {
+    <#
+    .SYNOPSIS
+        Retrieves vSphere stats or throws on failure.
+    #>
     ConnectTo-VMServer
 
-    $hostName     = (Get-VMHost).Name
-    $totalVMs     = (Get-VM).Count
-    $poweredOnVMs = (Get-VM | Where-Object PowerState -eq 'PoweredOn').Count
-    $networkCount = [VMwareNetwork]::ListNetworks().Count
-
     return [PSCustomObject]@{
-        Host      = $hostName
-        TotalVMs  = $totalVMs
-        PoweredOn = $poweredOnVMs
-        Networks  = $networkCount
+        Host      = (Get-VMHost).Name
+        TotalVMs  = (Get-VM).Count
+        PoweredOn = (Get-VM | Where-Object PowerState -eq 'PoweredOn').Count
+        Networks  = [VMwareNetwork]::ListNetworks().Count
     }
 }
 
-# -------------------------------------------------------------------
-# Renders the dashboard view inside the given UI panel
-# -------------------------------------------------------------------
 function Show-View {
+    <#
+    .SYNOPSIS
+        Renders the dashboard into the provided panel.
+    #>
     [CmdletBinding()]
-    param (
+    param(
         [Parameter(Mandatory)]
         [System.Windows.Forms.Panel]$ParentPanel
     )
 
-    # Clear any previous controls
+    # Clear panel
     $ParentPanel.Controls.Clear()
 
+    # Welcome
+    $lblWelcome = New-Object System.Windows.Forms.Label
+    $lblWelcome.Text     = "Welcome to the VMware ESXi Dashboard"
+    $lblWelcome.Font     = New-Object System.Drawing.Font("Segoe UI",14,[System.Drawing.FontStyle]::Bold)
+    $lblWelcome.AutoSize = $true
+    $lblWelcome.Location = New-Object System.Drawing.Point(20,20)
+    $ParentPanel.Controls.Add($lblWelcome)
+
+    # Attempt to get stats
+    $connected = $true
     try {
         $stats = Get-DashboardStats
     } catch {
-        $errLabel = New-Object Windows.Forms.Label
-        $errLabel.Text = "Failed to retrieve stats: $_"
-        $errLabel.ForeColor = 'Red'
-        $errLabel.AutoSize = $true
-        $errLabel.Location = New-Object Drawing.Point(20, 20)
-        $ParentPanel.Controls.Add($errLabel)
-        return
+        $connected = $false
+        $stats = [PSCustomObject]@{
+            Host      = "--"
+            TotalVMs  = 0
+            PoweredOn = 0
+            Networks  = 0
+        }
     }
 
-    # Header
-    $header = New-Object Windows.Forms.Label
-    $header.Text = "VMware Dashboard Overview"
-    $header.Font = New-Object Drawing.Font("Segoe UI", 16, [Drawing.FontStyle]::Bold)
-    $header.AutoSize = $true
-    $header.Location = New-Object Drawing.Point(20, 20)
-    $ParentPanel.Controls.Add($header)
+    # Connection status
+    $lblStatus = New-Object System.Windows.Forms.Label
+    $lblStatus.Text      = "Connection Status: " + ($connected ? "Connected" : "Not Connected")
+    $lblStatus.Font      = New-Object System.Drawing.Font("Segoe UI",11,[System.Drawing.FontStyle]::Italic)
+    $lblStatus.ForeColor = ($connected ? [System.Drawing.Color]::DarkGreen : [System.Drawing.Color]::DarkRed)
+    $lblStatus.AutoSize  = $true
+    $lblStatus.Location  = New-Object System.Drawing.Point(20,60)
+    $ParentPanel.Controls.Add($lblStatus)
 
-    # Info display
+    # Stats header
+    $lblHeader = New-Object System.Windows.Forms.Label
+    $lblHeader.Text     = "Environment Summary"
+    $lblHeader.Font     = New-Object System.Drawing.Font("Segoe UI",12,[System.Drawing.FontStyle]::Bold)
+    $lblHeader.AutoSize = $true
+    $lblHeader.Location = New-Object System.Drawing.Point(20,100)
+    $ParentPanel.Controls.Add($lblHeader)
+
+    # Stats lines
     $lines = @(
-        "Connected Host:   $($stats.Host)",
-        "Total VMs:        $($stats.TotalVMs)",
-        "Powered-On VMs:   $($stats.PoweredOn)",
-        "Available Networks: $($stats.Networks)"
+        "Connected Host:    $($stats.Host)",
+        "Total VMs:         $($stats.TotalVMs)",
+        "Powered-On VMs:    $($stats.PoweredOn)",
+        "Available Networks:$($stats.Networks)"
     )
 
-    $y = 70
+    $y = 140
     foreach ($line in $lines) {
-        $lbl = New-Object Windows.Forms.Label
-        $lbl.Text = $line
-        $lbl.Font = New-Object Drawing.Font("Segoe UI", 11)
-        $lbl.Location = New-Object Drawing.Point(30, $y)
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text     = $line
+        $lbl.Font     = New-Object System.Drawing.Font("Segoe UI",11)
         $lbl.AutoSize = $true
+        $lbl.Location = New-Object System.Drawing.Point(30,$y)
         $ParentPanel.Controls.Add($lbl)
-        $y += 35
+        $y += 30
     }
 }
 
-Export-ModuleMember -Function Show-View
+# No Export-ModuleMember: MainView will dot-source this and call Show-View
