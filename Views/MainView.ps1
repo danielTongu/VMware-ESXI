@@ -52,7 +52,6 @@ function Show-Login {
 # Creates and displays the main UI shell with navigation and content
 # -------------------------------------------------------------------
 function Show-MainShell {
-    # Create main application form
     $form = New-Object Windows.Forms.Form
     $form.Text            = "VMware ESXi Dashboard"
     $form.Size            = New-Object Drawing.Size(1100, 700)
@@ -60,35 +59,38 @@ function Show-MainShell {
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox     = $false
 
-    # Setup split container layout
     $split = New-Object Windows.Forms.SplitContainer
     $split.Dock              = 'Fill'
     $split.Orientation       = 'Vertical'
-    $split.SplitterDistance  = 200
+    $split.SplitterDistance  = 30 # << NARROWER LEFT NAVIGATION
     $split.IsSplitterFixed   = $true
     $form.Controls.Add($split)
 
-    # Style navigation panel (Panel1)
+    # Style navigation panel
     $split.Panel1.BackColor = [Drawing.Color]::SteelBlue
 
-    # Style content area (Panel2)
-    $split.Panel2.BackColor = [Drawing.Color]::WhiteSmoke
+    # Replace Panel2 with a scrollable panel
+    $scrollableContent = New-Object Windows.Forms.Panel
+    $scrollableContent.Dock        = 'Fill'
+    $scrollableContent.AutoScroll  = $true
+    $scrollableContent.BackColor   = [Drawing.Color]::WhiteSmoke
 
-    # Helper to create a nav button
+    # Remove Panel2 controls and add scrollable content panel
+    $split.Panel2.Controls.Clear()
+    $split.Panel2.Controls.Add($scrollableContent)
+
+    # Navigation button helper
     function New-NavButton {
-        param (
-            [string]$text,
-            [int]$top
-        )
+        param ([string]$text, [int]$top)
         $btn = New-Object Windows.Forms.Button
         $btn.Text     = $text
-        $btn.Size     = New-Object Drawing.Size(160, 40)
-        $btn.Location = New-Object Drawing.Point(20, $top)
-        $btn.Font     = New-Object Drawing.Font("Segoe UI", 10)
+        $btn.Size     = New-Object Drawing.Size(130, 40)
+        $btn.Location = New-Object Drawing.Point(15, $top)
+        $btn.Font     = New-Object Drawing.Font("Segoe UI", 9)
         return $btn
     }
 
-    # Define all navigation buttons
+    # Buttons
     $btnDashboard = New-NavButton "Dashboard"        30
     $btnClass     = New-NavButton "Classes"          80
     $btnVMs       = New-NavButton "Virtual Machines" 130
@@ -97,41 +99,31 @@ function Show-MainShell {
     $btnLogout.BackColor = [Drawing.Color]::IndianRed
     $btnLogout.ForeColor = [Drawing.Color]::White
 
-    # Add buttons to the nav panel
     $split.Panel1.Controls.AddRange(@(
         $btnDashboard, $btnClass, $btnVMs, $btnNetwork, $btnLogout
     ))
 
-    # Button click: Dashboard
+    # View navigation
     $btnDashboard.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $split.Panel2
+        Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $scrollableContent
     })
-
-    # Button click: Class Manager
     $btnClass.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\ClassManagerView.ps1" $split.Panel2
+        Load-ViewIntoPanel "$PSScriptRoot\ClassManagerView.ps1" $scrollableContent
     })
-
-    # Button click: VM Manager
     $btnVMs.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\VMsView.ps1" $split.Panel2
+        Load-ViewIntoPanel "$PSScriptRoot\VMsView.ps1" $scrollableContent
     })
-
-    # Button click: Network Manager
     $btnNetwork.Add_Click({
-        Load-ViewIntoPanel "$PSScriptRoot\NetworkManagerView.ps1" $split.Panel2
+        Load-ViewIntoPanel "$PSScriptRoot\NetworkManagerView.ps1" $scrollableContent
     })
-
-    # Button click: Logout and restart MainView
     $btnLogout.Add_Click({
         $form.Close()
         Show-MainView
     })
 
-    # Load default view (Dashboard) on start
-    Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $split.Panel2
+    # Default view
+    Load-ViewIntoPanel "$PSScriptRoot\DashboardView.ps1" $scrollableContent
 
-    # Show the form
     $form.Topmost = $true
     $form.Add_Shown({ $form.Activate() })
     $form.ShowDialog()
