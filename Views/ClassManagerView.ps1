@@ -1,136 +1,225 @@
 <#
 .SYNOPSIS
-    Class creation and management view.
+    Class creation & administration view.
 .DESCRIPTION
-    Provides GUI for:
-    - Listing course folders
-    - Inputting student usernames
-    - Creating VMs for a class
-    - Deleting all VMs for a course
+    - Create new class folders and student subfolders.
+    - View and select existing classes.
+    - Specify VM Template, Datastore, and Networks via dropdowns.
+    - Batch-create VMs for a class.
+    - Delete all VMs/folders for a class.
+    - Scrollable, admin-oriented layout.
 
-    Must be run after VMwareModels.psm1 is loaded.
+    Depends on VMwareModels.psm1 and PowerCLI.
 #>
 
+# Load WinForms UI types
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Import VMwareModels if not already loaded
+# Ensure core VMware functions are loaded
 if (-not (Get-Command ConnectTo-VMServer -ErrorAction SilentlyContinue)) {
     Import-Module "$PSScriptRoot\..\VMwareModels.psm1" -ErrorAction Stop
 }
 
 # -------------------------------------------------------------------
-# Helper: Adds a label + textbox to a panel
+# Helper to add a labeled control to a panel
 # -------------------------------------------------------------------
-function New-LabeledInput {
+function New-LabeledControl {
     param (
         [System.Windows.Forms.Panel]$Panel,
-        [string]$LabelText,
-        [int]$Top
+        [string]                 $LabelText,
+        [int]                    $Top,
+        [Type]                   $ControlType,
+        [Hashtable]              $Params
     )
 
-    $label = New-Object Windows.Forms.Label
-    $label.Text = $LabelText
-    $label.Location = New-Object Drawing.Point(20, $Top)
-    $label.Size = New-Object Drawing.Size(100, 20)
-    $Panel.Controls.Add($label)
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text     = $LabelText
+    $lbl.Location = New-Object System.Drawing.Point(20, $Top)
+    $lbl.AutoSize = $true
+    $Panel.Controls.Add($lbl)
 
-    $textbox = New-Object Windows.Forms.TextBox
-    $textbox.Location = New-Object Drawing.Point(130, $Top)
-    $textbox.Size = New-Object Drawing.Size(220, 20)
-    $Panel.Controls.Add($textbox)
-
-    return $textbox
+    $ctrl = New-Object $ControlType
+    foreach ($k in $Params.Keys) {
+        $ctrl.$k = $Params[$k]
+    }
+    $Panel.Controls.Add($ctrl)
+    return $ctrl
 }
 
 # -------------------------------------------------------------------
-# Entry point: shows the Class Manager view inside given panel
+# Entry point: Renders this view into the passed-in panel
 # -------------------------------------------------------------------
 function Show-View {
     [CmdletBinding()]
-    param (
+    param(
         [Parameter(Mandatory)]
         [System.Windows.Forms.Panel]$ParentPanel
     )
 
-    # Clear previous UI
+    # Clear and add a scrollable sub-panel
     $ParentPanel.Controls.Clear()
+    $panel = New-Object System.Windows.Forms.Panel
+    $panel.Dock       = 'Fill'
+    $panel.AutoScroll = $true
+    $ParentPanel.Controls.Add($panel)
 
-    # Connect to VMware and load class folders
+    # Connect & fetch resources
     ConnectTo-VMServer
-    $classFolders = [CourseManager]::ListClasses()
+    $classes    = [CourseManager]::ListClasses()
+    $templates  = (Get-Template | Select-Object -ExpandProperty Name)
+    $datastores = (Get-Datastore | Select-Object -ExpandProperty Name)
+    $networks   = [VMwareNetwork]::ListNetworks()
 
-    # --- Title ---
-    $lblTitle = New-Object Windows.Forms.Label
-    $lblTitle.Text = "Class Manager"
-    $lblTitle.Font = New-Object Drawing.Font("Segoe UI", 14, [Drawing.FontStyle]::Bold)
-    $lblTitle.Location = New-Object Drawing.Point(20, 20)
+    # Title
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text     = "Class Manager"
+    $lblTitle.Font     = New-Object System.Drawing.Font("Segoe UI",16,[System.Drawing.FontStyle]::Bold)
     $lblTitle.AutoSize = $true
-    $ParentPanel.Controls.Add($lblTitle)
+    $lblTitle.Location = New-Object System.Drawing.Point(20,20)
+    $panel.Controls.Add($lblTitle)
 
-    # --- Class folder dropdown ---
-    $lblClass = New-Object Windows.Forms.Label
-    $lblClass.Text = "Class Folder:"
-    $lblClass.Location = New-Object Drawing.Point(20, 60)
-    $lblClass.Size = New-Object Drawing.Size(100, 20)
-    $ParentPanel.Controls.Add($lblClass)
+    $y = 70
 
-    $comboClass = New-Object Windows.Forms.ComboBox
-    $comboClass.Location = New-Object Drawing.Point(130, 60)
-    $comboClass.Size = New-Object Drawing.Size(220, 20)
-    $comboClass.DropDownStyle = 'DropDownList'
-    $comboClass.Items.AddRange($classFolders)
-    $ParentPanel.Controls.Add($comboClass)
+    # Existing class dropdown
+    $cmbClass = New-LabeledControl -Panel $panel -LabelText "Select Class:" `
+        -Top $y -ControlType ([System.Windows.Forms.ComboBox]) -Params @{
+            Location      = New-Object System.Drawing.Point(130,$y)
+            Size          = New-Object System.Drawing.Size(200,22)
+            DropDownStyle = 'DropDownList'
+        }
+    $cmbClass.Items.AddRange($classes)
+    $y += 40
 
-    # --- Input fields ---
-    $txtStudents  = New-LabeledInput -Panel $ParentPanel -LabelText "Students (comma):" -Top 100
-    $txtTemplate  = New-LabeledInput -Panel $ParentPanel -LabelText "Template:"           -Top 140
-    $txtDatastore = New-LabeledInput -Panel $ParentPanel -LabelText "Datastore:"          -Top 180
-    $txtNetworks  = New-LabeledInput -Panel $ParentPanel -LabelText "Networks (comma):"   -Top 220
+    # New class name + student list
+    $txtNewClass  = New-LabeledControl -Panel $panel -LabelText "New Class Name:" `
+        -Top $y -ControlType ([System.Windows.Forms.TextBox]) -Params @{
+            Location = New-Object System.Drawing.Point(130,$y)
+            Size     = New-Object System.Drawing.Size(200,22)
+        }
+    $y += 30
 
-    # --- Create VMs button ---
-    $btnCreate = New-Object Windows.Forms.Button
-    $btnCreate.Text = "Create VMs"
-    $btnCreate.Size = New-Object Drawing.Size(100,30)
-    $btnCreate.Location = New-Object Drawing.Point(50, 270)
-    $btnCreate.Add_Click({
-        try {
-            $info = [PSCustomObject]@{
-                classFolder = $comboClass.Text
-                students    = $txtStudents.Text -split ',' | ForEach-Object { $_.Trim() }
-                servers     = @(@{
-                    template = $txtTemplate.Text
-                    adapters = $txtNetworks.Text -split ',' | ForEach-Object { $_.Trim() }
-                })
-                dataStore   = $txtDatastore.Text
+    $txtStudents = New-LabeledControl -Panel $panel -LabelText "Students (one per line):" `
+        -Top $y -ControlType ([System.Windows.Forms.TextBox]) -Params @{
+            Location   = New-Object System.Drawing.Point(130,$y)
+            Size       = New-Object System.Drawing.Size(200,80)
+            Multiline  = $true
+            ScrollBars = 'Vertical'
+        }
+    $y += 100
+
+    # Template dropdown
+    $cmbTemplate = New-LabeledControl -Panel $panel -LabelText "Template:" `
+        -Top $y -ControlType ([System.Windows.Forms.ComboBox]) -Params @{
+            Location      = New-Object System.Drawing.Point(130,$y)
+            Size          = New-Object System.Drawing.Size(200,22)
+            DropDownStyle = 'DropDownList'
+        }
+    $cmbTemplate.Items.AddRange($templates)
+    $y += 40
+
+    # Datastore dropdown
+    $cmbDatastore = New-LabeledControl -Panel $panel -LabelText "Datastore:" `
+        -Top $y -ControlType ([System.Windows.Forms.ComboBox]) -Params @{
+            Location      = New-Object System.Drawing.Point(130,$y)
+            Size          = New-Object System.Drawing.Size(200,22)
+            DropDownStyle = 'DropDownList'
+        }
+    $cmbDatastore.Items.AddRange($datastores)
+    $y += 40
+
+    # Networks checked list
+    $chkNetworks = New-LabeledControl -Panel $panel -LabelText "Networks:" `
+        -Top $y -ControlType ([System.Windows.Forms.CheckedListBox]) -Params @{
+            Location     = New-Object System.Drawing.Point(130,$y)
+            Size         = New-Object System.Drawing.Size(200,80)
+            CheckOnClick = $true
+        }
+    $chkNetworks.Items.AddRange($networks)
+    $y += 100
+
+    # Buttons
+    $btnCreateClass = New-Object System.Windows.Forms.Button
+    $btnCreateClass.Text     = "Create Class"
+    $btnCreateClass.Size     = New-Object System.Drawing.Size(120,30)
+    $btnCreateClass.Location = New-Object System.Drawing.Point(20,$y)
+    $panel.Controls.Add($btnCreateClass)
+
+    $btnCreateVMs = New-Object System.Windows.Forms.Button
+    $btnCreateVMs.Text     = "Create VMs"
+    $btnCreateVMs.Size     = New-Object System.Drawing.Size(120,30)
+    $btnCreateVMs.Location = New-Object System.Drawing.Point(160,$y)
+    $panel.Controls.Add($btnCreateVMs)
+
+    $btnDeleteClass = New-Object System.Windows.Forms.Button
+    $btnDeleteClass.Text     = "Delete Class"
+    $btnDeleteClass.Size     = New-Object System.Drawing.Size(120,30)
+    $btnDeleteClass.Location = New-Object System.Drawing.Point(300,$y)
+    $panel.Controls.Add($btnDeleteClass)
+
+    # -------------------------------------------------------------------
+    # Event Handlers
+    # -------------------------------------------------------------------
+
+    # Create class folder + student subfolders
+    $btnCreateClass.Add_Click({
+        $cf       = $txtNewClass.Text.Trim()
+        $students = $txtStudents.Lines | Where-Object { $_.Trim() }
+        if (-not $cf) {
+            [System.Windows.Forms.MessageBox]::Show("Enter a class name.","Validation")
+            return
+        }
+        if (-not $students) {
+            [System.Windows.Forms.MessageBox]::Show("Enter at least one student.","Validation")
+            return
+        }
+        ConnectTo-VMServer
+        $root = Get-Folder -Name 'vm'
+        if (-not (Get-Folder -Name $cf -ErrorAction SilentlyContinue)) {
+            New-Folder -Name $cf -Location $root | Out-Null
+        }
+        $parent = Get-Folder -Name $cf
+        foreach ($s in $students) {
+            $folderName = "$cf`_$s"
+            if (-not (Get-Folder -Name $folderName -ErrorAction SilentlyContinue)) {
+                New-Folder -Name $folderName -Location $parent | Out-Null
             }
+        }
+        if (-not $cmbClass.Items.Contains($cf)) { $cmbClass.Items.Add($cf) }
+        $cmbClass.SelectedItem = $cf
+        [System.Windows.Forms.MessageBox]::Show("Class '$cf' created.","Success")
+    })
 
-            [CourseManager]::NewCourseVMs($info)
-            [Windows.Forms.MessageBox]::Show("VMs created successfully.","Success",[Windows.Forms.MessageBoxButtons]::OK)
-        } catch {
-            [Windows.Forms.MessageBox]::Show("Error: $_","Error",[Windows.Forms.MessageBoxButtons]::OK)
+    # Create VMs for class
+    $btnCreateVMs.Add_Click({
+        $cf = $cmbClass.Text
+        if (-not $cf) {
+            [System.Windows.Forms.MessageBox]::Show("Select a class.","Validation")
+            return
+        }
+        $info = [PSCustomObject]@{
+            classFolder = $cf
+            students    = $txtStudents.Lines | Where-Object { $_.Trim() }
+            servers     = @(@{
+                template = $cmbTemplate.Text
+                adapters = $chkNetworks.CheckedItems | ForEach-Object { $_.ToString() }
+            })
+            dataStore   = $cmbDatastore.Text
+        }
+        [CourseManager]::NewCourseVMs($info)
+        [System.Windows.Forms.MessageBox]::Show("VMs created for class.","Success")
+    })
+
+    # Delete all VMs for class
+    $btnDeleteClass.Add_Click({
+        $cf = $cmbClass.Text
+        if (-not $cf) {
+            [System.Windows.Forms.MessageBox]::Show("Select a class.","Validation")
+            return
+        }
+        if ([System.Windows.Forms.MessageBox]::Show("Delete ALL VMs in '$cf'?","Confirm",[System.Windows.Forms.MessageBoxButtons]::YesNo) -eq 'Yes') {
+            [CourseManager]::RemoveCourseVMs($cf,1,100)
+            [System.Windows.Forms.MessageBox]::Show("Class deleted.","Success")
         }
     })
-    $ParentPanel.Controls.Add($btnCreate)
-
-    # --- Delete Class button ---
-    $btnDelete = New-Object Windows.Forms.Button
-    $btnDelete.Text = "Delete Class"
-    $btnDelete.Size = New-Object Drawing.Size(100,30)
-    $btnDelete.Location = New-Object Drawing.Point(200, 270)
-    $btnDelete.Add_Click({
-        try {
-            $cf = $comboClass.Text
-            $confirm = [Windows.Forms.MessageBox]::Show("Delete all student VMs from class $cf?","Confirm",[Windows.Forms.MessageBoxButtons]::YesNo)
-            if ($confirm -eq [Windows.Forms.DialogResult]::Yes) {
-                [CourseManager]::RemoveCourseVMs($cf, 1, 50)  # Assumes S1–S50
-                [Windows.Forms.MessageBox]::Show("Class VMs deleted.","Done",[Windows.Forms.MessageBoxButtons]::OK)
-            }
-        } catch {
-            [Windows.Forms.MessageBox]::Show("Error: $_","Error",[Windows.Forms.MessageBoxButtons]::OK)
-        }
-    })
-    $ParentPanel.Controls.Add($btnDelete)
 }
-
-Export-ModuleMember -Function Show-View
