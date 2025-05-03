@@ -67,7 +67,7 @@ function Show-MainShell {
     $form.Controls.Add($split)
 
     # Style navigation panel
-    $split.Panel1.BackColor = [Drawing.Color]::SteelBlue
+    $split.Panel1.BackColor = [Drawing.Color]::LightGray
 
     # Replace Panel2 with a scrollable panel
     $scrollableContent = New-Object Windows.Forms.Panel
@@ -133,13 +133,13 @@ function Show-MainShell {
 # Entry Point: show login (optional) then shell
 # -------------------------------------------------------------------
 function Show-MainView {
-    # For production:
-    # if (Show-Login) {
-    #     Show-MainShell
-    # } else {
-    #     [System.Windows.Forms.MessageBox]::Show("Login cancelled. Exiting.","Authentication")
-    # }
+    # For production 
+     if (Show-Login) {
+         Show-MainShell
+     } else {
+         [System.Windows.Forms.MessageBox]::Show("Login cancelled. Exiting.","Authentication")
+    }
 
-    # For development:
-    Show-MainShell
+    # Uncomment the following line to skip login for development and directly show the main shell.
+    #Show-MainShell
 }
