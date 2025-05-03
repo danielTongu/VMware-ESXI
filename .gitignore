@@ -3,49 +3,46 @@
 # DESCRIPTION: Ignore patterns for Python + PowerShell project
 # ─────────────────────────────────────────────
 
-# --- OS Artifacts ---
-Thumbs.db
-Desktop.ini
-.DS_Store
-
-# --- IDE / Editor ---
-.vscode/
-.idea/
-*.iml
-
-# --- Python ---
+# === Python ===
 __pycache__/
 *.py[cod]
 *.pyd
 *.pyo
 
-# --- Logs / Temp / Swap ---
+# === PyCharm / JetBrains ===
+.idea/
+*.iml
+
+# === VSCode ===
+.vscode/
+
+# === MacOS System Files ===
+.DS_Store
+
+# === Logs / Temp / Cache Files ===
 *.log
 *.tmp
 *.bak
 *.swp
 
-# --- PowerShell backup / temp files ---
+# === PowerShell Artifacts ===
 *.ps1~
 *.psm1~
 *.psd1~
+*.ps1xml
 
-# Ignore all ESXi backend scripts locally
-ESXi Scripts/
-ESXi_Scripts/
+# === Sensitive Files / Data Files ===
+GetCredentials.ps1
+AllUserLoginTimes.csv
+AllUserLoginTimes.ps1
 
-# --- Sensitive / Local-only data (do NOT commit) ---
-#ESXi_Scripts/GetCredential.ps1
-#ESXi_Scripts/GenericScripts/AllUserLoginTimes.csv
-#ESXi_Scripts/GenericScripts/AllUserLoginTimes.ps1
+# === Optional: scripts that are destructive/test-only ===
+DeleteOphanFilesFromDatastore.ps1
+deleteNetwork.ps1
+deleteNetworks.ps1
+addNetwork.ps1
+addNetworks.ps1
 
-# --- Optional: destructive/test-only scripts ---
-# Uncomment if you prefer to keep them out of the main branch
-# ESXi_Scripts/GenericScripts/addNetwork.ps1
-# ESXi_Scripts/GenericScripts/addNetworks.ps1
-# ESXi_Scripts/GenericScripts/deleteNetwork.ps1
-# ESXi_Scripts/GenericScripts/deleteNetworks.ps1
-# ESXi_Scripts/GenericScripts/DeleteOphanFilesFromDatastore.ps1
-
-# --- Note: we WANT to track all our real .ps1 and .psm1 modules! ---
-# No blanket "*.ps1" or "*.psm1" ignore rules here.
+# === Explicitly track essential scripts ===
+!createStudentFolders.ps1
+!VmFunctions.psm1
