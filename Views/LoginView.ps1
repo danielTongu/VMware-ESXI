@@ -1,28 +1,32 @@
+# Views/LoginView.ps1
 <#
 .SYNOPSIS
-    Displays a WinForms login dialog and returns whether authentication succeeded.
-
+    VMware Management System Login View with Offline Support
 .DESCRIPTION
-    Presents Email and Password fields with Sign In / Cancel buttons.
-    Validates credentials directly within this script (no AuthModel required).
-    Returns $true on success, $false on failure or cancel.
-
-.EXAMPLE
-    if (Show-LoginView) {
-        "Login succeeded" | Write-Host
-    } else {
-        "Login failed or cancelled" | Write-Host
-    }
+    Enhanced authentication with:
+      - Online login via Connect-VIServer
+      - Optional offline mode continuation
+      - Connection resilience and visual feedback
+      - Credential remember/unremember
 #>
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
 function Show-LoginView {
     [CmdletBinding()]
     param()
 
-    # Load WinForms assemblies
-    Add-Type -AssemblyName 'System.Windows.Forms'
-    Add-Type -AssemblyName 'System.Drawing'
+    $script:LoginResult = $false
+    $form = [System.Windows.Forms.Form]::new()
+    $form.Text             = 'VMware Management System - Login'
+    $form.Size             = [System.Drawing.Size]::new(450,380)
+    $form.StartPosition    = 'CenterScreen'
+    $form.FormBorderStyle  = 'FixedDialog'
+    $form.MaximizeBox      = $false
+    $form.MinimizeBox      = $false
 
+<<<<<<< HEAD
     # -----------------------------
     # Create the login form window
     # -----------------------------
@@ -102,43 +106,100 @@ function Show-LoginView {
     $btnCancel.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
 
     $form.Controls.Add($btnCancel)
+=======
+    # -- Logo --
+    $logo = [System.Windows.Forms.PictureBox]::new()
+    $logo.Size     = [System.Drawing.Size]::new(200,60)
+    $logo.Location = [System.Drawing.Point]::new(($form.ClientSize.Width - $logo.Width)/2,20)
+    try { $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\logo.png") } catch {}
+    $logo.SizeMode = 'Zoom'
+    $form.Controls.Add($logo)
 
-    # -----------------------------
-    # Result flag
-    # -----------------------------
-    $script:Success = $false
+    # -- Username --
+    $lblUser = [System.Windows.Forms.Label]::new(); $lblUser.Text='Username:'; $lblUser.Location=[System.Drawing.Point]::new(50,100); $lblUser.AutoSize=$true; $lblUser.Font=[System.Drawing.Font]::new('Segoe UI',10)
+    $txtUser = [System.Windows.Forms.TextBox]::new(); $txtUser.Location=[System.Drawing.Point]::new(50,125); $txtUser.Size=[System.Drawing.Size]::new(350,30); $txtUser.Font=[System.Drawing.Font]::new('Segoe UI',10)
+    $form.Controls.AddRange(@($lblUser,$txtUser))
 
-    # -----------------------------
-    # Sign In click handler
-    # -----------------------------
-    $btnOK.Add_Click({
-        $email    = $txtEmail.Text.Trim()
-        $password = $txtPass.Text
+    # -- Password --
+    $lblPass = [System.Windows.Forms.Label]::new(); $lblPass.Text='Password:'; $lblPass.Location=[System.Drawing.Point]::new(50,165); $lblPass.AutoSize=$true; $lblPass.Font=[System.Drawing.Font]::new('Segoe UI',10)
+    $txtPass = [System.Windows.Forms.TextBox]::new(); $txtPass.Location=[System.Drawing.Point]::new(50,190); $txtPass.Size=[System.Drawing.Size]::new(350,30); $txtPass.Font=[System.Drawing.Font]::new('Segoe UI',10); $txtPass.UseSystemPasswordChar=$true
+    $form.Controls.AddRange(@($lblPass,$txtPass))
 
-        # Simple hardcoded validation
-        if ($email -eq 'admin@example.com' -and $password -eq 'admin123') {
-            $script:Success = $true
+    # -- Remember Me --
+    $chkRemember = [System.Windows.Forms.CheckBox]::new(); $chkRemember.Text='Remember my credentials'; $chkRemember.Location=[System.Drawing.Point]::new(50,230); $chkRemember.AutoSize=$true
+    $form.Controls.Add($chkRemember)
+
+    # -- Buttons --
+    $btnLogin = [System.Windows.Forms.Button]::new(); $btnLogin.Text='Login'; $btnLogin.Size=[System.Drawing.Size]::new(100,35); $btnLogin.Location=[System.Drawing.Point]::new(50,270); $btnLogin.Font=[System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold); $form.AcceptButton=$btnLogin
+    $btnCancel= [System.Windows.Forms.Button]::new(); $btnCancel.Text='Cancel';$btnCancel.Size=[System.Drawing.Size]::new(100,35); $btnCancel.Location=[System.Drawing.Point]::new(200,270); $btnCancel.Font=[System.Drawing.Font]::new('Segoe UI',10); $form.CancelButton=$btnCancel
+    $btnOffline=[System.Windows.Forms.Button]::new(); $btnOffline.Text='Continue Offline';$btnOffline.Size=[System.Drawing.Size]::new(150,35); $btnOffline.Location=[System.Drawing.Point]::new(50,315); $btnOffline.Font=[System.Drawing.Font]::new('Segoe UI',10); $btnOffline.BackColor=[System.Drawing.Color]::LightGray; $btnOffline.Visible=$false
+    $form.Controls.AddRange(@($btnLogin,$btnCancel,$btnOffline))
+
+    # -- Status Label --
+    $lblStatus=[System.Windows.Forms.Label]::new(); $lblStatus.Text=''; $lblStatus.Location=[System.Drawing.Point]::new(50,360); $lblStatus.AutoSize=$true; $lblStatus.Font=[System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    $form.Controls.Add($lblStatus)
+
+    # -- Load remembered creds --
+    $credPath = "$env:APPDATA\VMwareManagement\credentials.xml"
+    if (Test-Path $credPath) {
+        try {
+            $secureString = Import-Clixml -Path $credPath
+            $psCred = New-Object System.Management.Automation.PSCredential('dummy',$secureString)
+            $txtUser.Text = $psCred.GetNetworkCredential().UserName
+            $txtPass.Text = $psCred.GetNetworkCredential().Password
+            $chkRemember.Checked = $true
+        } catch { Write-Warning "Credential load failed: $_" }
+    }
+>>>>>>> 0c3c925 (view updated)
+
+    # -- Login handler --
+    $btnLogin.Add_Click({
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $lblStatus.Text = 'Connecting...'; $lblStatus.ForeColor=[System.Drawing.Color]::Blue; $form.Refresh()
+        try {
+            $securePwd = ConvertTo-SecureString $txtPass.Text -AsPlainText -Force
+            $psCred = New-Object System.Management.Automation.PSCredential($txtUser.Text,$securePwd)
+            # Capture the VI connection
+            $viConnection = Connect-VIServer -Server $global:VMwareConfig.Server -Credential $psCred -ErrorAction Stop
+            # Persist to global state
+            $global:VMwareConfig.Connection = $viConnection
+            $global:VMwareConfig.User       = $psCred.UserName
+            $global:IsLoggedIn              = $true
+            if ($chkRemember.Checked) {
+                $folder = Split-Path $credPath -Parent
+                if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
+                $securePwd | Export-Clixml -Path $credPath -Force
+            } elseif (Test-Path $credPath) {
+                Remove-Item $credPath -ErrorAction SilentlyContinue
+            }
+            # Also inform our singleton model
+            [VMServerConnection]::GetInstance().SetConnection($viConnection)
+            [VMServerConnection]::GetInstance().SetCredentials($psCred)
+            $script:LoginResult = $true
             $form.Close()
-        } else {
-            [System.Windows.Forms.MessageBox]::Show(
-                'Invalid email or password.',
-                'Login Failed',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            ) | Out-Null
         }
+        catch {
+            $lblStatus.Text = "Login failed: $($_.Exception.Message)"; $lblStatus.ForeColor=[System.Drawing.Color]::Red
+            $btnOffline.Visible = $true
+            $form.Size = [System.Drawing.Size]::new($form.Width,420)
+        }
+        finally { $form.Cursor = [System.Windows.Forms.Cursors]::Default }
     })
 
-    # Cancel click handler
-    $btnCancel.Add_Click({
+    # -- Continue offline handler --
+    $btnOffline.Add_Click({
+        $global:VMwareConfig.OfflineMode = $true
+        $global:IsLoggedIn = $false
+        $script:LoginResult = $true    # proceed into shell in offline mode
         $form.Close()
     })
 
-    # -----------------------------
-    # Show the form modally
-    # -----------------------------
-    $form.ShowDialog() | Out-Null
-    return $script:Success
-}
+    # -- Cancel handler --
+    $btnCancel.Add_Click({
+        $script:LoginResult = $false
+        $form.Close()
+    })
 
-Export-ModuleMember -Function Show-LoginView
+    $form.ShowDialog() | Out-Null
+    return $script:LoginResult
+}
