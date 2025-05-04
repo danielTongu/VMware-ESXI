@@ -37,7 +37,7 @@ function Show-ClassManagerView {
     # Clear UI
     $ContentPanel.Controls.Clear()
 
-    # Main scrollable panel with improved styling
+    # Main scrollable panel
     $main = [System.Windows.Forms.Panel]::new()
     $main.Dock = 'Fill'
     $main.AutoScroll = $true
@@ -53,7 +53,7 @@ function Show-ClassManagerView {
     $lblHeader.ForeColor = [System.Drawing.Color]::DarkSlateBlue
     $main.Controls.Add($lblHeader)
 
-    # Offline/banner with improved visibility
+    # Offline/banner
     if (-not $global:IsLoggedIn -or $global:VMwareConfig.OfflineMode) {
         $lblOffline = [System.Windows.Forms.Label]::new()
         $lblOffline.Text = 'OFFLINE or not logged in: operations disabled'
@@ -113,7 +113,7 @@ function Show-ClassManagerView {
     # Class Information Section
     Add-SectionDivider -Title "Class Information" -YPos ([ref]$currentY)
 
-    # Existing class selector with improved styling
+    # Existing class selector
     $lblExist = [System.Windows.Forms.Label]::new()
     $lblExist.Text = 'Select Class:'
     $lblExist.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -130,7 +130,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($cmbClasses)
     $currentY += $verticalSpacing
 
-    # New class name with improved styling
+    # New class name
     $lblNew = [System.Windows.Forms.Label]::new()
     $lblNew.Text = 'New Class Name:'
     $lblNew.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -145,7 +145,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($txtNew)
     $currentY += $verticalSpacing
 
-    # Students list with improved styling
+    # Students list
     $lblStud = [System.Windows.Forms.Label]::new()
     $lblStud.Text = 'Students (one per line):'
     $lblStud.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -165,7 +165,7 @@ function Show-ClassManagerView {
     # VM Configuration Section
     Add-SectionDivider -Title "VM Configuration" -YPos ([ref]$currentY)
 
-    # Template selection with improved styling
+    # Template selection
     $lblTemp = [System.Windows.Forms.Label]::new()
     $lblTemp.Text = 'Template:'
     $lblTemp.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -182,7 +182,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($cmbTemp)
     $currentY += $verticalSpacing
 
-    # Datastore selection with improved styling
+    # Datastore selection 
     $lblDs = [System.Windows.Forms.Label]::new()
     $lblDs.Text = 'Datastore:'
     $lblDs.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -199,7 +199,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($cmbDs)
     $currentY += $verticalSpacing
 
-    # Network adapters with improved styling
+    # Network adapters
     $lblNet = [System.Windows.Forms.Label]::new()
     $lblNet.Text = 'Network Adapters:'
     $lblNet.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -216,7 +216,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($clb)
     $adapters = @($clb)
 
-    # Add adapter button with improved styling
+    # Add adapter button
     $btnAddA = [System.Windows.Forms.Button]::new()
     $btnAddA.Text = 'Add Adapter'
     $btnAddA.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -240,7 +240,7 @@ function Show-ClassManagerView {
     # Actions Section
     Add-SectionDivider -Title "Actions" -YPos ([ref]$currentY)
 
-    # Action buttons with improved styling
+    # Action buttons
     $buttonStyle = @{
         Font = [System.Drawing.Font]::new('Segoe UI', 12)
         Size = [System.Drawing.Size]::new(150, 40)
@@ -284,7 +284,7 @@ function Show-ClassManagerView {
     $main.Controls.Add($btnRefresh)
     $currentY += 60
 
-    # Status label with improved styling
+    # Status label
     $lblStatus = [System.Windows.Forms.Label]::new()
     $lblStatus.Text = 'Ready'
     $lblStatus.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
@@ -293,7 +293,7 @@ function Show-ClassManagerView {
     $lblStatus.AutoSize = $true
     $main.Controls.Add($lblStatus)
 
-    # -- Event handlers (unchanged from original) --
+    # -- Event handlers --
     $btnCreateF.Add_Click({
         $conn=Get-ConnectionSafe; if(!$conn){$lblStatus.Text='Offline/no auth';return}
         try{
