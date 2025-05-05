@@ -41,16 +41,16 @@ function Show-ClassManagerView {
     $main = [System.Windows.Forms.Panel]::new()
     $main.Dock = 'Fill'
     $main.AutoScroll = $true
-    $main.BackColor = [System.Drawing.Color]::White
+    $main.BackColor = $global:theme.Background
     $ContentPanel.Controls.Add($main)
 
-    # Header with better styling
+    # Header with theme styling
     $lblHeader = [System.Windows.Forms.Label]::new()
     $lblHeader.Text = 'Class Management'
     $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
     $lblHeader.Location = [System.Drawing.Point]::new(30, 20)
     $lblHeader.AutoSize = $true
-    $lblHeader.ForeColor = [System.Drawing.Color]::DarkSlateBlue
+    $lblHeader.ForeColor = $global:theme.Primary  # Burgundy
     $main.Controls.Add($lblHeader)
 
     # Offline/banner
@@ -58,7 +58,7 @@ function Show-ClassManagerView {
         $lblOffline = [System.Windows.Forms.Label]::new()
         $lblOffline.Text = 'OFFLINE or not logged in: operations disabled'
         $lblOffline.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
-        $lblOffline.ForeColor = [System.Drawing.Color]::DarkRed
+        $lblOffline.ForeColor = $global:theme.Warning
         $lblOffline.AutoSize = $true
         $lblOffline.Location = [System.Drawing.Point]::new(300, 28)
         $main.Controls.Add($lblOffline)
@@ -95,7 +95,7 @@ function Show-ClassManagerView {
         $lblSection = [System.Windows.Forms.Label]::new()
         $lblSection.Text = $Title
         $lblSection.Font = [System.Drawing.Font]::new('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
-        $lblSection.ForeColor = [System.Drawing.Color]::DarkSlateBlue
+        $lblSection.ForeColor = $global:theme.Primary  # Burgundy
         $lblSection.Location = [System.Drawing.Point]::new($sectionLeft, $YPos.Value)
         $lblSection.AutoSize = $true
         $main.Controls.Add($lblSection)
@@ -119,6 +119,7 @@ function Show-ClassManagerView {
     $lblExist.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblExist.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblExist.AutoSize = $true
+    $lblExist.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblExist)
 
     $cmbClasses = [System.Windows.Forms.ComboBox]::new()
@@ -136,12 +137,15 @@ function Show-ClassManagerView {
     $lblNew.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblNew.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblNew.AutoSize = $true
+    $lblNew.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblNew)
 
     $txtNew = [System.Windows.Forms.TextBox]::new()
     $txtNew.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $txtNew.Location = [System.Drawing.Point]::new($controlLeft, $currentY - 3)
     $txtNew.Size = [System.Drawing.Size]::new($controlWidth, 30)
+    $txtNew.BackColor = [System.Drawing.Color]::White
+    $txtNew.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($txtNew)
     $currentY += $verticalSpacing
 
@@ -151,6 +155,7 @@ function Show-ClassManagerView {
     $lblStud.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblStud.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblStud.AutoSize = $true
+    $lblStud.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblStud)
 
     $txtStud = [System.Windows.Forms.TextBox]::new()
@@ -159,6 +164,8 @@ function Show-ClassManagerView {
     $txtStud.Size = [System.Drawing.Size]::new($controlWidth, 100)
     $txtStud.Multiline = $true
     $txtStud.ScrollBars = 'Vertical'
+    $txtStud.BackColor = [System.Drawing.Color]::White
+    $txtStud.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($txtStud)
     $currentY += 120
 
@@ -171,6 +178,7 @@ function Show-ClassManagerView {
     $lblTemp.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblTemp.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblTemp.AutoSize = $true
+    $lblTemp.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblTemp)
 
     $cmbTemp = [System.Windows.Forms.ComboBox]::new()
@@ -188,6 +196,7 @@ function Show-ClassManagerView {
     $lblDs.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblDs.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblDs.AutoSize = $true
+    $lblDs.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblDs)
 
     $cmbDs = [System.Windows.Forms.ComboBox]::new()
@@ -205,6 +214,7 @@ function Show-ClassManagerView {
     $lblNet.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $lblNet.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblNet.AutoSize = $true
+    $lblNet.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($lblNet)
 
     $clb = [System.Windows.Forms.CheckedListBox]::new()
@@ -213,6 +223,8 @@ function Show-ClassManagerView {
     $clb.Size = [System.Drawing.Size]::new($controlWidth, 100)
     $clb.CheckOnClick = $true
     $clb.Items.AddRange($networks)
+    $clb.BackColor = [System.Drawing.Color]::White
+    $clb.ForeColor = $global:theme.TextPrimary
     $main.Controls.Add($clb)
     $adapters = @($clb)
 
@@ -222,8 +234,11 @@ function Show-ClassManagerView {
     $btnAddA.Font = [System.Drawing.Font]::new('Segoe UI', 12)
     $btnAddA.Location = [System.Drawing.Point]::new($controlLeft + $controlWidth + 10, $currentY)
     $btnAddA.Size = [System.Drawing.Size]::new(120, 30)
-    $btnAddA.BackColor = [System.Drawing.Color]::LightSteelBlue
+    $btnAddA.BackColor = $global:theme.Background
+    $btnAddA.ForeColor = $global:theme.Primary
     $btnAddA.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnAddA.FlatAppearance.BorderColor = $global:theme.Primary
+    $btnAddA.FlatAppearance.BorderSize = 1
     $btnAddA.Add_Click({
         $nb = [System.Windows.Forms.CheckedListBox]::new()
         $nb.Font = [System.Drawing.Font]::new('Segoe UI', 12)
@@ -231,6 +246,8 @@ function Show-ClassManagerView {
         $nb.Size = $clb.Size
         $nb.CheckOnClick = $true
         $nb.Items.AddRange($networks)
+        $nb.BackColor = [System.Drawing.Color]::White
+        $nb.ForeColor = $global:theme.TextPrimary
         $main.Controls.Add($nb)
         $adapters += $nb
     })
@@ -245,105 +262,203 @@ function Show-ClassManagerView {
         Font = [System.Drawing.Font]::new('Segoe UI', 12)
         Size = [System.Drawing.Size]::new(150, 40)
         FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        FlatAppearance = @{
+            BorderSize = 0
+            MouseOverBackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        }
     }
-
+    # Create Folders button
     $btnCreateF = [System.Windows.Forms.Button]::new()
     $btnCreateF.Text = 'Create Folders'
     $btnCreateF.Font = $buttonStyle.Font
     $btnCreateF.Size = $buttonStyle.Size
     $btnCreateF.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
-    $btnCreateF.BackColor = [System.Drawing.Color]::LightGreen
+    $btnCreateF.BackColor = $global:theme.Background
+    $btnCreateF.ForeColor = $global:theme.Primary
     $btnCreateF.FlatStyle = $buttonStyle.FlatStyle
+    $btnCreateF.FlatAppearance.BorderColor = $global:theme.Primary
+    $btnCreateF.FlatAppearance.BorderSize = 1
     $main.Controls.Add($btnCreateF)
 
+    # Create VMs button
     $btnCreateV = [System.Windows.Forms.Button]::new()
     $btnCreateV.Text = 'Create VMs'
     $btnCreateV.Font = $buttonStyle.Font
     $btnCreateV.Size = $buttonStyle.Size
     $btnCreateV.Location = [System.Drawing.Point]::new($sectionLeft + 160, $currentY)
-    $btnCreateV.BackColor = [System.Drawing.Color]::LightGreen
+    $btnCreateV.BackColor = $global:theme.Background
+    $btnCreateV.ForeColor = $global:theme.Primary
     $btnCreateV.FlatStyle = $buttonStyle.FlatStyle
+    $btnCreateV.FlatAppearance.BorderColor = $global:theme.Primary
+    $btnCreateV.FlatAppearance.BorderSize = 1
     $main.Controls.Add($btnCreateV)
 
+    # Delete Class button
     $btnDeleteC = [System.Windows.Forms.Button]::new()
     $btnDeleteC.Text = 'Delete Class'
     $btnDeleteC.Font = $buttonStyle.Font
     $btnDeleteC.Size = $buttonStyle.Size
     $btnDeleteC.Location = [System.Drawing.Point]::new($sectionLeft + 320, $currentY)
-    $btnDeleteC.BackColor = [System.Drawing.Color]::LightCoral
+    $btnDeleteC.BackColor = $global:theme.Background
+    $btnDeleteC.ForeColor = $global:theme.Error
     $btnDeleteC.FlatStyle = $buttonStyle.FlatStyle
+    $btnDeleteC.FlatAppearance.BorderColor = $global:theme.Error
+    $btnDeleteC.FlatAppearance.BorderSize = 1
     $main.Controls.Add($btnDeleteC)
 
+    # Refresh button
     $btnRefresh = [System.Windows.Forms.Button]::new()
     $btnRefresh.Text = 'Refresh'
     $btnRefresh.Font = $buttonStyle.Font
     $btnRefresh.Size = $buttonStyle.Size
     $btnRefresh.Location = [System.Drawing.Point]::new($sectionLeft + 480, $currentY)
-    $btnRefresh.BackColor = [System.Drawing.Color]::LightSteelBlue
+    $btnRefresh.BackColor = $global:theme.Background
+    $btnRefresh.ForeColor = $global:theme.TextPrimary
     $btnRefresh.FlatStyle = $buttonStyle.FlatStyle
+    $btnRefresh.FlatAppearance.BorderColor = $global:theme.TextPrimary
+    $btnRefresh.FlatAppearance.BorderSize = 1
     $main.Controls.Add($btnRefresh)
+
+    # Update vertical position for the next section
     $currentY += 60
 
     # Status label
     $lblStatus = [System.Windows.Forms.Label]::new()
     $lblStatus.Text = 'Ready'
     $lblStatus.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
-    $lblStatus.ForeColor = [System.Drawing.Color]::DarkSlateGray
+    $lblStatus.ForeColor = $global:theme.TextSecondary
     $lblStatus.Location = [System.Drawing.Point]::new($sectionLeft, $currentY)
     $lblStatus.AutoSize = $true
     $main.Controls.Add($lblStatus)
 
-    # -- Event handlers --
+    # -- Event handlers (unchanged) --
+    # Event handler for "Create Folders" button
     $btnCreateF.Add_Click({
-        $conn=Get-ConnectionSafe; if(!$conn){$lblStatus.Text='Offline/no auth';return}
-        try{
-            $name=$txtNew.Text.Trim(); $stud=$txtStud.Lines|Where{$_.Trim()}
-            if(-not $name){throw 'Name empty'}; if(-not $stud){throw 'No students'}
-            $lblStatus.Text='Creating folders...'; $main.Refresh()
-            [CourseManager]::CreateClassFolders($name,$stud)
-            if(-not $cmbClasses.Items.Contains($name)){ $cmbClasses.Items.Add($name) }
-            $lblStatus.Text='Folders created'
-        }catch{Write-Warning"CreateFolders failed: $_"; $lblStatus.Text='Error'}
-    })
-    $btnCreateV.Add_Click({
-        $conn=Get-ConnectionSafe; if(!$conn){$lblStatus.Text='Offline/no auth';return}
-        try{
-            $name=$cmbClasses.SelectedItem; $stud=$txtStud.Lines|Where{$_.Trim()}
-            if(-not $name){throw 'Select class'}; if(-not $stud){throw 'No students'}
-            $tmpl=$cmbTemp.SelectedItem; $ds=$cmbDs.SelectedItem
-            if(-not $tmpl -or -not $ds){throw 'Select template/datastore'}
-            $nets=@(); foreach($a in $adapters){$nets+=$a.CheckedItems}
-            if(-not $nets){throw 'No networks'}
-            $lblStatus.Text='Creating VMs...'; $main.Refresh()
-            $config=[PSCustomObject]@{classFolder=$name;students=$stud;dataStore=$ds;servers=@(@{serverName="$name`_VM";template=$tmpl;adapters=$nets})}
-            [CourseManager]::CreateCourseVMs($config)
-            $lblStatus.Text='VMs created'
-        }catch{Write-Warning"CreateVMs failed: $_"; $lblStatus.Text='Error'}
-    })
-    $btnDeleteC.Add_Click({
-        $conn=Get-ConnectionSafe; if(!$conn){$lblStatus.Text='Offline/no auth';return}
-        try{
-            $name=$cmbClasses.SelectedItem; if(-not $name){throw 'Select class'}
-            $c=[System.Windows.Forms.MessageBox]::Show("Delete '$name'?",'Confirm',[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning)
-            if($c -ne 'Yes'){return}
-            $stud=$txtStud.Lines|Where{$_.Trim()}
-            $lblStatus.Text='Deleting...'; $main.Refresh()
-            [CourseManager]::RemoveCourseVMs($name,$stud)
-            $cmbClasses.Items.Remove($name); $lblStatus.Text='Deleted'
-        }catch{Write-Warning"DeleteClass failed: $_"; $lblStatus.Text='Error'}
-    })
-    $btnRefresh.Add_Click({
-        $conn=Get-ConnectionSafe; if($conn){
-            try{
-                $templates=Get-Template -Server $conn|Select-Object -Expand Name; $cmbTemp.Items.Clear(); $cmbTemp.Items.AddRange($templates)
-                $datastores=Get-Datastore -Server $conn|Select-Object -Expand Name; $cmbDs.Items.Clear(); $cmbDs.Items.AddRange($datastores)
-                $nets=[VMwareNetwork]::ListPortGroups()|Select-Object -Expand Name; foreach($clb in $adapters){$clb.Items.Clear(); $clb.Items.AddRange($nets)}
-                $classes=[CourseManager]::ListClasses(); $cmbClasses.Items.Clear(); $cmbClasses.Items.AddRange($classes)
-                $lblStatus.Text='Refreshed'
-            }catch{Write-Warning"Refresh failed: $_"; $lblStatus.Text='Error'}
-        } else { $lblStatus.Text='Offline/no auth' }
+        $conn = Get-ConnectionSafe
+        if (!$conn) { 
+            $lblStatus.Text = 'Offline/no auth'
+            return 
+        }
+        try {
+            $name = $txtNew.Text.Trim()
+            $stud = $txtStud.Lines | Where { $_.Trim() }
+            if (-not $name) { throw 'Name empty' }
+            if (-not $stud) { throw 'No students' }
+            $lblStatus.Text = 'Creating folders...'
+            $main.Refresh()
+            [CourseManager]::CreateClassFolders($name, $stud)
+            if (-not $cmbClasses.Items.Contains($name)) { 
+                $cmbClasses.Items.Add($name) 
+            }
+            $lblStatus.Text = 'Folders created'
+        } catch {
+            Write-Warning "CreateFolders failed: $_"
+            $lblStatus.Text = 'Error'
+        }
     })
 
-    # Load selected class into new class text box
-    $cmbClasses.Add_SelectedIndexChanged({ $txtNew.Text=$cmbClasses.SelectedItem.ToString() })
+    # Event handler for "Create VMs" button
+    $btnCreateV.Add_Click({
+        $conn = Get-ConnectionSafe
+        if (!$conn) { 
+            $lblStatus.Text = 'Offline/no auth'
+            return 
+        }
+        try {
+            $name = $cmbClasses.SelectedItem
+            $stud = $txtStud.Lines | Where { $_.Trim() }
+            if (-not $name) { throw 'Select class' }
+            if (-not $stud) { throw 'No students' }
+            $tmpl = $cmbTemp.SelectedItem
+            $ds = $cmbDs.SelectedItem
+            if (-not $tmpl -or -not $ds) { throw 'Select template/datastore' }
+            $nets = @()
+            foreach ($a in $adapters) { $nets += $a.CheckedItems }
+            if (-not $nets) { throw 'No networks' }
+            $lblStatus.Text = 'Creating VMs...'
+            $main.Refresh()
+            $config = [PSCustomObject]@{
+                classFolder = $name
+                students = $stud
+                dataStore = $ds
+                servers = @(@{
+                    serverName = "$name`_VM"
+                    template = $tmpl
+                    adapters = $nets
+                })
+            }
+            [CourseManager]::CreateCourseVMs($config)
+            $lblStatus.Text = 'VMs created'
+        } catch {
+            Write-Warning "CreateVMs failed: $_"
+            $lblStatus.Text = 'Error'
+        }
+    })
+
+    # Event handler for "Delete Class" button
+    $btnDeleteC.Add_Click({
+        $conn = Get-ConnectionSafe
+        if (!$conn) { 
+            $lblStatus.Text = 'Offline/no auth'
+            return 
+        }
+        try {
+            $name = $cmbClasses.SelectedItem
+            if (-not $name) { throw 'Select class' }
+            $c = [System.Windows.Forms.MessageBox]::Show(
+                "Delete '$name'?", 
+                'Confirm', 
+                [System.Windows.Forms.MessageBoxButtons]::YesNo, 
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
+            if ($c -ne 'Yes') { return }
+            $stud = $txtStud.Lines | Where { $_.Trim() }
+            $lblStatus.Text = 'Deleting...'
+            $main.Refresh()
+            [CourseManager]::RemoveCourseVMs($name, $stud)
+            $cmbClasses.Items.Remove($name)
+            $lblStatus.Text = 'Deleted'
+        } catch {
+            Write-Warning "DeleteClass failed: $_"
+            $lblStatus.Text = 'Error'
+        }
+    })
+
+    # Event handler for "Refresh" button
+    $btnRefresh.Add_Click({
+        $conn = Get-ConnectionSafe
+        if ($conn) {
+            try {
+                $templates = Get-Template -Server $conn | Select-Object -ExpandProperty Name
+                $cmbTemp.Items.Clear()
+                $cmbTemp.Items.AddRange($templates)
+
+                $datastores = Get-Datastore -Server $conn | Select-Object -ExpandProperty Name
+                $cmbDs.Items.Clear()
+                $cmbDs.Items.AddRange($datastores)
+
+                $nets = [VMwareNetwork]::ListPortGroups() | Select-Object -ExpandProperty Name
+                foreach ($clb in $adapters) {
+                    $clb.Items.Clear()
+                    $clb.Items.AddRange($nets)
+                }
+
+                $classes = [CourseManager]::ListClasses()
+                $cmbClasses.Items.Clear()
+                $cmbClasses.Items.AddRange($classes)
+
+                $lblStatus.Text = 'Refreshed'
+            } catch {
+                Write-Warning "Refresh failed: $_"
+                $lblStatus.Text = 'Error'
+            }
+        } else {
+            $lblStatus.Text = 'Offline/no auth'
+        }
+    })
+
+    # Event handler for class selection change
+    $cmbClasses.Add_SelectedIndexChanged({
+        $txtNew.Text = $cmbClasses.SelectedItem.ToString()
+    })
 }

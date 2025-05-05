@@ -17,19 +17,6 @@ function Show-LoginView {
     [CmdletBinding()]
     param()
 
-    # UI Theme Configuration
-    $theme = @{
-        Background     = [System.Drawing.Color]::FromArgb(240, 240, 240)
-        Primary        = [System.Drawing.Color]::FromArgb(0, 120, 215)
-        Secondary      = [System.Drawing.Color]::FromArgb(100, 160, 220)
-        TextPrimary    = [System.Drawing.Color]::FromArgb(50, 50, 50)
-        TextSecondary  = [System.Drawing.Color]::FromArgb(120, 120, 120)
-        Success        = [System.Drawing.Color]::FromArgb(50, 160, 80)
-        Warning        = [System.Drawing.Color]::FromArgb(220, 150, 0)
-        Error          = [System.Drawing.Color]::FromArgb(220, 80, 80)
-        CardBackground = [System.Drawing.Color]::White
-    }
-
     # Initialize global variables
     $script:LoginResult = $false
 
@@ -37,7 +24,7 @@ function Show-LoginView {
     $form = [System.Windows.Forms.Form]::new()
     $form.Text = 'VMware Management System'
     $form.Size = [System.Drawing.Size]::new(800, 800)
-    $form.BackColor = $theme.Background
+    $form.BackColor = $global:theme.Background
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
@@ -47,9 +34,8 @@ function Show-LoginView {
     $container = [System.Windows.Forms.Panel]::new()
     $container.Size = [System.Drawing.Size]::new(400, 400)
     $container.Location = [System.Drawing.Point]::new(($form.ClientSize.Width - $container.Width) / 2, 200)
-    $container.BackColor = $theme.CardBackground
-    $container.BorderStyle = 'None'
-    $container.Margin = [System.Windows.Forms.Padding]::new(10)
+    $container.BackColor = $global:theme.CardBackground
+    $container.BorderStyle = 'FixedSingle'
     $form.Controls.Add($container)
 
     # Add subtle shadow effect
@@ -76,7 +62,7 @@ function Show-LoginView {
     $lblHeader = [System.Windows.Forms.Label]::new()
     $lblHeader.Text = 'Sign In'
     $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI', 20, [System.Drawing.FontStyle]::Bold)
-    $lblHeader.ForeColor = $theme.Primary
+    $lblHeader.ForeColor = $global:theme.Primary  # Burgundy color
     $lblHeader.Location = [System.Drawing.Point]::new(($container.Width - $lblHeader.PreferredWidth) / 2, 30)
     $lblHeader.AutoSize = $true
     $container.Controls.Add($lblHeader)
@@ -86,12 +72,12 @@ function Show-LoginView {
         Font = [System.Drawing.Font]::new('Segoe UI', 11)
         BorderStyle = 'FixedSingle'
         BackColor = [System.Drawing.Color]::White
-        ForeColor = $theme.TextPrimary
+        ForeColor = $global:theme.TextPrimary
     }
 
     $labelStyle = @{
         Font = [System.Drawing.Font]::new('Segoe UI', 10)
-        ForeColor = $theme.TextSecondary
+        ForeColor = $global:theme.TextSecondary
         AutoSize = $true
     }
 
@@ -142,7 +128,7 @@ function Show-LoginView {
     $chkRemember = [System.Windows.Forms.CheckBox]::new()
     $chkRemember.Text = 'Remember credentials'
     $chkRemember.Font = [System.Drawing.Font]::new('Segoe UI', 10)
-    $chkRemember.ForeColor = $theme.TextSecondary
+    $chkRemember.ForeColor = $global:theme.TextSecondary
     $chkRemember.Location = [System.Drawing.Point]::new(40, 260)
     $chkRemember.AutoSize = $true
     $container.Controls.Add($chkRemember)
@@ -158,11 +144,11 @@ function Show-LoginView {
         }
     }
 
-    # Login Button
+    # Login Button - Burgundy color
     $btnLogin = [System.Windows.Forms.Button]::new()
     $btnLogin.Text = 'LOGIN'
     $btnLogin.Location = [System.Drawing.Point]::new(40, 310)
-    $btnLogin.BackColor = $theme.Primary
+    $btnLogin.BackColor = $global:theme.Primary  # Burgundy
     $btnLogin.ForeColor = [System.Drawing.Color]::White
 
     foreach ($prop in $buttonStyle.GetEnumerator()) {
@@ -178,12 +164,12 @@ function Show-LoginView {
     $form.AcceptButton = $btnLogin
     $container.Controls.Add($btnLogin)
 
-    # Cancel Button
+    # Cancel Button - Light gray
     $btnCancel = [System.Windows.Forms.Button]::new()
     $btnCancel.Text = 'CANCEL'
     $btnCancel.Location = [System.Drawing.Point]::new(230, 310)
     $btnCancel.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
-    $btnCancel.ForeColor = $theme.TextPrimary
+    $btnCancel.ForeColor = $global:theme.TextPrimary
 
     foreach ($prop in $buttonStyle.GetEnumerator()) {
         if ($prop.Key -eq 'FlatAppearance') {
@@ -198,7 +184,7 @@ function Show-LoginView {
     $form.CancelButton = $btnCancel
     $container.Controls.Add($btnCancel)
 
-    # Continue Offline Button
+    # Continue Offline Button - Outlined burgundy
     $btnOffline = [System.Windows.Forms.Button]::new()
     $btnOffline.Text = 'CONTINUE OFFLINE'
     $btnOffline.Font = [System.Drawing.Font]::new('Segoe UI', 10)
@@ -206,9 +192,9 @@ function Show-LoginView {
     $btnOffline.Location = [System.Drawing.Point]::new(40, 370)
     $btnOffline.FlatStyle = 'Flat'
     $btnOffline.FlatAppearance.BorderSize = 1
-    $btnOffline.FlatAppearance.BorderColor = $theme.Primary
+    $btnOffline.FlatAppearance.BorderColor = $global:theme.Primary  # Burgundy border
     $btnOffline.BackColor = [System.Drawing.Color]::White
-    $btnOffline.ForeColor = $theme.Primary
+    $btnOffline.ForeColor = $global:theme.Primary  # Burgundy text
     $btnOffline.Visible = $false
     $container.Controls.Add($btnOffline)
 
@@ -234,7 +220,7 @@ function Show-LoginView {
         } catch {
             Write-Warning "Credential load failed: $_"
             $lblStatus.Text = "Warning: Could not load saved credentials"
-            $lblStatus.ForeColor = $theme.Warning
+            $lblStatus.ForeColor = $global:theme.Warning
         }
     }
 
@@ -242,7 +228,7 @@ function Show-LoginView {
     $btnLogin.Add_Click({
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         $lblStatus.Text = 'Authenticating...'
-        $lblStatus.ForeColor = $theme.TextSecondary
+        $lblStatus.ForeColor = $global:theme.TextSecondary
         $form.Refresh()
 
         try {
@@ -279,7 +265,7 @@ function Show-LoginView {
             $form.Close()
         } catch {
             $lblStatus.Text = "Login failed: $($_.Exception.Message)"
-            $lblStatus.ForeColor = $theme.Error
+            $lblStatus.ForeColor = $global:theme.Error
             $btnOffline.Visible = $true
             $container.Height = 460
             $form.Height = 710
