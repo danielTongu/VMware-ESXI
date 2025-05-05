@@ -1,4 +1,7 @@
-<#
+Add-Type -AssemblyName 'System.Windows.Forms'
+Add-Type -AssemblyName 'System.Drawing'
+
+<##
 .SYNOPSIS
     VMware Network Management View, resilient to authentication and offline states.
 .DESCRIPTION
@@ -9,19 +12,24 @@
     Honors global login and offline state; operations are no-ops when disconnected.
 .PARAMETER ContentPanel
     The Panel control where this view is rendered.
+.NOTES
+    Resilient design based on Main.ps1: always shows UI even if offline or unauthenticated.
+.EXAMPLE
+    Show-NetworkView -ContentPanel $split.Panel2
 #>
-
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
 function Show-NetworkView {
-    [CmdletBinding()]
+
     param (
-        [Parameter(Mandatory=$true)][System.Windows.Forms.Panel]$ContentPanel
+        [Parameter(Mandatory=$true)]
+        [System.Windows.Forms.Panel]$ContentPanel
     )
 
-    # Safe connection helper
+    # Helper: safe connection under auth/offline conditions
     function Get-ConnectionSafe {
+        <#
+        .SYNOPSIS
+            Returns a VMware connection or $null if offline/not authenticated.
+        #>
         if (-not $global:IsLoggedIn) {
             Write-Warning 'Not logged in: network operations disabled.'
             return $null
@@ -33,186 +41,272 @@ function Show-NetworkView {
         return $global:VMwareConfig.Connection
     }
 
-    # Clear UI
+    # Clear and theme the content panel
     $ContentPanel.Controls.Clear()
+    $ContentPanel.BackColor = $global:theme.Background
 
-    # Header and offline banner
-    $lblHeader = [System.Windows.Forms.Label]::new()
+    # Header label
+    $lblHeader = New-Object System.Windows.Forms.Label
     $lblHeader.Text = 'Network Management'
-    $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI',16,[System.Drawing.FontStyle]::Bold)
-    $lblHeader.Location = [System.Drawing.Point]::new(10,10)
+    $lblHeader.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
+    $lblHeader.ForeColor = $global:theme.Primary
     $lblHeader.AutoSize = $true
+    $lblHeader.Location = [System.Drawing.Point]::new(20, 15)
     $ContentPanel.Controls.Add($lblHeader)
 
+    # Offline/auth banner
     if (-not $global:IsLoggedIn -or $global:VMwareConfig.OfflineMode) {
-        $lblOffline = [System.Windows.Forms.Label]::new()
+        $lblOffline = New-Object System.Windows.Forms.Label
         $lblOffline.Text = 'OFFLINE or not logged in: limited network functionality'
-        $lblOffline.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Italic)
-        $lblOffline.ForeColor = [System.Drawing.Color]::DarkRed
+        $lblOffline.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
+        $lblOffline.ForeColor = $global:theme.Error
         $lblOffline.AutoSize = $true
         $lblOffline.Location = [System.Drawing.Point]::new(260,16)
         $ContentPanel.Controls.Add($lblOffline)
     }
 
-    # Tab control
-    $tabControl = [System.Windows.Forms.TabControl]::new()
-    $tabControl.Location = [System.Drawing.Point]::new(10,40)
-    $tabControl.Size     = [System.Drawing.Size]::new(780,450)
+    # Tab control setup
+    $tabControl = New-Object System.Windows.Forms.TabControl
+    $tabControl.Font = New-Object System.Drawing.Font('Segoe UI', 12)
+    $tabControl.Location = [System.Drawing.Point]::new(20, 60)
+    $tabControl.Size = [System.Drawing.Size]::new(850, 500)
     $ContentPanel.Controls.Add($tabControl)
 
     # --- Overview Tab ---
-    $tabOverview = [System.Windows.Forms.TabPage]::new()
-    $tabOverview.Text = 'Overview'
+    $tabOverview = New-Object System.Windows.Forms.TabPage 'Network Overview'
+    $tabOverview.BackColor = $global:theme.CardBackground
     $tabControl.Controls.Add($tabOverview)
 
-    
-    # Grid
-    $grid = [System.Windows.Forms.DataGridView]::new()
-    $grid.Location = [System.Drawing.Point]::new(10,10)
-    $grid.Size     = [System.Drawing.Size]::new(750,350)
-    $grid.ReadOnly = $true; $grid.AllowUserToAddRows = $false
-    $grid.SelectionMode = 'FullRowSelect'; $grid.AutoSizeColumnsMode = 'Fill'
-    $grid.AutoGenerateColumns = $false
-    foreach ($colName in 'Name','Type','vSwitch','VLAN','Ports','Used') {
-        $col = [System.Windows.Forms.DataGridViewTextBoxColumn]::new()
-        $col.Name = $colName; $col.HeaderText = $colName
-        $grid.Columns.Add($col) | Out-Null
-    }
+    # Data grid for networks
+    $grid = New-Object System.Windows.Forms.DataGridView
+    $grid.ReadOnly = $true
+    $grid.AllowUserToAddRows = $false
+    $grid.SelectionMode = 'FullRowSelect'
+    $grid.AutoSizeColumnsMode = 'Fill'
+    $grid.Location = [System.Drawing.Point]::new(15, 15)
+    $grid.Size = [System.Drawing.Size]::new(820, 380)
+    $grid.BackgroundColor = $global:theme.CardBackground
+    $grid.GridColor = $global:theme.Border
+    $grid.BorderStyle = 'Fixed3D'
+    $grid.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+    $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:theme.TextPrimary
+    $grid.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::AliceBlue
     $tabOverview.Controls.Add($grid)
 
-
-
     # Refresh button
-    $btnRefresh = [System.Windows.Forms.Button]::new()
-    $btnRefresh.Text = 'Refresh'
-    $btnRefresh.Size = [System.Drawing.Size]::new(100,30)
-    $btnRefresh.Location = [System.Drawing.Point]::new(660,370)
+    $btnRefresh = New-Object System.Windows.Forms.Button
+    $btnRefresh.Text = 'Refresh Data'
+    $btnRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $btnRefresh.Size = New-Object System.Drawing.Size(150, 35)
+    $btnRefresh.Location = [System.Drawing.Point]::new(685, 405)
+    $btnRefresh.BackColor = $global:theme.Secondary
+    $btnRefresh.ForeColor = $global:theme.CardBackground
+    $btnRefresh.FlatStyle = 'Flat'
     $btnRefresh.Add_Click({ Refresh-NetworkData })
     $tabOverview.Controls.Add($btnRefresh)
 
-
+    # Define overview columns
+    $columns = @(
+        @{Name='Name';    Header='Name'},
+        @{Name='Type';    Header='Type'},
+        @{Name='vSwitch'; Header='vSwitch'},
+        @{Name='VLAN';    Header='VLAN'},
+        @{Name='Ports';   Header='Ports'},
+        @{Name='Used';    Header='Used'}
+    )
+    foreach ($col in $columns) {
+        $gridCol = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+        $gridCol.Name = $col.Name
+        $gridCol.HeaderText = $col.Header
+        $grid.Columns.Add($gridCol) | Out-Null
+    }
 
     # --- Operations Tab ---
-    $tabOps = [System.Windows.Forms.TabPage]::new(); $tabOps.Text = 'Operations'; $tabControl.Controls.Add($tabOps)
+    $tabOps = New-Object System.Windows.Forms.TabPage 'Network Operations'
+    $tabOps.BackColor = $global:theme.CardBackground
+    $tabControl.Controls.Add($tabOps)
 
+    # Layout anchors
+    $secX = 20; $ctlX = 200; $ctlW = 250; $spacingY = 35; $yPos = 20
 
+    # Section divider function
+    function Add-SectionDivider {
+        param([string]$Title, [ref]$Y)
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text = $Title
+        $lbl.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
+        $lbl.ForeColor = $global:theme.Primary
+        $lbl.Location = [System.Drawing.Point]::new($secX, $Y.Value)
+        $lbl.AutoSize = $true
+        $tabOps.Controls.Add($lbl)
 
-    # Single network controls
-    $lblName = [System.Windows.Forms.Label]::new(); 
-    $lblName.Text='Network Name:'; 
-    $lblName.Location=[System.Drawing.Point]::new(10,10); 
-    $lblName.AutoSize=$true; 
+        $line = New-Object System.Windows.Forms.Label
+        $line.BorderStyle = 'Fixed3D'
+        $line.Location = [System.Drawing.Point]::new($secX, $Y.Value + 25)
+        $line.Size = [System.Drawing.Size]::new($tabOps.Width - 40, 2)
+        $tabOps.Controls.Add($line)
+
+        $Y.Value += 40
+    }
+
+    # Single network ops
+    Add-SectionDivider -Title 'Single Network Operations' -Y ([ref]$yPos)
+    # Name label
+    $lblName = New-Object System.Windows.Forms.Label
+    $lblName.Text = 'Network Name:'
+    $lblName.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblName.ForeColor = $global:theme.TextPrimary
+    $lblName.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $lblName.AutoSize = $true
     $tabOps.Controls.Add($lblName)
-
-    $txtName = [System.Windows.Forms.TextBox]::new(); 
-    $txtName.Location=[System.Drawing.Point]::new(120,10); 
-    $txtName.Size=[System.Drawing.Size]::new(200,20); 
+    # Name textbox
+    $txtName = New-Object System.Windows.Forms.TextBox
+    $txtName.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $txtName.ForeColor = $global:theme.TextPrimary
+    $txtName.BackColor = $global:theme.CardBackground
+    $txtName.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $txtName.Size = [System.Drawing.Size]::new($ctlW, 25)
     $tabOps.Controls.Add($txtName)
+    $yPos += $spacingY
 
-    $lblSwitch=[System.Windows.Forms.Label]::new();
-    $lblSwitch.Text='vSwitch:';
-    $lblSwitch.Location=[System.Drawing.Point]::new(10,40);
-    $lblSwitch.AutoSize=$true;
+    # vSwitch selector
+    $lblSwitch = New-Object System.Windows.Forms.Label
+    $lblSwitch.Text = 'vSwitch:'
+    $lblSwitch.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblSwitch.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $lblSwitch.AutoSize = $true
     $tabOps.Controls.Add($lblSwitch)
-
-    $cmbSwitch=[System.Windows.Forms.ComboBox]::new();
-    $cmbSwitch.Location=[System.Drawing.Point]::new(120,40);
-    $cmbSwitch.Size=[System.Drawing.Size]::new(200,20);
+    $cmbSwitch = New-Object System.Windows.Forms.ComboBox
+    $cmbSwitch.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $cmbSwitch.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $cmbSwitch.Size = [System.Drawing.Size]::new($ctlW, 25)
+    $cmbSwitch.DropDownStyle = 'DropDownList'
     $tabOps.Controls.Add($cmbSwitch)
+    $yPos += $spacingY
 
-    $lblVLAN=[System.Windows.Forms.Label]::new();
-    $lblVLAN.Text='VLAN ID:';
-    $lblVLAN.Location=[System.Drawing.Point]::new(10,70);
-    $lblVLAN.AutoSize=$true;
+    # VLAN textbox
+    $lblVLAN = New-Object System.Windows.Forms.Label
+    $lblVLAN.Text = 'VLAN ID:'
+    $lblVLAN.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblVLAN.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $lblVLAN.AutoSize = $true
     $tabOps.Controls.Add($lblVLAN)
-
-    $txtVLAN=[System.Windows.Forms.TextBox]::new();
-    $txtVLAN.Location=[System.Drawing.Point]::new(120,70);
-    $txtVLAN.Size=[System.Drawing.Size]::new(60,20);
+    $txtVLAN = New-Object System.Windows.Forms.TextBox
+    $txtVLAN.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $txtVLAN.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $txtVLAN.Size = [System.Drawing.Size]::new(80, 25)
+    $txtVLAN.BackColor = $global:theme.CardBackground
+    $txtVLAN.ForeColor = $global:theme.TextPrimary
     $tabOps.Controls.Add($txtVLAN)
+    $yPos += 50
 
-    $btnAdd=[System.Windows.Forms.Button]::new();
-    $btnAdd.Text='Add Port Group';
-    $btnAdd.Size=[System.Drawing.Size]::new(120,30);
-    $btnAdd.Location=[System.Drawing.Point]::new(10,100);
-    $btnAdd.Add_Click({ Add-Network });
+    # Single action buttons
+    $btnAdd = New-Object System.Windows.Forms.Button
+    $btnAdd.Text = 'Add Port Group'
+    $btnAdd.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $btnAdd.Size = New-Object System.Drawing.Size(180,35)
+    $btnAdd.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $btnAdd.BackColor = $global:theme.Primary
+    $btnAdd.ForeColor = $global:theme.CardBackground
+    $btnAdd.FlatStyle = 'Flat'
+    $btnAdd.Add_Click({ Add-Network })
     $tabOps.Controls.Add($btnAdd)
 
-    $btnRemove=[System.Windows.Forms.Button]::new();
-    $btnRemove.Text='Remove Port Group';
-    $btnRemove.Size=[System.Drawing.Size]::new(120,30);
-    $btnRemove.Location=[System.Drawing.Point]::new(140,100);
-    $btnRemove.Add_Click({ Remove-Network });
+    $btnRemove = New-Object System.Windows.Forms.Button
+    $btnRemove.Text = 'Remove Port Group'
+    $btnRemove.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $btnRemove.Size = New-Object System.Drawing.Size(180,35)
+    $btnRemove.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $btnRemove.BackColor = $global:theme.Error
+    $btnRemove.ForeColor = $global:theme.CardBackground
+    $btnRemove.FlatStyle = 'Flat'
+    $btnRemove.Add_Click({ Remove-Network })
     $tabOps.Controls.Add($btnRemove)
+    $yPos += 50
 
-
-
-    # Bulk
-    $lblBulk=[System.Windows.Forms.Label]::new();
-    $lblBulk.Text='Bulk Student Networks';
-    $lblBulk.Font=[System.Drawing.Font]::new('Segoe UI',12,[System.Drawing.FontStyle]::Bold);
-    $lblBulk.Location=[System.Drawing.Point]::new(10,150);
-    $lblBulk.AutoSize=$true;
-    $tabOps.Controls.Add($lblBulk)
-
-    $lblCourse=[System.Windows.Forms.Label]::new();
-    $lblCourse.Text='Course Prefix:';
-    $lblCourse.Location=[System.Drawing.Point]::new(10,180);
-    $lblCourse.AutoSize=$true;
+    # Bulk student networks
+    Add-SectionDivider -Title 'Bulk Student Networks' -Y ([ref]$yPos)
+    # Course prefix
+    $lblCourse = New-Object System.Windows.Forms.Label
+    $lblCourse.Text = 'Course Prefix:'
+    $lblCourse.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblCourse.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $lblCourse.AutoSize = $true
     $tabOps.Controls.Add($lblCourse)
-
-    $txtCourse=[System.Windows.Forms.TextBox]::new();
-    $txtCourse.Location=[System.Drawing.Point]::new(120,180);
-    $txtCourse.Size=[System.Drawing.Size]::new(100,20);
+    $txtCourse = New-Object System.Windows.Forms.TextBox
+    $txtCourse.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $txtCourse.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $txtCourse.Size = [System.Drawing.Size]::new(120,25)
+    $txtCourse.BackColor = $global:theme.CardBackground
+    $txtCourse.ForeColor = $global:theme.TextPrimary
     $tabOps.Controls.Add($txtCourse)
+    $yPos += $spacingY
 
-    $lblRange=[System.Windows.Forms.Label]::new();
-    $lblRange.Text='Range:';
-    $lblRange.Location=[System.Drawing.Point]::new(10,210);
-    $lblRange.AutoSize=$true;
-
+    # Range inputs
+    $lblRange = New-Object System.Windows.Forms.Label
+    $lblRange.Text = 'Student Range:'
+    $lblRange.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblRange.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $lblRange.AutoSize = $true
     $tabOps.Controls.Add($lblRange)
-    $txtStart=[System.Windows.Forms.TextBox]::new();
-    $txtStart.Location=[System.Drawing.Point]::new(120,210);
-    $txtStart.Size=[System.Drawing.Size]::new(40,20);
-    $txtStart.Text='1';
+    $txtStart = New-Object System.Windows.Forms.TextBox
+    $txtStart.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $txtStart.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $txtStart.Size = New-Object System.Drawing.Size(50,25)
+    $txtStart.BackColor = $global:theme.CardBackground
+    $txtStart.ForeColor = $global:theme.TextPrimary
+    $txtStart.Text = '1'
     $tabOps.Controls.Add($txtStart)
-
-    $lblTo=[System.Windows.Forms.Label]::new();
-    $lblTo.Text='to';
-    $lblTo.Location=[System.Drawing.Point]::new(170,210);
-    $lblTo.AutoSize=$true;
+    $lblTo = New-Object System.Windows.Forms.Label
+    $lblTo.Text = ' to '
+    $lblTo.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $lblTo.Location = [System.Drawing.Point]::new($ctlX+60, $yPos)
+    $lblTo.AutoSize = $true
     $tabOps.Controls.Add($lblTo)
-
-    $txtEnd=[System.Windows.Forms.TextBox]::new();
-    $txtEnd.Location=[System.Drawing.Point]::new(200,210);
-    $txtEnd.Size=[System.Drawing.Size]::new(40,20);
-    $txtEnd.Text='10';
+    $txtEnd = New-Object System.Windows.Forms.TextBox
+    $txtEnd.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $txtEnd.Location = [System.Drawing.Point]::new($ctlX+90, $yPos)
+    $txtEnd.Size = New-Object System.Drawing.Size(50,25)
+    $txtEnd.BackColor = $global:theme.CardBackground
+    $txtEnd.ForeColor = $global:theme.TextPrimary
+    $txtEnd.Text = '10'
     $tabOps.Controls.Add($txtEnd)
-    
-    $btnBulkAdd=[System.Windows.Forms.Button]::new();
-    $btnBulkAdd.Text='Create';
-    $btnBulkAdd.Size=[System.Drawing.Size]::new(180,30);
-    $btnBulkAdd.Location=[System.Drawing.Point]::new(10,240);
-    $btnBulkAdd.Add_Click({ Add-BulkNetworks });
+    $yPos += 50
+
+    # Bulk action buttons
+    $btnBulkAdd = New-Object System.Windows.Forms.Button
+    $btnBulkAdd.Text = 'Create Networks'
+    $btnBulkAdd.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $btnBulkAdd.Size = New-Object System.Drawing.Size(180,35)
+    $btnBulkAdd.Location = [System.Drawing.Point]::new($secX, $yPos)
+    $btnBulkAdd.BackColor = $global:theme.Primary
+    $btnBulkAdd.ForeColor = $global:theme.CardBackground
+    $btnBulkAdd.FlatStyle = 'Flat'
+    $btnBulkAdd.Add_Click({ Add-BulkNetworks })
     $tabOps.Controls.Add($btnBulkAdd)
 
-    $btnBulkRem=[System.Windows.Forms.Button]::new();
-    $btnBulkRem.Text='Remove';
-    $btnBulkRem.Size=[System.Drawing.Size]::new(180,30);
-    $btnBulkRem.Location=[System.Drawing.Point]::new(200,240);
-    $btnBulkRem.Add_Click({ Remove-BulkNetworks });
+    $btnBulkRem = New-Object System.Windows.Forms.Button
+    $btnBulkRem.Text = 'Remove Networks'
+    $btnBulkRem.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $btnBulkRem.Size = New-Object System.Drawing.Size(180,35)
+    $btnBulkRem.Location = [System.Drawing.Point]::new($ctlX, $yPos)
+    $btnBulkRem.BackColor = $global:theme.Error
+    $btnBulkRem.ForeColor = $global:theme.CardBackground
+    $btnBulkRem.FlatStyle = 'Flat'
+    $btnBulkRem.Add_Click({ Remove-BulkNetworks })
     $tabOps.Controls.Add($btnBulkRem)
 
-
     # Status bar
-    $status=[System.Windows.Forms.StatusBar]::new();
-    $status.Location=[System.Drawing.Point]::new(10,500);
-    $status.Size=[System.Drawing.Size]::new(780,22);
+    $status = New-Object System.Windows.Forms.StatusBar
+    $status.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $status.BackColor = $global:theme.CardBackground
+    $status.ForeColor = $global:theme.TextSecondary
+    $status.SizingGrip = $false
+    $status.Dock = 'Bottom'
     $ContentPanel.Controls.Add($status)
 
-
-
+    # --- Functions ---
     function Refresh-NetworkData {
         # Update the status bar to indicate loading
         $status.Text='Loading...';$ContentPanel.Refresh()
