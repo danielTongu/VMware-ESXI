@@ -12,6 +12,22 @@
 
 
 
+# UI Theme Configuration - Grayscale with Burgundy accent
+Add-Type -AssemblyName 'System.Drawing'
+
+$global:theme = @{  
+    Background     = [System.Drawing.Color]::FromArgb(250, 250, 250)  # Very light gray
+    Primary        = [System.Drawing.Color]::FromArgb(128, 0, 32)     # Burgundy accent
+    Secondary      = [System.Drawing.Color]::FromArgb(160, 160, 160)  # Medium gray
+    TextPrimary    = [System.Drawing.Color]::FromArgb(40, 40, 40)     # Dark gray text
+    TextSecondary  = [System.Drawing.Color]::FromArgb(120, 120, 120) # Medium gray text
+    Success        = [System.Drawing.Color]::FromArgb(80, 80, 80)    # Dark gray (unused)
+    Warning        = [System.Drawing.Color]::FromArgb(192, 64, 0)    # Dark orange (unused)
+    Error          = [System.Drawing.Color]::FromArgb(180, 0, 0)     # Dark red accent
+    CardBackground = [System.Drawing.Color]::White                 # White for panels
+    Border         = [System.Drawing.Color]::FromArgb(220, 220, 220) # Light gray border
+}
+
 
 
 #region CONFIGURATION
@@ -23,6 +39,7 @@ $global:VMwareConfig = @{
     Connection      = $null          # Will hold the VIServer connection
     User            = $null          # Logged‐in username
 }
+
 # Track authentication state for dynamic login/logout
 $global:IsLoggedIn = $false
 #endregion
