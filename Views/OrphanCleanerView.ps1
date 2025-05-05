@@ -24,9 +24,17 @@ function Show-OrphanCleanerView {
     $layout = New-Object System.Windows.Forms.TableLayoutPanel
     $layout.Dock      = 'Fill'
     $layout.RowCount  = 2
-    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute', 40))
+    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'absolute', 50))
+    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute', 50))
     $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent', 100))
     $ContentPanel.Controls.Add($layout)
+
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = 'Orphaned VM Files'
+    $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = [System.Drawing.Color]::DarkSlateBlue
+    $lblTitle.AutoSize = $true
+    $layout.Controls.Add($lblTitle, 0, 0)
 
     # ---- Controls Row ----
     $controlsPanel = New-Object System.Windows.Forms.FlowLayoutPanel
@@ -34,12 +42,13 @@ function Show-OrphanCleanerView {
     $controlsPanel.FlowDirection = 'LeftToRight'
     $controlsPanel.WrapContents  = $false
     $controlsPanel.Padding       = '10,5,10,5'
-    $layout.Controls.Add($controlsPanel, 0, 0)
+    $layout.Controls.Add($controlsPanel, 0, 1)
 
     # Datastore label
     $lblDatastore = New-Object System.Windows.Forms.Label
     $lblDatastore.Text  = 'Datastore:'
     $lblDatastore.AutoSize = $true
+    $lblDatastore.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
     $lblDatastore.TextAlign = 'MiddleLeft'
     $controlsPanel.Controls.Add($lblDatastore)
 
@@ -47,18 +56,21 @@ function Show-OrphanCleanerView {
     $comboDatastores = New-Object System.Windows.Forms.ComboBox
     $comboDatastores.DropDownStyle = 'DropDownList'
     $comboDatastores.Width         = 200
+    $comboDatastores.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
     $controlsPanel.Controls.Add($comboDatastores)
 
     # Refresh button
     $btnRefresh = New-Object System.Windows.Forms.Button
     $btnRefresh.Text      = 'Refresh'
     $btnRefresh.AutoSize  = $true
+    $btnRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
     $controlsPanel.Controls.Add($btnRefresh)
 
     # Clean button
     $btnClean = New-Object System.Windows.Forms.Button
     $btnClean.Text      = 'Delete Selected'
     $btnClean.AutoSize  = $true
+    $btnClean.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
     $controlsPanel.Controls.Add($btnClean)
 
     # ---- Data Grid Row ----
@@ -68,7 +80,7 @@ function Show-OrphanCleanerView {
     $grid.SelectionMode      = 'FullRowSelect'
     $grid.MultiSelect        = $true
     $grid.AutoSizeColumnsMode= 'Fill'
-    $layout.Controls.Add($grid, 0, 1)
+    $layout.Controls.Add($grid, 0, 2)
 
     # Populate datastores list
     try {
