@@ -23,6 +23,8 @@ function Show-LoginView {
     # Main form setup
     $form = [System.Windows.Forms.Form]::new()
     $form.Text = 'VMware Management System'
+    $form.StartPosition = 'CenterScreen'
+    $form.TopMost = $true
     $form.Size = [System.Drawing.Size]::new(800, 800)
     $form.BackColor = $global:theme.Background
     $form.StartPosition = 'CenterScreen'
@@ -48,8 +50,8 @@ function Show-LoginView {
 
     # Application logo
     $logo = [System.Windows.Forms.PictureBox]::new()
-    $logo.Size = [System.Drawing.Size]::new(300, 190)
-    $logo.Location = [System.Drawing.Point]::new(($form.Width - $logo.Width) / 2, 15)
+    $logo.Size = [System.Drawing.Size]::new(250, 190)
+    $logo.Location = [System.Drawing.Point]::new(($form.Width - $logo.Width) / 2, 0)
     try {
         $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
     } catch {
@@ -63,7 +65,7 @@ function Show-LoginView {
     $lblHeader.Text = 'Sign In'
     $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI', 20, [System.Drawing.FontStyle]::Bold)
     $lblHeader.ForeColor = $global:theme.Primary  # Burgundy color
-    $lblHeader.Location = [System.Drawing.Point]::new(($container.Width - $lblHeader.PreferredWidth) / 2, 30)
+    $lblHeader.Location = [System.Drawing.Point]::new(($container.Width - $lblHeader.PreferredWidth) / 2, 5)
     $lblHeader.AutoSize = $true
     $container.Controls.Add($lblHeader)
 
@@ -84,7 +86,7 @@ function Show-LoginView {
     # Username Field
     $lblUser = [System.Windows.Forms.Label]::new()
     $lblUser.Text = 'Username'
-    $lblUser.Location = [System.Drawing.Point]::new(40, 100)
+    $lblUser.Location = [System.Drawing.Point]::new(40, 50)
 
     foreach ($prop in $labelStyle.GetEnumerator()) {
         $lblUser.$($prop.Key) = $prop.Value
@@ -93,7 +95,7 @@ function Show-LoginView {
     $container.Controls.Add($lblUser)
 
     $txtUser = [System.Windows.Forms.TextBox]::new()
-    $txtUser.Location = [System.Drawing.Point]::new(40, 125)
+    $txtUser.Location = [System.Drawing.Point]::new(40, 74)
     $txtUser.Size = [System.Drawing.Size]::new(340, 35)
 
     foreach ($prop in $fieldStyle.GetEnumerator()) {
@@ -105,7 +107,7 @@ function Show-LoginView {
     # Password Field
     $lblPass = [System.Windows.Forms.Label]::new()
     $lblPass.Text = 'Password'
-    $lblPass.Location = [System.Drawing.Point]::new(40, 180)
+    $lblPass.Location = [System.Drawing.Point]::new(40, 110)
 
     foreach ($prop in $labelStyle.GetEnumerator()) {
         $lblPass.$($prop.Key) = $prop.Value
@@ -114,7 +116,9 @@ function Show-LoginView {
     $container.Controls.Add($lblPass)
 
     $txtPass = [System.Windows.Forms.TextBox]::new()
-    $txtPass.Location = [System.Drawing.Point]::new(40, 205)
+    $txtPass.Location = [System.Drawing.Point]::new(40, 134)
+    $txtPass.PasswordChar = '*'
+    $txtPass.MaxLength = 100
     $txtPass.Size = [System.Drawing.Size]::new(340, 35)
     $txtPass.UseSystemPasswordChar = $true
 
@@ -129,7 +133,8 @@ function Show-LoginView {
     $chkRemember.Text = 'Remember credentials'
     $chkRemember.Font = [System.Drawing.Font]::new('Segoe UI', 10)
     $chkRemember.ForeColor = $global:theme.TextSecondary
-    $chkRemember.Location = [System.Drawing.Point]::new(40, 260)
+    $chkRemember.Location = [System.Drawing.Point]::new(40, 180)
+    $chkRemember.Size = [System.Drawing.Size]::new(200, 20)
     $chkRemember.AutoSize = $true
     $container.Controls.Add($chkRemember)
 
@@ -147,7 +152,7 @@ function Show-LoginView {
     # Login Button - Burgundy color
     $btnLogin = [System.Windows.Forms.Button]::new()
     $btnLogin.Text = 'LOGIN'
-    $btnLogin.Location = [System.Drawing.Point]::new(40, 310)
+    $btnLogin.Location = [System.Drawing.Point]::new(40, 220)
     $btnLogin.BackColor = $global:theme.Primary  # Burgundy
     $btnLogin.ForeColor = [System.Drawing.Color]::White
 
@@ -167,7 +172,7 @@ function Show-LoginView {
     # Cancel Button - Light gray
     $btnCancel = [System.Windows.Forms.Button]::new()
     $btnCancel.Text = 'CANCEL'
-    $btnCancel.Location = [System.Drawing.Point]::new(230, 310)
+    $btnCancel.Location = [System.Drawing.Point]::new(230, 220)
     $btnCancel.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
     $btnCancel.ForeColor = $global:theme.TextPrimary
 
@@ -184,12 +189,22 @@ function Show-LoginView {
     $form.CancelButton = $btnCancel
     $container.Controls.Add($btnCancel)
 
+    # Status Label
+    $lblStatus = [System.Windows.Forms.Label]::new()
+    $lblStatus.Text = ''
+    $lblStatus.Size = [System.Drawing.Size]::new($container.Width - 80, 40)
+    $lblStatus.Location = [System.Drawing.Point]::new(40, 310)
+    $lblStatus.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+    $lblStatus.Font = [System.Drawing.Font]::new('Segoe UI', 10)
+    $lblStatus.ForeColor = $global:theme.TextSecondary
+    $container.Controls.Add($lblStatus)
+
     # Continue Offline Button - Outlined burgundy
     $btnOffline = [System.Windows.Forms.Button]::new()
     $btnOffline.Text = 'CONTINUE OFFLINE'
     $btnOffline.Font = [System.Drawing.Font]::new('Segoe UI', 10)
     $btnOffline.Size = [System.Drawing.Size]::new(340, 35)
-    $btnOffline.Location = [System.Drawing.Point]::new(40, 370)
+    $btnOffline.Location = [System.Drawing.Point]::new(40, 270)
     $btnOffline.FlatStyle = 'Flat'
     $btnOffline.FlatAppearance.BorderSize = 1
     $btnOffline.FlatAppearance.BorderColor = $global:theme.Primary  # Burgundy border
@@ -197,15 +212,6 @@ function Show-LoginView {
     $btnOffline.ForeColor = $global:theme.Primary  # Burgundy text
     $btnOffline.Visible = $false
     $container.Controls.Add($btnOffline)
-
-    # Status Label
-    $lblStatus = [System.Windows.Forms.Label]::new()
-    $lblStatus.Text = ''
-    $lblStatus.Size = [System.Drawing.Size]::new($container.Width - 80, 40)
-    $lblStatus.Location = [System.Drawing.Point]::new(40, 420)
-    $lblStatus.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
-    $lblStatus.Font = [System.Drawing.Font]::new('Segoe UI', 10)
-    $container.Controls.Add($lblStatus)
 
     # Load remembered credentials
     $credPath = "$env:APPDATA\VMwareManagement\credentials.xml"
@@ -228,7 +234,6 @@ function Show-LoginView {
     $btnLogin.Add_Click({
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         $lblStatus.Text = 'Authenticating...'
-        $lblStatus.ForeColor = $global:theme.TextSecondary
         $form.Refresh()
 
         try {
@@ -267,8 +272,9 @@ function Show-LoginView {
             $lblStatus.Text = "Login failed: $($_.Exception.Message)"
             $lblStatus.ForeColor = $global:theme.Error
             $btnOffline.Visible = $true
-            $container.Height = 460
-            $form.Height = 710
+            $container.Height = $container.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+            $form.Height = $form.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+            $form.Refresh()
             $btnLogin.Text = 'LOGIN'
         } finally {
             $form.Cursor = [System.Windows.Forms.Cursors]::Default
@@ -300,6 +306,9 @@ function Show-LoginView {
     })
 
     # Show the form and return the result
+    $container.Height = $container.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+    $form.Height = $form.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+    $form.Refresh()
     $result = $form.ShowDialog()
     $form.Dispose()
     return $script:LoginResult
