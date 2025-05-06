@@ -46,7 +46,7 @@ function Show-VMsView {
 
     # Title label with accent color
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = 'Virtual Machines Management'
+    $lblTitle.Text = 'Virtual Machines'
     $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = $global:theme.Primary
     $lblTitle.AutoSize = $true

@@ -25,7 +25,7 @@ function Show-LoginView {
     $form.Text = 'VMware Management System'
     $form.StartPosition = 'CenterScreen'
     $form.TopMost = $true
-    $form.Size = [System.Drawing.Size]::new(800, 800)
+    $form.Size = [System.Drawing.Size]::new(800, 200)
     $form.BackColor = $global:theme.Background
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
