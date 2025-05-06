@@ -110,7 +110,7 @@ $deleteOrphanFilesButton.Visible = $false
 $contentPanel.Controls.Add($deleteOrphanFilesButton)
 
 $retrieveUserLogsButton = New-Object System.Windows.Forms.Button
-$retrieveUserLogsButton.Text = "Retrieve User Logs"
+$retrieveUserLogsButton.Text = "Retrieve User Login Times"
 $retrieveUserLogsButton.Size = New-Object System.Drawing.Size(150, 30)
 $retrieveUserLogsButton.Location = New-Object System.Drawing.Point(200, 700)
 $retrieveUserLogsButton.Visible = $false
@@ -122,6 +122,25 @@ $showActiveVMsButton.Size = New-Object System.Drawing.Size(150, 30)
 $showActiveVMsButton.Location = New-Object System.Drawing.Point(370, 700)
 $showActiveVMsButton.Visible = $false
 $contentPanel.Controls.Add($showActiveVMsButton)
+
+# --- RECENT ACTIVITY COMPONENTS (Logs Section) ---
+
+$recentActivityLabel = New-Object System.Windows.Forms.Label
+$recentActivityLabel.Text = "Recent Activity"
+$recentActivityLabel.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
+$recentActivityLabel.Location = New-Object System.Drawing.Point(30, 100)
+$recentActivityLabel.AutoSize = $true
+$recentActivityLabel.Visible = $false
+$contentPanel.Controls.Add($recentActivityLabel)
+
+$recentActivityBox = New-Object System.Windows.Forms.TextBox
+$recentActivityBox.Multiline = $true
+$recentActivityBox.ScrollBars = "Vertical"
+$recentActivityBox.Size = New-Object System.Drawing.Size(800, 500)
+$recentActivityBox.Location = New-Object System.Drawing.Point(30, 130)
+$recentActivityBox.ReadOnly = $true
+$recentActivityBox.Visible = $false
+$contentPanel.Controls.Add($recentActivityBox)
 
 # Function to clear/hide section-specific controls
 function Hide-AllExtras {
@@ -142,6 +161,8 @@ function Hide-AllExtras {
     $deleteOrphanFilesButton.Visible = $false
     $retrieveUserLogsButton.Visible = $false
     $showActiveVMsButton.Visible = $false
+    $recentActivityLabel.Visible = $false
+    $recentActivityBox.Visible = $false
 }
 
 # Function to update the content area
@@ -163,6 +184,9 @@ function Set-Content {
         $deleteOrphanFilesButton.Visible = $true
         $retrieveUserLogsButton.Visible = $true
         $showActiveVMsButton.Visible = $true
+        $recentActivityLabel.Visible = $true
+        $recentActivityBox.Visible = $true
+        $recentActivityBox.Text = "Loading logs..."  # will be replaced with dynamic content later
     }
 }
 
