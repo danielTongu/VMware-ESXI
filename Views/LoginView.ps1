@@ -1,15 +1,15 @@
-# Views/LoginView.ps1
 <#
 .SYNOPSIS
-    VMware Management System Login View with Offline Support
+    Modern VMware Management System Login
 .DESCRIPTION
-    Enhanced authentication with:
-      - Online login via Connect-VIServer
-      - Optional offline mode continuation
-      - Connection resilience and visual feedback
-      - Credential remember/unremember
+    Enhanced authentication interface featuring:
+    - Sleek modern UI design
+    - Responsive layout with visual feedback
+    - Secure credential management
+    - Online/offline mode switching
 #>
 
+# Import required .NET assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -19,6 +19,8 @@ function Show-LoginView {
 
     # Initialize global variables
     $script:LoginResult = $false
+
+    # Main form setup
     $form = [System.Windows.Forms.Form]::new()
     $form.Text = 'VMware Management System'
     $form.StartPosition = 'CenterScreen'
@@ -211,12 +213,13 @@ function Show-LoginView {
     $btnOffline.Visible = $false
     $container.Controls.Add($btnOffline)
 
-    # -- Load remembered creds --
+    # Load remembered credentials
     $credPath = "$env:APPDATA\VMwareManagement\credentials.xml"
+    
     if (Test-Path $credPath) {
         try {
             $secureString = Import-Clixml -Path $credPath
-            $psCred = New-Object System.Management.Automation.PSCredential('dummy',$secureString)
+            $psCred = New-Object System.Management.Automation.PSCredential('dummy', $secureString)
             $txtUser.Text = $psCred.GetNetworkCredential().UserName
             $txtPass.Text = $psCred.GetNetworkCredential().Password
             $chkRemember.Checked = $true
@@ -227,7 +230,7 @@ function Show-LoginView {
         }
     }
 
-    # -- Login handler --
+    # Login handler
     $btnLogin.Add_Click({
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         $lblStatus.Text = 'Authenticating...'
@@ -235,23 +238,34 @@ function Show-LoginView {
 
         try {
             $securePwd = ConvertTo-SecureString $txtPass.Text -AsPlainText -Force
-            $psCred = New-Object System.Management.Automation.PSCredential($txtUser.Text,$securePwd)
-            # Capture the VI connection
+            $psCred = New-Object System.Management.Automation.PSCredential($txtUser.Text, $securePwd)
+
+            # Visual feedback during connection
+            $btnLogin.Text = 'CONNECTING...'
+            $btnLogin.Refresh()
+
             $viConnection = Connect-VIServer -Server $global:VMwareConfig.Server -Credential $psCred -ErrorAction Stop
-            # Persist to global state
+
+            # Update global state
             $global:VMwareConfig.Connection = $viConnection
-            $global:VMwareConfig.User       = $psCred.UserName
-            $global:IsLoggedIn              = $true
+            $global:VMwareConfig.User = $psCred.UserName
+            $global:IsLoggedIn = $true
+
+            # Handle credential persistence
             if ($chkRemember.Checked) {
                 $folder = Split-Path $credPath -Parent
-                if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
+                if (-not (Test-Path $folder)) {
+                    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+                }
                 $securePwd | Export-Clixml -Path $credPath -Force
             } elseif (Test-Path $credPath) {
                 Remove-Item $credPath -ErrorAction SilentlyContinue
             }
-            # Also inform our singleton model
+
+            # Update connection model
             [VMServerConnection]::GetInstance().SetConnection($viConnection)
             [VMServerConnection]::GetInstance().SetCredentials($psCred)
+
             $script:LoginResult = $true
             $form.Close()
         } catch {
@@ -267,15 +281,15 @@ function Show-LoginView {
         }
     })
 
-    # -- Continue offline handler --
+    # Continue offline handler
     $btnOffline.Add_Click({
         $global:VMwareConfig.OfflineMode = $true
         $global:IsLoggedIn = $false
-        $script:LoginResult = $true    # proceed into shell in offline mode
+        $script:LoginResult = $true
         $form.Close()
     })
 
-    # -- Cancel handler --
+    # Cancel handler
     $btnCancel.Add_Click({
         $script:LoginResult = $false
         $form.Close()

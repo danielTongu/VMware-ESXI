@@ -61,7 +61,7 @@ function Show-NetworkView {
         $lblOffline.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
         $lblOffline.ForeColor = $global:theme.Error
         $lblOffline.AutoSize = $true
-        $lblOffline.Location = [System.Drawing.Point]::new(260,16)
+        $lblOffline.Location = [System.Drawing.Point]::new(300, 22)
         $ContentPanel.Controls.Add($lblOffline)
     }
 
@@ -308,13 +308,8 @@ function Show-NetworkView {
 
     # --- Functions ---
     function Refresh-NetworkData {
-        # Update the status bar to indicate loading
         $status.Text='Loading...';$ContentPanel.Refresh()
-        
-        # Get a safe connection object
         $conn=Get-ConnectionSafe
-
-        # If no connection is available, clear the grid and update the status
         if($null -eq $conn){ 
             $grid.DataSource=@(); 
             $status.Text='Offline/no auth'; 
@@ -322,25 +317,19 @@ function Show-NetworkView {
         }
 
         try {
-            # Retrieve virtual switches and port groups from the server
             $vs=Get-VirtualSwitch -Server $conn
             $pgs=Get-VirtualPortGroup -Server $conn
 
-            # Clear and populate the vSwitch combo box
             $cmbSwitch.Items.Clear()
             foreach($v in $vs){
                 $cmbSwitch.Items.Add($v.Name)
             }
 
-            # Set the first item as selected if there are items in the combo box
             if($cmbSwitch.Items.Count){
                 $cmbSwitch.SelectedIndex=0
             }
 
-            # Create a list to hold network data
             $list=[System.Collections.ArrayList]::new()
-
-            # Add virtual switch data to the list
             foreach($v in $vs){$list.Add([PSCustomObject]@{
                     Name=$v.Name;
                     Type='vSwitch';
@@ -350,7 +339,6 @@ function Show-NetworkView {
                     Used=$v.NumPortsAvailable
             })|Out-Null}
 
-            # Add port group data to the list
             foreach($p in $pgs){ $list.Add([PSCustomObject]@{
                 Name=$p.Name;
                 Type='Port Group';
@@ -359,176 +347,112 @@ function Show-NetworkView {
                 Ports='';Used=''
             })|Out-Null}
 
-            # Bind the list to the grid and update the status
             $grid.DataSource=$list; 
             $status.Text='Loaded'
         } catch {
-            # Handle errors during data refresh
             Write-Warning "Refresh failed: $_"; $status.Text='Error'
         }
     }
 
     function Add-Network {
-        # Get a safe connection object
         $conn = Get-ConnectionSafe
         if ($null -eq $conn) {
-            # Update the status bar if offline or no authentication
             $status.Text = 'Offline/no auth'
             return
         }
         try {
-            # Validate that the network name is not empty
-            if (-not $txtName.Text) {
-                throw 'Name empty'
-            }
-            # Validate that a vSwitch is selected
-            if (-not $cmbSwitch.SelectedItem) {
-                throw 'Select switch'
-            }
-            # Update the status bar to indicate the addition process
+            if (-not $txtName.Text) { throw 'Name empty' }
+            if (-not $cmbSwitch.SelectedItem) { throw 'Select switch' }
             $status.Text = 'Adding...'
             $ContentPanel.Refresh()
-            # Call the VMwareNetwork method to create the port group
             [VMwareNetwork]::CreateStudentPortGroup($txtName.Text, $cmbSwitch.SelectedItem)
-            # Update the status bar to indicate success
             $status.Text = 'Added'
-            # Refresh the network data to reflect changes
             Refresh-NetworkData
         } catch {
-            # Handle errors during the addition process
             Write-Warning "Add failed: $_"
             $status.Text = 'Error'
         }
     }
 
     function Remove-Network {
-        # Get a safe connection object
         $conn = Get-ConnectionSafe
         if ($null -eq $conn) {
-            # Update the status bar if offline or no authentication
             $status.Text = 'Offline/no auth'
             return
         }
         try {
-            # Validate that the network name is not empty
-            if (-not $txtName.Text) {
-                throw 'Name empty'
-            }
-            # Confirm the removal of the port group
+            if (-not $txtName.Text) { throw 'Name empty' }
             $confirmation = [System.Windows.Forms.MessageBox]::Show(
                 "Remove '$($txtName.Text)'?", 
                 'Confirm', 
                 [System.Windows.Forms.MessageBoxButtons]::YesNo, 
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             )
-            if ($confirmation -ne 'Yes') {
-                return
-            }
-            # Update the status bar to indicate the removal process
+            if ($confirmation -ne 'Yes') { return }
             $status.Text = 'Removing...'
             $ContentPanel.Refresh()
-            # Call the VMwareNetwork method to remove the port group
             [VMwareNetwork]::RemovePortGroup($txtName.Text)
-            # Update the status bar to indicate success
             $status.Text = 'Removed'
-            # Refresh the network data to reflect changes
             Refresh-NetworkData
         } catch {
-            # Handle errors during the removal process
             Write-Warning "Remove failed: $_"
             $status.Text = 'Error'
         }
     }
 
-    
     function Add-BulkNetworks {
-        # Get a safe connection object
         $conn = Get-ConnectionSafe
         if ($null -eq $conn) {
-            # Update the status bar if offline or no authentication
             $status.Text = 'Offline/no auth'
             return
         }
         try {
-            # Validate that the course prefix is not empty
-            if (-not $txtCourse.Text) {
-                throw 'Prefix empty'
-            }
-            # Parse the start and end range as integers
+            if (-not $txtCourse.Text) { throw 'Prefix empty' }
             $s = [int]$txtStart.Text
             $e = [int]$txtEnd.Text
-            # Validate that the start range is less than or equal to the end range
-            if ($s -gt $e) {
-                throw 'Invalid range'
-            }
-            # Confirm the creation of bulk networks
+            if ($s -gt $e) { throw 'Invalid range' }
             $confirmation = [System.Windows.Forms.MessageBox]::Show(
                 "Create ${txtCourse.Text} $s-$e?", 
                 'Confirm', 
                 [System.Windows.Forms.MessageBoxButtons]::YesNo, 
                 [System.Windows.Forms.MessageBoxIcon]::Question
             )
-            if ($confirmation -ne 'Yes') {
-                return
-            }
-            # Update the status bar to indicate the creation process
+            if ($confirmation -ne 'Yes') { return }
             $status.Text = 'Creating...'
             $ContentPanel.Refresh()
-            # Call the CourseManager method to create the student networks
             [CourseManager]::CreateStudentNetworks($txtCourse.Text, $s, $e)
-            # Update the status bar to indicate success
             $status.Text = 'Done'
-            # Refresh the network data to reflect changes
             Refresh-NetworkData
         } catch {
-            # Handle errors during the bulk addition process
             Write-Warning "Bulk add failed: $_"
             $status.Text = 'Error'
         }
     }
 
-    
     function Remove-BulkNetworks {
-        # Get a safe connection object
         $conn = Get-ConnectionSafe
         if ($null -eq $conn) {
-            # Update the status bar if offline or no authentication
             $status.Text = 'Offline/no auth'
             return
         }
         try {
-            # Validate that the course prefix is not empty
-            if (-not $txtCourse.Text) {
-                throw 'Prefix empty'
-            }
-            # Parse the start and end range as integers
+            if (-not $txtCourse.Text) { throw 'Prefix empty' }
             $s = [int]$txtStart.Text
             $e = [int]$txtEnd.Text
-            # Validate that the start range is less than or equal to the end range
-            if ($s -gt $e) {
-                throw 'Invalid range'
-            }
-            # Confirm the removal of bulk networks
+            if ($s -gt $e) { throw 'Invalid range' }
             $confirmation = [System.Windows.Forms.MessageBox]::Show(
                 "Remove ${txtCourse.Text} $s-$e?", 
                 'Confirm', 
                 [System.Windows.Forms.MessageBoxButtons]::YesNo, 
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             )
-            if ($confirmation -ne 'Yes') {
-                return
-            }
-            # Update the status bar to indicate the removal process
+            if ($confirmation -ne 'Yes') { return }
             $status.Text = 'Removing...'
             $ContentPanel.Refresh()
-            # Call the CourseManager method to remove the student networks
             [CourseManager]::RemoveStudentNetworks($txtCourse.Text, $s, $e)
-            # Update the status bar to indicate success
             $status.Text = 'Done'
-            # Refresh the network data to reflect changes
             Refresh-NetworkData
         } catch {
-            # Handle errors during the bulk removal process
             Write-Warning "Bulk remove failed: $_"
             $status.Text = 'Error'
         }

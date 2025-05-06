@@ -47,8 +47,8 @@ function Show-ClassManagerView {
     # Header with theme styling
     $lblHeader = [System.Windows.Forms.Label]::new()
     $lblHeader.Text = 'Class Management'
-    $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI',16,[System.Drawing.FontStyle]::Bold)
-    $lblHeader.Location = [System.Drawing.Point]::new(20,20)
+    $lblHeader.Font = [System.Drawing.Font]::new('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
+    $lblHeader.Location = [System.Drawing.Point]::new(30, 20)
     $lblHeader.AutoSize = $true
     $lblHeader.ForeColor = $global:theme.Primary  # Burgundy
     $main.Controls.Add($lblHeader)
@@ -60,7 +60,7 @@ function Show-ClassManagerView {
         $lblOffline.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Italic)
         $lblOffline.ForeColor = $global:theme.Warning
         $lblOffline.AutoSize = $true
-        $lblOffline.Location = [System.Drawing.Point]::new(300,24)
+        $lblOffline.Location = [System.Drawing.Point]::new(300, 28)
         $main.Controls.Add($lblOffline)
     }
 
@@ -252,8 +252,11 @@ function Show-ClassManagerView {
         $adapters += $nb
     })
     $main.Controls.Add($btnAddA)
+    $currentY += 110
 
-    $y += 100
+    # Actions Section
+    Add-SectionDivider -Title "Actions" -YPos ([ref]$currentY)
+
     # Action buttons
     $buttonStyle = @{
         Font = [System.Drawing.Font]::new('Segoe UI', 12)

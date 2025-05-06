@@ -50,9 +50,7 @@ function Show-VMsView {
     $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = $global:theme.Primary
     $lblTitle.AutoSize = $true
-    $lblTitle.Location = New-Object System.Drawing.Point(10, 10)
-    $ContentPanel.Controls.Add($lblTitle)
-
+    $titlePanel.Controls.Add($lblTitle)
 
     # Offline mode indicator
     if ($global:VMwareConfig.OfflineMode) {
@@ -189,9 +187,7 @@ function Show-VMsView {
                     $result.Student = $parts[1]
                 }
             }
-        } catch {
-            # Ignore parse errors
-        }
+        } catch {}
         return $result
     }
 
@@ -203,7 +199,6 @@ function Show-VMsView {
             $ContentPanel.Refresh()
 
             if (-not $global:VMwareConfig.OfflineMode) {
-                # Attempt to get connection
                 $conn = [VMServerConnection]::GetInstance().GetConnection()
                 if (-not $conn) { throw 'Not connected to vCenter' }
 
@@ -236,10 +231,11 @@ function Show-VMsView {
                     $table.Rows.Add($row)
                 }
 
-                $grid.DataSource = $table
+                $gridPanel.DataSource = $table
+                $statusBar.Text = "Loaded $($table.Rows.Count) VMs"
             } else {
-                # Offline: clear grid
-                $grid.DataSource = $null
+                $gridPanel.DataSource = $null
+                $statusBar.Text = 'Offline mode - no live data available'
             }
         } catch {
             [System.Windows.Forms.MessageBox]::Show("Failed to load VMs: $_", 'Error', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -263,7 +259,6 @@ function Show-VMsView {
             $gridPanel.DataSource.DefaultView.RowFilter = if ([string]::IsNullOrWhiteSpace($filterText)) { '' } else { "Name LIKE '%$filterText%' OR Folder LIKE '%$filterText%' OR PowerState LIKE '%$filterText%' OR IP LIKE '%$filterText%' OR Datastore LIKE '%$filterText%'" }
         } catch { $statusBar.Text = "Filter error: $_" }
     })
-
 
     # Grid selection changes
     $gridPanel.Add_SelectionChanged({
