@@ -76,7 +76,7 @@ function Show-MainShell {
     $form = [System.Windows.Forms.Form]::new()
     $form.Text = 'VMware ESXi Management Console'
     $form.StartPosition = 'CenterScreen'
-    $form.Size = [System.Drawing.Size]::new(1200,800)
+    $form.Size = [System.Drawing.Size]::new(1200,400)
     $form.MinimumSize = [System.Drawing.Size]::new(800,600)
 
     # Top-level layout
