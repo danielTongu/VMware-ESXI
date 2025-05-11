@@ -1,18 +1,19 @@
-<#
-.SYNOPSIS
-    Modern VMware Management System Login
-.DESCRIPTION
-    Enhanced authentication interface featuring:
-    - Sleek modern UI design
-    - Responsive layout with visual feedback
-    - Secure credential management
-    - Online/offline mode switching
-#>
 
 # Import required .NET assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+
+<#
+.SYNOPSIS
+    Displays a login form for VMware Management System.
+.DESCRIPTION
+    This script creates a login form using Windows Forms, allowing users to enter their VMware credentials.
+    It includes options for saving credentials and handling offline mode.
+.PARAMETER None
+    This script does not take any parameters. It is designed to be called directly from the main application.
+
+#>
 function Show-LoginView {
     [CmdletBinding()]
     param()
@@ -21,24 +22,24 @@ function Show-LoginView {
     $script:LoginResult = $false
 
     # Main form setup
-    $form = [System.Windows.Forms.Form]::new()
-    $form.Text = 'VMware Management System'
-    $form.StartPosition = 'CenterScreen'
-    $form.TopMost = $true
-    $form.Size = [System.Drawing.Size]::new(800, 200)
-    $form.BackColor = $global:theme.Background
-    $form.StartPosition = 'CenterScreen'
-    $form.FormBorderStyle = 'FixedDialog'
-    $form.MaximizeBox = $false
-    $form.MinimizeBox = $false
+    $mainForm = [System.Windows.Forms.Form]::new()
+    $mainForm.Text = 'VMware Management System'
+    $mainForm.StartPosition = 'CenterScreen'
+    $mainForm.TopMost = $true
+    $mainForm.Size = [System.Drawing.Size]::new(800, 200)
+    $mainForm.BackColor = $global:theme.Background
+    $mainForm.StartPosition = 'CenterScreen'
+    $mainForm.FormBorderStyle = 'FixedDialog'
+    $mainForm.MaximizeBox = $false
+    $mainForm.MinimizeBox = $false
 
     # Main container panel with shadow effect
     $container = [System.Windows.Forms.Panel]::new()
     $container.Size = [System.Drawing.Size]::new(400, 400)
-    $container.Location = [System.Drawing.Point]::new(($form.ClientSize.Width - $container.Width) / 2, 200)
+    $container.Location = [System.Drawing.Point]::new(($mainForm.ClientSize.Width - $container.Width) / 2, 135)
     $container.BackColor = $global:theme.CardBackground
     $container.BorderStyle = 'FixedSingle'
-    $form.Controls.Add($container)
+    $mainForm.Controls.Add($container)
 
     # Add subtle shadow effect
     $shadow = [System.Windows.Forms.Panel]::new()
@@ -46,19 +47,19 @@ function Show-LoginView {
     $shadow.Location = [System.Drawing.Point]::new($container.Left - 3, $container.Top - 3)
     $shadow.BackColor = [System.Drawing.Color]::FromArgb(30, 0, 0, 0)
     $shadow.SendToBack()
-    $form.Controls.Add($shadow)
+    $mainForm.Controls.Add($shadow)
 
     # Application logo
     $logo = [System.Windows.Forms.PictureBox]::new()
-    $logo.Size = [System.Drawing.Size]::new(250, 190)
-    $logo.Location = [System.Drawing.Point]::new(($form.Width - $logo.Width) / 2, 0)
+    $logo.Size = [System.Drawing.Size]::new(130, 130)
+    $logo.Location = [System.Drawing.Point]::new(($mainForm.Width - $logo.Width) / 2, 0)
     try {
         $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
     } catch {
         # Handle missing logo image gracefully
     }
     $logo.SizeMode = 'Zoom'
-    $form.Controls.Add($logo)
+    $mainForm.Controls.Add($logo)
 
     # Login header
     $lblHeader = [System.Windows.Forms.Label]::new()
@@ -166,7 +167,7 @@ function Show-LoginView {
         }
     }
 
-    $form.AcceptButton = $btnLogin
+    $mainForm.AcceptButton = $btnLogin
     $container.Controls.Add($btnLogin)
 
     # Cancel Button - Light gray
@@ -186,7 +187,7 @@ function Show-LoginView {
         }
     }
 
-    $form.CancelButton = $btnCancel
+    $mainForm.CancelButton = $btnCancel
     $container.Controls.Add($btnCancel)
 
     # Status Label
@@ -224,17 +225,17 @@ function Show-LoginView {
             $txtPass.Text = $psCred.GetNetworkCredential().Password
             $chkRemember.Checked = $true
         } catch {
-            Write-Warning "Credential load failed: $_"
+            Write-Host "[CREDENTIAL LOAD ERROR] $_" -ForegroundColor Red
             $lblStatus.Text = "Warning: Could not load saved credentials"
             $lblStatus.ForeColor = $global:theme.Warning
         }
-    }
+    }    
 
     # Login handler
     $btnLogin.Add_Click({
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $mainForm.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         $lblStatus.Text = 'Authenticating...'
-        $form.Refresh()
+        $mainForm.Refresh()
 
         try {
             $securePwd = ConvertTo-SecureString $txtPass.Text -AsPlainText -Force
@@ -267,17 +268,17 @@ function Show-LoginView {
             [VMServerConnection]::GetInstance().SetCredentials($psCred)
 
             $script:LoginResult = $true
-            $form.Close()
+            $mainForm.Close()
         } catch {
             $lblStatus.Text = "Login failed: $($_.Exception.Message)"
             $lblStatus.ForeColor = $global:theme.Error
             $btnOffline.Visible = $true
             $container.Height = $container.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
-            $form.Height = $form.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
-            $form.Refresh()
+            $mainForm.Height = $mainForm.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+            $mainForm.Refresh()
             $btnLogin.Text = 'LOGIN'
         } finally {
-            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+            $mainForm.Cursor = [System.Windows.Forms.Cursors]::Default
         }
     })
 
@@ -286,30 +287,30 @@ function Show-LoginView {
         $global:VMwareConfig.OfflineMode = $true
         $global:IsLoggedIn = $false
         $script:LoginResult = $true
-        $form.Close()
+        $mainForm.Close()
     })
 
     # Cancel handler
     $btnCancel.Add_Click({
         $script:LoginResult = $false
-        $form.Close()
+        $mainForm.Close()
     })
 
     # Form shown event for animations
-    $form.Add_Shown({
-        $form.Opacity = 0
-        while ($form.Opacity -lt 1) {
-            $form.Opacity += 0.05
+    $mainForm.Add_Shown({
+        $mainForm.Opacity = 0
+        while ($mainForm.Opacity -lt 1) {
+            $mainForm.Opacity += 0.05
             [System.Threading.Thread]::Sleep(10)
-            $form.Refresh()
+            $mainForm.Refresh()
         }
     })
 
     # Show the form and return the result
     $container.Height = $container.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
-    $form.Height = $form.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
-    $form.Refresh()
-    $result = $form.ShowDialog()
-    $form.Dispose()
+    $mainForm.Height = $mainForm.GetPreferredSize([System.Drawing.Size]::new(0, 0)).Height + 50
+    $mainForm.Refresh()
+    $result = $mainForm.ShowDialog()
+    $mainForm.Dispose()
     return $script:LoginResult
 }

@@ -21,10 +21,10 @@ Add-Type -AssemblyName System.Drawing
         The panel where the class manager UI will be displayed.
 
     .EXAMPLE
-        Show-ClassManagerView -ContentPanel $mainPanel
+        Show-ClassesView -ContentPanel $mainPanel
         Displays the class manager UI in the specified content panel.
 #>
-function Show-ClassManagerView {
+function Show-ClassesView {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

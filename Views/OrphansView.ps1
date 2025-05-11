@@ -20,9 +20,9 @@ Add-Type -AssemblyName 'System.Drawing'
         The panel where the Orphan Cleaner view will be displayed.
 
     .EXAMPLE
-        Show-OrphanCleanerView -ContentPanel $mainPanel
+        Show-OrphansView -ContentPanel $mainPanel
 #>
-function Show-OrphanCleanerView {
+function Show-OrphansView {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

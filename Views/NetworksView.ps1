@@ -18,10 +18,10 @@ Add-Type -AssemblyName System.Drawing
 .PARAMETER ContentPanel
     The panel where the Network Manager UI will be displayed.
 .EXAMPLE
-    Show-NetworkView -ContentPanel $mainPanel
+    Show-NetworksView -ContentPanel $mainPanel
     Initializes the Network Manager UI in the specified content panel.
 #>
-function Show-NetworkView {
+function Show-NetworksView {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

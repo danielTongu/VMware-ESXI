@@ -1,3 +1,7 @@
+# Views\LoginView.ps1
+
+# View that shows up after successful login.
+
 # Required assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -5,10 +9,9 @@ Add-Type -AssemblyName System.Drawing
 # Color definitions for buttons
 $buttonNormalColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
 $buttonHoverColor = [System.Drawing.Color]::FromArgb(62, 62, 64)
-$buttonActiveColor = [System.Drawing.Color]::FromArgb(0, 122, 204)  # Blue accent
-$buttonBorderColor = [System.Drawing.Color]::FromArgb(80, 80, 80)  # Subtle border
-$buttonActiveBorderColor = [System.Drawing.Color]::White
-$logoutModeColor = [System.Drawing.Color]::FromArgb(128, 0, 32)  # Burgundy
+$buttonBorderColor = $global:theme.Success #[System.Drawing.Color]::FromArgb(80, 80, 80)  # Subtle border
+$buttonActiveBorderColor = $global:theme.CardBackground #white
+$logoutModeColor = $global:theme.Primary  # Burgundy
 
 # Store the currently active button
 $global:ActiveButton = $null
@@ -24,13 +27,17 @@ function Get-ConnectionSafe {
         Write-Warning "Offline mode: skipping connection attempt."
         return $null
     }
-    try { return [VMServerConnection]::GetInstance().GetConnection() }
-    catch {
+    try {
+        return [VMServerConnection]::GetInstance().GetConnection()
+    } catch {
+        Write-Warning "Connection failed. Switching to offline mode."
+        Write-Host "Error during Get-ConnectionSafe:`n$($_.Exception.Message)`n$($_.ScriptStackTrace)" -ForegroundColor Red
         $global:VMwareConfig.OfflineMode = $true
-        Write-Warning "Connection failed: $_"
         return $null
     }
 }
+
+
 
 <#
 .SYNOPSIS
@@ -46,49 +53,59 @@ function Load-ViewIntoPanel {
         [Parameter(Mandatory)][System.Windows.Forms.Panel]$TargetPanel
     )
     
-    # Clear existing controls
     $TargetPanel.Controls.Clear()
     
     try {
-        # Dot-source the script to load its functions
+        if (-not (Test-Path $ScriptPath)) {
+            throw "Script not found: $ScriptPath"
+        }
+
         . $ScriptPath
-        
-        # Check for common view functions
+
         $viewFunctions = @(
             'Show-DashboardView',
+            'Show-ClassesView',
             'Show-VMsView',
-            'Show-ClassManagerView',
-            'Show-NetworkView',
-            'Show-OrphanCleanerView',
+            'Show-NetworksView',
+            'Show-OrphansView',
             'Show-LogsView'
         )
-        
+
+        $matched = $false
         foreach ($func in $viewFunctions) {
             if (Get-Command $func -ErrorAction SilentlyContinue) {
-                # Call the view function with the target panel
                 & $func -ContentPanel $TargetPanel
-                return
+                $matched = $true
+                break
             }
         }
-        throw "No recognized view function found in $ScriptPath"
+
+        if (-not $matched) {
+            throw "No recognized view function found in: $ScriptPath"
+        }
     } catch {
-        Write-Host "`n[ERROR LOADING VIEW]`nPath: $ScriptPath`nError: $_`nStack Trace:`n$($_.ScriptStackTrace)`n" -ForegroundColor Red
-        
+        # Log detailed info for developer
+        Write-Host "`n[ERROR LOADING VIEW]`nScriptPath: $ScriptPath`nError: $($_.Exception.Message)`n$($_.ScriptStackTrace)`n" -ForegroundColor Red
+
+        # Display user-friendly message
         [System.Windows.Forms.MessageBox]::Show(
-            "Could not load the requested view. Please try again or contact support.",
-            "View Loading Error",
+            "Unable to load view. Please try again or contact support.",
+            "View Load Error",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error
         )
-        
+
+        # Show error label in UI
         $errorLabel = New-Object System.Windows.Forms.Label
-        $errorLabel.Text = "Error loading view: $_"
+        $errorLabel.Text = "Error loading view."
         $errorLabel.ForeColor = [System.Drawing.Color]::Red
         $errorLabel.AutoSize = $true
         $errorLabel.Location = New-Object System.Drawing.Point(20, 20)
         $TargetPanel.Controls.Add($errorLabel)
     }
 }
+
+
 
 <#
 .SYNOPSIS
@@ -106,7 +123,7 @@ function New-NavButton {
         [string]$ScriptPath,
         [System.Windows.Forms.Panel]$TargetPanel
     )
-    
+
     $btn = New-Object System.Windows.Forms.Button
     $btn.Text = "   $Text"
     $btn.Font = New-Object System.Drawing.Font('Segoe UI', 10)
@@ -120,38 +137,47 @@ function New-NavButton {
     $btn.TextAlign = 'MiddleLeft'
     $btn.Margin = New-Object System.Windows.Forms.Padding(0, 5, 0, 5)
     $btn.Padding = New-Object System.Windows.Forms.Padding(10, 0, 0, 0)
-    
-    # Store the parameters in the button's Tag property
+
     $btn.Tag = @{
-        ScriptPath = $ScriptPath
+        ScriptPath  = $ScriptPath
         TargetPanel = $TargetPanel
     }
-    
-    # Add the click event handler
+
     $btn.Add_Click({
-        # Reset all buttons to normal state
-        foreach ($control in $this.Parent.Controls) {
-            if ($control -is [System.Windows.Forms.Button] -and $control -ne $global:AuthButton) {
-                $control.BackColor = $buttonNormalColor
-                $control.FlatAppearance.BorderColor = $buttonBorderColor
-                $control.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+        try {
+            # Reset all buttons
+            foreach ($control in $this.Parent.Controls) {
+                if ($control -is [System.Windows.Forms.Button] -and $control -ne $global:AuthButton) {
+                    $control.BackColor = $buttonNormalColor
+                    $control.FlatAppearance.BorderColor = $buttonBorderColor
+                    $control.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+                }
             }
+
+            # Highlight the active button
+            $this.FlatAppearance.BorderColor = $buttonActiveBorderColor
+            $this.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+            $global:ActiveButton = $this
+
+            # Load the view
+            $params = $this.Tag
+            Load-ViewIntoPanel -ScriptPath $params.ScriptPath -TargetPanel $params.TargetPanel
+            Update-StatusBar
+        } catch {
+            Write-Host "[ERROR] Navigation button action failed: $($_.Exception.Message)" -ForegroundColor Red
+            [System.Windows.Forms.MessageBox]::Show(
+                "An unexpected error occurred while navigating. Please try again.",
+                "Navigation Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
         }
-        
-        # Highlight active button
-        $this.BackColor = $buttonActiveColor
-        $this.FlatAppearance.BorderColor = $buttonActiveBorderColor
-        $this.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $global:ActiveButton = $this
-        
-        # Load the view
-        $params = $this.Tag
-        Load-ViewIntoPanel -ScriptPath $params.ScriptPath -TargetPanel $params.TargetPanel
-        Update-StatusBar
     })
-    
+
     return $btn
 }
+
+
 
 <#
 .SYNOPSIS
@@ -197,7 +223,7 @@ function Show-MainShell {
 
     # Title
     $title = New-Object System.Windows.Forms.Label
-    $title.Text = 'VMWARE CONSOLE'
+    $title.Text = 'VMware ESXi'
     $title.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
     $title.ForeColor = [System.Drawing.Color]::White
     $title.Location = New-Object System.Drawing.Point(10, 10)
@@ -237,9 +263,9 @@ function Show-MainShell {
     
     $btnDashboard = New-NavButton -Text 'Dashboard' -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
     $btnVMs = New-NavButton -Text 'Virtual Machines' -ScriptPath "$scriptDir\VMsView.ps1" -TargetPanel $contentPanel
-    $btnClasses = New-NavButton -Text 'Class Management' -ScriptPath "$scriptDir\ClassManagerView.ps1" -TargetPanel $contentPanel
-    $btnNetworks = New-NavButton -Text 'Network Management' -ScriptPath "$scriptDir\NetworkManagerView.ps1" -TargetPanel $contentPanel
-    $btnOrphans = New-NavButton -Text 'Orphan Cleaner' -ScriptPath "$scriptDir\OrphanCleanerView.ps1" -TargetPanel $contentPanel
+    $btnClasses = New-NavButton -Text 'Class Management' -ScriptPath "$scriptDir\ClassesView.ps1" -TargetPanel $contentPanel
+    $btnNetworks = New-NavButton -Text 'Network Management' -ScriptPath "$scriptDir\NetworksView.ps1" -TargetPanel $contentPanel
+    $btnOrphans = New-NavButton -Text 'Orphan Cleaner' -ScriptPath "$scriptDir\OrphansView.ps1" -TargetPanel $contentPanel
     $btnLogs = New-NavButton -Text 'Logs' -ScriptPath "$scriptDir\LogsView.ps1" -TargetPanel $contentPanel
 
     $navPanel.Controls.AddRange(@($btnDashboard, $btnVMs, $btnClasses, $btnNetworks, $btnOrphans, $btnLogs))
@@ -249,10 +275,9 @@ function Show-MainShell {
     $global:AuthButton.Text = "   $(if ($global:IsLoggedIn) { 'Logout' } else { 'Login' })"
     $global:AuthButton.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $global:AuthButton.ForeColor = [System.Drawing.Color]::White
-    $global:AuthButton.BackColor = if ($global:IsLoggedIn) { [System.Drawing.Color]::FromArgb(76, 175, 80) } else { $logoutModeColor }
     $global:AuthButton.FlatStyle = 'Flat'
     $global:AuthButton.FlatAppearance.BorderSize = 1
-    $global:AuthButton.FlatAppearance.BorderColor = if ($global:IsLoggedIn) { [System.Drawing.Color]::FromArgb(100, 200, 100) } else { [System.Drawing.Color]::FromArgb(150, 0, 50) }
+    $global:AuthButton.FlatAppearance.BorderColor = if ($global:IsLoggedIn) { $global:theme.Error } else { $global:theme.Success }
     $global:AuthButton.Size = New-Object System.Drawing.Size(200, 40)
     $global:AuthButton.TextAlign = 'MiddleLeft'
     $global:AuthButton.Margin = New-Object System.Windows.Forms.Padding(0, 5, 0, 5)
@@ -264,8 +289,7 @@ function Show-MainShell {
             try { [VMServerConnection]::GetInstance().Disconnect() } catch {}
             $global:IsLoggedIn = $false
             $this.Text = '  Login'
-            $this.BackColor = $logoutModeColor
-            $this.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(150, 0, 50)
+            $this.FlatAppearance.BorderColor = $global:theme.Success
             $contentPanel.Controls.Clear()
             Update-StatusBar
         } else {
@@ -273,8 +297,7 @@ function Show-MainShell {
             if (Show-LoginView) {
                 $global:IsLoggedIn = $true
                 $this.Text = '  Logout'
-                $this.BackColor = [System.Drawing.Color]::FromArgb(76, 175, 80)
-                $this.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(100, 200, 100)
+                $this.FlatAppearance.BorderColor = $global:theme.Error
                 if ($global:ActiveButton) {
                     $global:ActiveButton.PerformClick()
                 } else {
@@ -300,19 +323,37 @@ function Show-MainShell {
     $statusBar.Panels.Add($statusPanel)
     $main.Controls.Add($statusBar)
 
+
+
+    <#
+    .SYNOPSIS
+        Updates the status bar with connection and host information.
+    .DESCRIPTION
+        This function retrieves the current connection and host information,
+        updating the status bar accordingly. It handles errors gracefully,
+        providing feedback in case of issues.
+    .OUTPUTS
+        None. Updates the status bar text directly.
+    #>
     function Update-StatusBar {
-        $c = Get-ConnectionSafe
-        if ($null -ne $c) {
-            try { 
-                $h = Get-VMHost -Server $c -ErrorAction Stop
-                $statusPanel.Text = "Connected: $($h.Name) | Ver: $($h.Version) | User: $($c.User) | $(Get-Date -Format 'G')"
-            } catch { 
-                $statusPanel.Text = "Connection lost | $(Get-Date -Format 'G')"
+        try {
+            $c = Get-ConnectionSafe
+            if ($null -ne $c) {
+                try {
+                    $h = Get-VMHost -Server $c -ErrorAction Stop
+                    $statusPanel.Text = "Connected: $($h.Name) | Ver: $($h.Version) | User: $($c.User) | $(Get-Date -Format 'G')"
+                } catch {
+                    Write-Host "Error retrieving host info: $($_.Exception.Message)" -ForegroundColor Red
+                    $statusPanel.Text = "Connected, but host data failed | $(Get-Date -Format 'G')"
+                }
+            } else {
+                $statusPanel.Text = "Offline mode | $(Get-Date -Format 'G')"
             }
-        } else { 
-            $statusPanel.Text = "Offline mode | $(Get-Date -Format 'G')"
+        } catch {
+            Write-Host "Unexpected error in Update-StatusBar: $($_.Exception.Message)" -ForegroundColor Red
+            $statusPanel.Text = "Status error | $(Get-Date -Format 'G')"
         }
-    }
+    }    
 
     # Set initial splitter distance
     $splitContainer.SplitterDistance = 220
@@ -341,9 +382,18 @@ function Show-MainShell {
     $main.ShowDialog()
 }
 
+
+
 <#
 .SYNOPSIS
-    Entry point: shows login then main shell.
+    Displays the main view after successful login.
+.DESCRIPTION
+    This function loads the login view and, upon successful authentication,
+    initializes and displays the main application shell.
+.PARAMETER ScriptPath
+    Path to the login view script.
+.PARAMETER TargetPanel
+    The content panel where the login view will be rendered.
 #>
 function Show-MainView {
     . "$PSScriptRoot\LoginView.ps1"
