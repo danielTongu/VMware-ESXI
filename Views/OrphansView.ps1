@@ -1,26 +1,16 @@
-Add-Type -AssemblyName 'System.Windows.Forms'
-Add-Type -AssemblyName 'System.Drawing'
-
-
-
-# ────────────────────────────────────────────────────────────────────────────
-#                       Views/OrphansView.ps1
-# ────────────────────────────────────────────────────────────────────────────
+# Required assemblies
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
 
 
 <#
     .SYNOPSIS
-        Displays the Orphan Cleaner view in the UI.
-
+        Displays the Orphans view in the UI.
     .DESCRIPTION
-        This function initializes the Orphan Cleaner view, populating it with data and setting up event handlers.
-
+        Initializes the Orphans view layout and populates it with data.
     .PARAMETER ContentPanel
-        The panel where the Orphan Cleaner view will be displayed.
-
-    .EXAMPLE
-        Show-OrphansView -ContentPanel $mainPanel
+        The Windows.Forms.Panel where this view is rendered.
 #>
 function Show-OrphansView {
     [CmdletBinding()]
@@ -30,43 +20,40 @@ function Show-OrphansView {
     )
 
     try {
-        # Build UI (empty)
+        # Build UI skeleton
         $uiRefs = New-OrphanCleanerLayout -ContentPanel $ContentPanel
 
-        # Populate with data if connected
+        # Populate data if connected
         $data = Get-OrphanCleanerData
         if ($data) {
             Update-OrphanCleanerWithData -UiRefs $uiRefs -Data $data
         } else {
-            # show user message if not connected
-            $lblMessage = New-Object System.Windows.Forms.Label
+            # Show disconnected message
+            $lblMessage = [System.Windows.Forms.Label]::new()
             $lblMessage.Text = 'Not connected to a server.'
-            $lblMessage.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold) 
-            $lblMessage.ForeColor = [System.Drawing.Color]::Red
-            $lblMessage.Location = New-Object System.Drawing.Point(20, 20)
+            $lblMessage.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
+            $lblMessage.ForeColor = $global:Theme.Error
+            $lblMessage.Location = [System.Drawing.Point]::new(20, 20)
             $lblMessage.AutoSize = $true
+
             $ContentPanel.Controls.Add($lblMessage)
         }
-    } catch { 
-        Write-Verbose "Orphan cleaner initialization failed: $_" 
+    } catch {
+        Write-Verbose "Orphan cleaner initialization failed: $_"
     }
 }
-
 
 
 
 <#
     .SYNOPSIS
         Creates the layout for the Orphan Cleaner view.
-
     .DESCRIPTION
-        This function sets up the layout for the Orphan Cleaner view, including header, filter controls, data grid, and action buttons.
-
+        Builds the UI skeleton with header, filters, data grid, and controls.
     .PARAMETER ContentPanel
-        The panel where the Orphan Cleaner layout will be created.
-
-    .EXAMPLE
-        $layout = New-OrphanCleanerLayout -ContentPanel $mainPanel
+        The Windows.Forms.Panel to populate.
+    .OUTPUTS
+        Hashtable of UI element references.
 #>
 function New-OrphanCleanerLayout {
     [CmdletBinding()]
@@ -78,150 +65,149 @@ function New-OrphanCleanerLayout {
     try {
         $ContentPanel.SuspendLayout()
         $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $global:theme.Background
+        $ContentPanel.BackColor = $global:Theme.LightGray
 
-        # ── ROOT LAYOUT ─────────────────────────────────────────────────
-        $root = New-Object System.Windows.Forms.TableLayoutPanel
+        # Root layout
+        $root = [System.Windows.Forms.TableLayoutPanel]::new()
         $root.Dock = 'Fill'
         $root.ColumnCount = 1
         $root.RowCount = 4
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))   # Header
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))   # Filter
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100))) # Grid
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))   # Controls
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Header
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Filter
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100)) # Grid
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Controls
+        
         $ContentPanel.Controls.Add($root)
 
-
-
-        #===== Row [1] HEADER ===============================================
-        $header = New-Object System.Windows.Forms.Panel
-        $header.Dock = 'Fill'
+        # Header
+        $header = [System.Windows.Forms.Panel]::new()
+        $header.Dock = 'Fill'; 
         $header.Height = 60
-        $header.BackColor = $global:theme.Primary
+        $header.BackColor = $global:Theme.Primary
+        
         $root.Controls.Add($header, 0, 0)
 
-        $titleLabel = New-Object System.Windows.Forms.Label
+        $titleLabel = [System.Windows.Forms.Label]::new()
         $titleLabel.Text = 'ORPHANED VM FILES'
-        $titleLabel.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
-        $titleLabel.ForeColor = [System.Drawing.Color]::White
-        $titleLabel.Location = New-Object System.Drawing.Point(20, 15)
+        $titleLabel.Font = [System.Drawing.Font]::new('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
+        $titleLabel.ForeColor = $global:Theme.White
+        $titleLabel.Location = [System.Drawing.Point]::new(20,15)
         $titleLabel.AutoSize = $true
+        
         $header.Controls.Add($titleLabel)
 
-
-
-        #===== Row [2] FILTER ===============================================
-        $filterPanel = New-Object System.Windows.Forms.Panel
-        $filterPanel.Dock = 'Fill'
+        # Filter row
+        $filterPanel = [System.Windows.Forms.Panel]::new()
+        $filterPanel.Dock = 'Fill'; 
         $filterPanel.Height = 50
-        $filterPanel.BackColor = $global:theme.Background
+        $filterPanel.BackColor = $global:Theme.LightGray
+        
         $root.Controls.Add($filterPanel, 0, 1)
 
         # Datastore label
-        $lblDatastore = New-Object System.Windows.Forms.Label
+        $lblDatastore = [System.Windows.Forms.Label]::new()
         $lblDatastore.Text = 'Datastore:'
-        $lblDatastore.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblDatastore.Location = New-Object System.Drawing.Point(20, 15)
+        $lblDatastore.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblDatastore.ForeColor = $global:Theme.PrimaryDarker
+        $lblDatastore.Location = [System.Drawing.Point]::new(20,15)
         $lblDatastore.AutoSize = $true
+
         $filterPanel.Controls.Add($lblDatastore)
 
         # Datastore dropdown
-        $cmbDatastores = New-Object System.Windows.Forms.ComboBox
-        $cmbDatastores.Name = 'cmbDatastores'
+        $cmbDatastores = [System.Windows.Forms.ComboBox]::new()
         $cmbDatastores.DropDownStyle = 'DropDownList'
         $cmbDatastores.Width = 250
-        $cmbDatastores.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $cmbDatastores.Location = New-Object System.Drawing.Point(100, 10)
-        $cmbDatastores.BackColor = $global:theme.CardBackground
+        $cmbDatastores.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $cmbDatastores.Location = [System.Drawing.Point]::new(100,10)
+        $cmbDatastores.BackColor = $global:Theme.White
+        $cmbDatastores.ForeColor = $global:Theme.PrimaryDark
+
         $filterPanel.Controls.Add($cmbDatastores)
 
         # Search field
-        $txtSearch = New-Object System.Windows.Forms.TextBox
-        $txtSearch.Name = 'txtSearch'
-        $txtSearch.Width = 200
+        $txtSearch = [System.Windows.Forms.TextBox]::new()
+        $txtSearch.Width = 200; 
         $txtSearch.Height = 30
-        $txtSearch.Location = New-Object System.Drawing.Point(370, 10)
-        $txtSearch.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $txtSearch.BackColor = $global:theme.CardBackground
+        $txtSearch.Location = [System.Drawing.Point]::new(370,10)
+        $txtSearch.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $txtSearch.BackColor = $global:Theme.White
+        $txtSearch.ForeColor = $global:Theme.PrimaryDarker
+
         $filterPanel.Controls.Add($txtSearch)
 
         # Search button
-        $btnSearch = New-Object System.Windows.Forms.Button
-        $btnSearch.Name = 'btnSearch'
-        $btnSearch.Text = "SEARCH"
-        $btnSearch.Width = 100
+        $btnSearch = [System.Windows.Forms.Button]::new()
+        $btnSearch.Text = 'SEARCH'; 
+        $btnSearch.Width = 100; 
         $btnSearch.Height = 30
-        $btnSearch.Location = New-Object System.Drawing.Point(580, 10)
-        $btnSearch.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnSearch.BackColor = $global:theme.Primary
-        $btnSearch.ForeColor = [System.Drawing.Color]::White
+        $btnSearch.Location = [System.Drawing.Point]::new(580,10)
+        $btnSearch.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnSearch.BackColor = $global:Theme.Primary
+        $btnSearch.ForeColor = $global:Theme.White
+
         $filterPanel.Controls.Add($btnSearch)
 
-
-
-
-        #===== Row [3] DATA GRID ===========================================
-        $grid = New-Object System.Windows.Forms.DataGridView
-        $grid.Name = 'gvOrphans'
+        # Data grid
+        $grid = [System.Windows.Forms.DataGridView]::new()
+        $grid.Name = 'gvOrphans'; 
         $grid.Dock = 'Fill'
-        $grid.ReadOnly = $true
-        $grid.SelectionMode = 'FullRowSelect'
+        $grid.ReadOnly = $true;
+        $grid.SelectionMode = 'FullRowSelect'; 
         $grid.MultiSelect = $true
         $grid.AutoSizeColumnsMode = 'Fill'
-        $grid.BackgroundColor = $global:theme.CardBackground
-        $grid.GridColor = $global:theme.Border
+        $grid.BackgroundColor = $global:Theme.White
+        $grid.GridColor = $global:Theme.PrimaryDark
         $grid.BorderStyle = 'FixedSingle'
-        $grid.DefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $grid.DefaultCellStyle.ForeColor = $global:theme.TextPrimary
-        $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:theme.TextPrimary
-        $grid.ColumnHeadersDefaultCellStyle.BackColor = $global:theme.Background
+        $grid.DefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $grid.DefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
+        $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
+        $grid.ColumnHeadersDefaultCellStyle.BackColor = $global:Theme.LightGray
+
         $root.Controls.Add($grid, 0, 2)
 
-
-
-        #===== Row [4] CONTROLS ============================================
-        $controlsPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-        $controlsPanel.Dock = 'Fill'
+        # Controls footer
+        $controlsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
+        $controlsPanel.Dock = 'Fill'; 
         $controlsPanel.Height = 50
         $controlsPanel.FlowDirection = 'LeftToRight'
-        $controlsPanel.Padding = New-Object System.Windows.Forms.Padding(10)
-        $controlsPanel.BackColor = $global:theme.Background
+        $controlsPanel.Padding = [System.Windows.Forms.Padding]::new(10)
+        $controlsPanel.BackColor = $global:Theme.LightGray
+
         $root.Controls.Add($controlsPanel, 0, 3)
 
         # Refresh button
-        $btnRefresh = New-Object System.Windows.Forms.Button
-        $btnRefresh.Name = 'btnRefresh'
-        $btnRefresh.Text = 'REFRESH'
-        $btnRefresh.Width = 120
+        $btnRefresh = [System.Windows.Forms.Button]::new()
+        $btnRefresh.Text = 'REFRESH'; 
+        $btnRefresh.Width = 120;
         $btnRefresh.Height = 35
-        $btnRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnRefresh.BackColor = $global:theme.Secondary
-        $btnRefresh.ForeColor = [System.Drawing.Color]::White
+        $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnRefresh.BackColor = $global:Theme.Primary
+        $btnRefresh.ForeColor = $global:Theme.White
+
         $controlsPanel.Controls.Add($btnRefresh)
 
-        # Delete Selected button
-        $btnDelete = New-Object System.Windows.Forms.Button
-        $btnDelete.Name = 'btnDelete'
-        $btnDelete.Text = 'DELETE SELECTED'
-        $btnDelete.Width = 150
+        # Delete button
+        $btnDelete = [System.Windows.Forms.Button]::new()
+        $btnDelete.Text = 'DELETE SELECTED';
+        $btnDelete.Width = 150;
         $btnDelete.Height = 35
-        $btnDelete.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnDelete.BackColor = $global:theme.Error
-        $btnDelete.ForeColor = [System.Drawing.Color]::White
+        $btnDelete.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnDelete.BackColor = $global:Theme.Error
+        $btnDelete.ForeColor = $global:Theme.White
+
         $controlsPanel.Controls.Add($btnDelete)
 
-        # Return references to UI elements
-        $refs = @{
+        # Return refs
+        return @{
             DatastoreCombo = $cmbDatastores
-            SearchBox = $txtSearch
-            SearchButton = $btnSearch
-            OrphansGrid = $grid
-            RefreshButton = $btnRefresh
-            DeleteButton = $btnDelete
+            SearchBox      = $txtSearch
+            SearchButton   = $btnSearch
+            OrphansGrid    = $grid
+            RefreshButton  = $btnRefresh
+            DeleteButton   = $btnDelete
         }
-
-        return $refs
     }
     finally {
         $ContentPanel.ResumeLayout($true)
@@ -230,17 +216,13 @@ function New-OrphanCleanerLayout {
 
 
 
-
 <#
     .SYNOPSIS
-        Retrieves the list of datastores from the server.
-
+        Retrieves available datastores from vSphere.
     .DESCRIPTION
-        This function connects to the server and retrieves the list of datastores available.
-
-    .EXAMPLE
-        $datastoreData = Get-OrphanCleanerData
-        # This will return a hashtable with the datastores and the last updated time.
+        Returns the list of datastore names and timestamp, or $null if disconnected.
+    .OUTPUTS
+        Hashtable with Datastores and LastUpdated.
 #>
 function Get-OrphanCleanerData {
     [CmdletBinding()]
@@ -248,16 +230,12 @@ function Get-OrphanCleanerData {
 
     try {
         $conn = [VMServerConnection]::GetInstance().GetConnection()
-        if (-not $conn) {
-            return $null
-        }
-
+        if (-not $conn) { return $null }
         return @{
-            Datastores = Get-Datastore -Server $conn | Select-Object -ExpandProperty Name
-            LastUpdated = (Get-Date)
+            Datastores  = Get-Datastore -Server $conn | Select-Object -ExpandProperty Name
+            LastUpdated = Get-Date
         }
-    }
-    catch {
+    } catch {
         Write-Verbose "Failed to load datastores: $_"
         return $null
     }
@@ -265,23 +243,15 @@ function Get-OrphanCleanerData {
 
 
 
-
 <#
     .SYNOPSIS
-        Updates the Orphan Cleaner view with data.
-
+        Updates the Orphan Cleaner view with retrieved data.
     .DESCRIPTION
-        This function populates the Orphan Cleaner view with data and sets up event handlers for user interactions.
-
+        Populates dropdown, grid columns, and wires event handlers for refresh, delete, and search.
     .PARAMETER UiRefs
-        A hashtable containing references to UI elements.
-
+        Hashtable of UI element references.
     .PARAMETER Data
-        A hashtable containing the data to be displayed in the Orphan Cleaner view.
-
-    .EXAMPLE
-        Update-OrphanCleanerWithData -UiRefs $uiRefs -Data $data
-        # This will update the Orphan Cleaner view with the provided data and set up event handlers.
+        Hashtable containing datastores and timestamp.
 #>
 function Update-OrphanCleanerWithData {
     [CmdletBinding()]
@@ -291,29 +261,28 @@ function Update-OrphanCleanerWithData {
     )
 
     try {
-        # Populate datastores dropdown
+        # Populate dropdown
         $UiRefs.DatastoreCombo.Items.Clear()
         if ($Data.Datastores) {
             $UiRefs.DatastoreCombo.Items.AddRange($Data.Datastores)
-            if ($UiRefs.DatastoreCombo.Items.Count -gt 0) {
-                $UiRefs.DatastoreCombo.SelectedIndex = 0
-            }
+            $UiRefs.DatastoreCombo.SelectedIndex = 0
         }
 
-        # Configure grid columns
+        # Configure grid
         $UiRefs.OrphansGrid.Columns.Clear()
-        $UiRefs.OrphansGrid.Columns.Add('Path','Path') > $null
-        $UiRefs.OrphansGrid.Columns.Add('Size','Size') > $null
-        $UiRefs.OrphansGrid.Columns.Add('Type','Type') > $null
+        $UiRefs.OrphansGrid.Columns.Add('Path','Path') | Out-Null
+        $UiRefs.OrphansGrid.Columns.Add('Size','Size') | Out-Null
+        $UiRefs.OrphansGrid.Columns.Add('Type','Type') | Out-Null
 
-        # Add event handlers
+        # Refresh event
         $UiRefs.RefreshButton.Add_Click({
             try {
-                $selectedDS = $UiRefs.DatastoreCombo.SelectedItem
-                if (-not $selectedDS) { return }
+                $ds = $UiRefs.DatastoreCombo.SelectedItem
+                if (-not $ds) { return }
 
-                $orphans = [OrphanCleaner]::FindOrphanedFiles($selectedDS)
+                $orphans = [OrphanCleaner]::FindOrphanedFiles($ds)
                 $UiRefs.OrphansGrid.Rows.Clear()
+
                 foreach ($file in $orphans) {
                     $idx = $UiRefs.OrphansGrid.Rows.Add()
                     $row = $UiRefs.OrphansGrid.Rows[$idx]
@@ -321,68 +290,50 @@ function Update-OrphanCleanerWithData {
                     $row.Cells['Size'].Value = $file.Size
                     $row.Cells['Type'].Value = $file.Type
                 }
-            }
-            catch {
+            } catch {
                 Write-Verbose "Failed to refresh orphans: $_"
             }
         })
 
+        # Delete event
         $UiRefs.DeleteButton.Add_Click({
             try {
-                $selectedDS = $UiRefs.DatastoreCombo.SelectedItem
-                if (-not $selectedDS) { return }
+                $ds = $UiRefs.DatastoreCombo.SelectedItem
+                if (-not $ds) { return }
 
                 $conn = [VMServerConnection]::GetInstance().GetConnection()
-                if (-not $conn) {
-                    Write-Verbose "Not connected - cannot delete files"
-                    return
-                }
+                if (-not $conn) { return }
 
-                $dsObj = Get-Datastore -Name $selectedDS -Server $conn -ErrorAction Stop
-                $toRemove = $UiRefs.OrphansGrid.SelectedRows | ForEach-Object { $_.Cells['Path'].Value }
-                
-                foreach ($path in $toRemove) {
-                    try {
-                        Remove-DatastoreFile -Datastore $dsObj -Path $path -Confirm:$false -ErrorAction Stop
-                    } 
-                    catch {
-                        Write-Verbose "Failed to delete '$path': $_"
-                    }
-                }
+                $dsObj = Get-Datastore -Name $ds -Server $conn -ErrorAction Stop
 
-                # Refresh after deletion
+                foreach ($sel in $UiRefs.OrphansGrid.SelectedRows) {
+                    $path = $sel.Cells['Path'].Value
+                    try { Remove-DatastoreFile -Datastore $dsObj -Path $path -Confirm:$false -ErrorAction Stop } catch { }
+                }
                 $UiRefs.RefreshButton.PerformClick()
-            }
-            catch {
+            } catch {
                 Write-Verbose "Failed to delete selected files: $_"
             }
         })
 
+        # Search event
         $UiRefs.SearchButton.Add_Click({
-            $filterText = $UiRefs.SearchBox.Text.Trim()
-            if ([string]::IsNullOrEmpty($filterText)) {
-                return
-            }
+            $filter = $UiRefs.SearchBox.Text.Trim()
 
             foreach ($row in $UiRefs.OrphansGrid.Rows) {
-                if ($row.Cells['Path'].Value -match $filterText) {
+                if (-not [string]::IsNullOrEmpty($filter) -and $row.Cells['Path'].Value -notmatch $filter) {
+                    $row.Visible = $false
+                }else {
                     $row.Visible = $true
                 }
-                else {
-                    $row.Visible = $false
-                }
             }
         })
-
-        # Enable search on Enter key
-        $UiRefs.SearchBox.Add_KeyDown({
-            if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
-                $UiRefs.SearchButton.PerformClick()
-                $_.SuppressKeyPress = $true
-            }
+        $UiRefs.SearchBox.Add_KeyDown({ 
+            if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { 
+                $UiRefs.SearchButton.PerformClick(); $_.SuppressKeyPress = $true 
+            } 
         })
-    }
-    catch {
+    } catch {
         Write-Verbose "Failed to update orphan cleaner view: $_"
     }
 }
