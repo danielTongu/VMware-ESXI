@@ -95,27 +95,34 @@ function New-ClassManagerLayout {
         $refs = @{ TabControl = $tabControl; Tabs = @{} }
 
         # Dashboard Tab
-        $tabDash = [System.Windows.Forms.TabPage]::new('Dashboard');
-        $tabDash.BackColor = $global:Theme.White
+        $tabOverview = [System.Windows.Forms.TabPage]::new('Overview');
+        $tabOverview.BackColor = $global:Theme.White
 
-        $tabControl.TabPages.Add($tabDash);
+        $tabControl.TabPages.Add($tabOverview);
         $refs.Tabs.Dashboard = @{}
 
         # Tree view for classes
-        $dashLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
-        $dashLayout.Dock = 'Fill';
-        $dashLayout.RowCount = 2
-        $dashLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $dashLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        $overviewLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $overviewLayout.Dock = 'Fill';
+        $overviewLayout.RowCount = 2
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
         
-        $tabDash.Controls.Add($dashLayout)
+        $tabOverview.Controls.Add($overviewLayout)
+
+        $treePanel = [System.Windows.Forms.Panel]::new()
+        $treePanel.Dock = 'Fill'
+        $treePanel.AutoScroll = $true
+        $treePanel.Padding = [System.Windows.Forms.Padding]::new(10)
+        $treePanel.BackColor = $global:Theme.White
+
+        $overviewLayout.Controls.Add($treePanel,0,0);
         
         $tree = [System.Windows.Forms.TreeView]::new(); 
         $tree.Dock = 'Fill'; 
         $tree.BackColor = $global:Theme.White; 
         $tree.ForeColor = $global:Theme.PrimaryDark
-
-        $dashLayout.Controls.Add($tree,0,0); 
+        $treePanel.Controls.Add($tree); 
         $refs.Tabs.Dashboard.ClassTree = $tree
 
         $dashButtons = [System.Windows.Forms.FlowLayoutPanel]::new(); 
@@ -123,7 +130,7 @@ function New-ClassManagerLayout {
         $dashButtons.BackColor = $global:Theme.White; 
         $dashButtons.Padding = [System.Windows.Forms.Padding]::new(5)
 
-        $dashLayout.Controls.Add($dashButtons,0,1)
+        $overviewLayout.Controls.Add($dashButtons,0,1)
 
         $btnRefresh = [System.Windows.Forms.Button]::new(); 
         $btnRefresh.Text = 'REFRESH'; 

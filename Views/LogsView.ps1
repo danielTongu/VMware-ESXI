@@ -122,17 +122,24 @@ function New-LogsLayout {
         $filterPanel.Controls.Add($searchBtn)
 
         # Log textbox
-        $logPanel = [System.Windows.Forms.TextBox]::new()
-        $logPanel.Name = 'txtLogs'
-        $logPanel.Dock = 'Fill'
-        $logPanel.Multiline = $true
-        $logPanel.ScrollBars = 'Vertical' 
-        $logPanel.ReadOnly = $true
-        $logPanel.BackColor = $global:Theme.White
-        $logPanel.ForeColor = $global:Theme.PrimaryDark
-        $logPanel.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $logScroller = [System.Windows.Forms.Panel]::new()
+        $logScroller.Dock = 'Fill'
+        $logScroller.AutoScroll = $true
+        $logScroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $logScroller.BackColor = $global:Theme.White
+        $root.Controls.Add($logScroller,0,2)
 
-        $root.Controls.Add($logPanel,0,2)
+        $logTextBox = [System.Windows.Forms.TextBox]::new()
+        $logTextBox.Name = 'txtLogs'
+        $logTextBox.Dock = 'Fill'
+        $logTextBox.Multiline = $true
+        $logTextBox.ScrollBars = 'Vertical' 
+        $logTextBox.ReadOnly = $true
+        $logTextBox.BackColor = $global:Theme.White
+        $logTextBox.ForeColor = $global:Theme.PrimaryDark
+        $logTextBox.Font = [System.Drawing.Font]::new('Segoe UI',10)
+
+        $logScroller.Controls.Add($logTextBox)
 
         # Control buttons
         $controlsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
@@ -170,7 +177,7 @@ function New-LogsLayout {
 
         # Return refs
         return @{ 
-            LogTextBox = $logPanel
+            LogTextBox = $logTextBox
             SearchBox = $searchBox
             SearchButton = $searchBtn
             RefreshButton = $btnRefresh

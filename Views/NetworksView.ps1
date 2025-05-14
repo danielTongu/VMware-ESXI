@@ -105,6 +105,14 @@ function New-NetworkLayout {
         $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
         $tabOverview.Controls.Add($overviewLayout)
 
+
+        $gridScroller = [System.Windows.Forms.Panel]::new()
+        $gridScroller.Dock = 'Fill'
+        $gridScroller.AutoScroll = $true
+        $gridScroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $gridScroller.BackColor = $global:Theme.White
+        $overviewLayout.Controls.Add($gridScroller,0,0)
+
         $grid = [System.Windows.Forms.DataGridView]::new()
         $grid.Name = 'grdNetworks'  
         $grid.Dock = 'Fill'
@@ -119,7 +127,7 @@ function New-NetworkLayout {
         $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
         $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
         $grid.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::AliceBlue
-        $overviewLayout.Controls.Add($grid,0,0)
+        $gridScroller.Controls.Add($grid)
         $refs.Tabs.Overview.NetworkGrid = $grid
 
         $cols = @(

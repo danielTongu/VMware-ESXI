@@ -129,6 +129,14 @@ function New-VMsLayout {
         $filterPanel.Controls.Add($searchBtn)
 
         # Main grid
+        $gridscroller = [System.Windows.Forms.Panel]::new()
+        $gridscroller.Dock = 'Fill'
+        $gridscroller.AutoScroll = $true
+        $gridscroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $gridscroller.BackColor = $global:Theme.White
+        
+        $root.Controls.Add($gridscroller, 0, 2)
+
         $grid = New-Object System.Windows.Forms.DataGridView
         $grid.Name = 'gvVMs'
         $grid.Dock = 'Fill'
@@ -142,7 +150,7 @@ function New-VMsLayout {
         $grid.BorderStyle = 'FixedSingle'
         $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::New('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
 
-        $root.Controls.Add($grid, 0, 2)
+        $gridscroller.Controls.Add($grid)
 
         # Grid columns
         $columns = @(
