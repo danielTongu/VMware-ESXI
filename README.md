@@ -23,10 +23,10 @@ VMware-ESXI/
 │   ├── MainView.ps1           # Shell: navigation menu + content panel
 │   ├── LoginView.ps1          # Login dialog
 │   ├── DashboardView.ps1      # Host, VM, and network summary stats
-│   ├── ClassManagerView.ps1   # UI for managing class VMs
+│   ├── ClassesView.ps1   # UI for managing class VMs
 │   ├── VMsView.ps1            # Grid: list, filter, power on/off, remove VMs
-│   ├── NetworkManagerView.ps1 # Add/remove port groups (bulk & single)
-│   ├── OrphanCleanerView.ps1  # Discover & delete orphaned VM files
+│   ├── NetworksView.ps1 # Add/remove port groups (bulk & single)
+│   ├── OrphansView.ps1  # Discover & delete orphaned VM files
 │   └── LogsView.ps1           # View and refresh VMware event logs
 ├── .gitignore                 # Exclude IDE and temp files
 ├── Main.ps1                   # Entry point: shows LoginView then MainShell
@@ -82,7 +82,7 @@ cd VMware-ESXI
 | **Classes**          | Create/delete student VMs for a course         |
 | **Virtual Machines** | Filterable grid: power, restart, remove VMs    |
 | **Networks**         | Add/remove port groups (single or bulk)        |
-| **Orphan Cleaner**   | Find and delete orphaned VM files on datastore |
+| **Orphans**          | Find and delete orphaned VM files on datastore |
 | **Logs**             | View and refresh the latest VMware events      |
 | **Logout**           | Signs out user and returns to login screen     |
 
