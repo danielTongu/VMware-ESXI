@@ -200,6 +200,13 @@ function Show-MainShell {
     Entry point: shows login then main shell.
 #>
 function Show-MainView {
-    . "$PSScriptRoot\LoginView.ps1"
-    if (Show-LoginView) { Show-MainShell } else { [System.Windows.Forms.MessageBox]::Show('Login cancelled or failed.','Authentication',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information) }
+    # if not then opens login page
+    if (-not $global:IsLoggedIn) {
+        if (-not (Show-LoginView)) {
+            [System.Windows.Forms.MessageBox]::Show('Login cancelled or failed.','Authentication',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
+            return
+        }
+    }
+
+    Show-MainShell
 }
