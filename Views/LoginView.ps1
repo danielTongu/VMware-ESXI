@@ -249,7 +249,6 @@ function Handle-Login {
     
     $mainForm.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     $lblStatus.Text = 'Authenticating...'
-    $lblStatus.ForeColor = $global:Theme.TextSecondary
 
     $mainForm.Refresh()
 
