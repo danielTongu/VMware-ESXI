@@ -1,99 +1,283 @@
+# Required assemblies
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+
+
 <#
-.SYNOPSIS
-    UI view for displaying VMware events/logs.
-.DESCRIPTION
-    Provides a PowerShell Forms interface to:
-      - Refresh and view the latest events from the vCenter or ESXi host
-      - Display logs in a multiline text box with timestamp and message
-    Honors global login and offline state; no-ops when disconnected.
-.PARAMETER ContentPanel
-    The Panel control in which to render this view.
+    .SYNOPSIS
+        Displays the logs view in the application.
+
+    .DESCRIPTION
+        Initializes the logs view layout and populates it with VMware log data.
+    .PARAMETER ContentPanel
+        The Windows.Forms.Panel where this view is rendered.
 #>
 function Show-LogsView {
+    [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [System.Windows.Forms.Panel]$ContentPanel
     )
 
-    # Clear existing content
-    $ContentPanel.Controls.Clear()
+    try {
+        # Build UI skeleton
+        $uiRefs = New-LogsLayout -ContentPanel $ContentPanel
 
-    # Layout: title, controls, log display
-    $layout = New-Object System.Windows.Forms.TableLayoutPanel
-    $layout.Dock      = 'Fill'
-    $layout.RowCount  = 3
-    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute', 30))  # Title
-    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute', 40))  # Controls
-    $layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent', 100))  # Log text box
-    $ContentPanel.Controls.Add($layout)
-
-    # Title label
-    $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text      = 'Event Logs'
-    $lblTitle.Dock      = 'Fill'
-    $lblTitle.Font      = New-Object System.Drawing.Font('Segoe UI',14,[System.Drawing.FontStyle]::Bold)
-    $lblTitle.ForeColor = [System.Drawing.Color]::Black
-    $lblTitle.TextAlign = 'MiddleCenter'
-    $layout.Controls.Add($lblTitle,0,0)
-
-    # Controls panel
-    $controls = New-Object System.Windows.Forms.FlowLayoutPanel
-    $controls.Dock          = 'Fill'
-    $controls.FlowDirection = 'LeftToRight'
-    $controls.WrapContents  = $false
-    $controls.Padding       = '10,5,10,5'
-    $layout.Controls.Add($controls,0,1)
-
-    # Refresh button
-    $btnRefresh = New-Object System.Windows.Forms.Button
-    $btnRefresh.Text     = 'Refresh Logs'
-    $btnRefresh.AutoSize = $true
-    $controls.Controls.Add($btnRefresh)
-
-    # Clear button
-    $btnClear = New-Object System.Windows.Forms.Button
-    $btnClear.Text     = 'Clear'
-    $btnClear.AutoSize = $true
-    $controls.Controls.Add($btnClear)
-
-    # Log display text box
-    $txtLogs = New-Object System.Windows.Forms.TextBox
-    $txtLogs.Dock       = 'Fill'
-    $txtLogs.Multiline  = $true
-    $txtLogs.ScrollBars = 'Vertical'
-    $txtLogs.ReadOnly   = $true
-    $layout.Controls.Add($txtLogs,0,2)
-
-    <#
-    .SYNOPSIS
-        Loads the latest VMware events into the text box.
-    #>
-    function Load-Logs {
-        $txtLogs.Clear()
-        $conn = Get-ConnectionSafe
-        if ($null -eq $conn) {
-            $txtLogs.Text = "Offline or not logged in."
-            return
+        # Populate with data if connected
+        $data = Get-LogsData
+        if ($data) {
+            Update-LogsWithData -UiRefs $uiRefs -Data $data
+        } else {
+            $uiRefs.LogTextBox.Text = 'No log data available or not connected.'
         }
-        try {
-            # Retrieve the latest 100 events
-            $events = Get-VIEvent -Server $conn -MaxSamples 100 -ErrorAction Stop
-            foreach ($ev in $events) {
-                $timestamp = $ev.CreatedTime.ToString('G')
-                $user      = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
-                $message   = $ev.FullFormattedMessage
-                $txtLogs.AppendText("[$timestamp] ($user) $message`r`n")
-            }
-        }
-        catch {
-            $txtLogs.AppendText("Failed to load logs: $_`r`n")
-        }
+    } catch {
+        Write-Verbose "Logs view initialization failed: $_"
     }
+}
 
-    # Event handlers
-    $btnRefresh.Add_Click({ Load-Logs })
-    $btnClear.Add_Click({ $txtLogs.Clear() })
 
-    # Initial load
-    Load-Logs
+
+<#
+    .SYNOPSIS
+        Creates the layout for the logs view.
+    .DESCRIPTION
+        Builds header, filter, log box, and control buttons using CWU theme colors.
+    .PARAMETER ContentPanel
+        The Panel where the logs view is rendered.
+    .OUTPUTS
+        Hashtable of UI references.
+#>
+function New-LogsLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Windows.Forms.Panel]$ContentPanel
+    )
+
+    try {
+        $ContentPanel.SuspendLayout()
+        $ContentPanel.Controls.Clear()
+        $ContentPanel.BackColor = $global:Theme.LightGray
+
+        # Root layout
+        $root = [System.Windows.Forms.TableLayoutPanel]::new()
+        $root.Dock = 'Fill'; 
+        $root.ColumnCount = 1; 
+        $root.RowCount = 4
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Header
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Filter
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100)) # Log box
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Controls
+        
+        $ContentPanel.Controls.Add($root)
+
+        # Header
+        $header = [System.Windows.Forms.Panel]::new()
+        $header.Dock = 'Fill'; 
+        $header.Height = 60
+        $header.BackColor = $global:Theme.Primary
+
+        $root.Controls.Add($header,0,0)
+
+        $titleLabel = [System.Windows.Forms.Label]::new()
+        $titleLabel.Text = 'EVENT LOGS'
+        $titleLabel.Font = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+        $titleLabel.ForeColor = $global:Theme.White
+        $titleLabel.Location = [System.Drawing.Point]::new(20,15)
+        $titleLabel.AutoSize = $true
+        
+        $header.Controls.Add($titleLabel)
+
+        # Filter row
+        $filterPanel = [System.Windows.Forms.Panel]::new()
+        $filterPanel.Dock = 'Fill'; 
+        $filterPanel.Height = 50
+        $filterPanel.BackColor = $global:Theme.LightGray
+
+        $root.Controls.Add($filterPanel,0,1)
+
+        # Search box
+        $searchBox = [System.Windows.Forms.TextBox]::new()
+        $searchBox.Name = 'txtFilter'
+        $searchBox.Width = 300; $searchBox.Height = 30
+        $searchBox.Location = [System.Drawing.Point]::new(20,10)
+        $searchBox.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $searchBox.BackColor = $global:Theme.White 
+        $searchBox.ForeColor = $global:Theme.PrimaryDark
+
+        $filterPanel.Controls.Add($searchBox)
+
+        # Search button
+        $searchBtn = [System.Windows.Forms.Button]::new()
+        $searchBtn.Name = 'btnSearch'
+        $searchBtn.Text = 'SEARCH'
+        $searchBtn.Width = 100 
+        $searchBtn.Height = 30
+        $searchBtn.Location = [System.Drawing.Point]::new(330,10)
+        $searchBtn.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $searchBtn.BackColor = $global:Theme.Primary; 
+        $searchBtn.ForeColor = $global:Theme.White
+
+        $filterPanel.Controls.Add($searchBtn)
+
+        # Log textbox
+        $logScroller = [System.Windows.Forms.Panel]::new()
+        $logScroller.Dock = 'Fill'
+        $logScroller.AutoScroll = $true
+        $logScroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $logScroller.BackColor = $global:Theme.White
+        $root.Controls.Add($logScroller,0,2)
+
+        $logTextBox = [System.Windows.Forms.TextBox]::new()
+        $logTextBox.Name = 'txtLogs'
+        $logTextBox.Dock = 'Fill'
+        $logTextBox.Multiline = $true
+        $logTextBox.ScrollBars = 'Vertical' 
+        $logTextBox.ReadOnly = $true
+        $logTextBox.BackColor = $global:Theme.White
+        $logTextBox.ForeColor = $global:Theme.PrimaryDark
+        $logTextBox.Font = [System.Drawing.Font]::new('Segoe UI',10)
+
+        $logScroller.Controls.Add($logTextBox)
+
+        # Control buttons
+        $controlsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
+        $controlsPanel.Dock = 'Fill'
+        $controlsPanel.Height = 50
+        $controlsPanel.FlowDirection = 'LeftToRight'
+        $controlsPanel.Padding = [System.Windows.Forms.Padding]::new(10)
+        $controlsPanel.BackColor = $global:Theme.LightGray
+
+        $root.Controls.Add($controlsPanel,0,3)
+
+        # Refresh button
+        $btnRefresh = [System.Windows.Forms.Button]::new()
+        $btnRefresh.Name = 'btnRefresh'
+        $btnRefresh.Text = 'REFRESH'
+        $btnRefresh.Width = 120
+        $btnRefresh.Height = 35
+        $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnRefresh.BackColor = $global:Theme.Primary
+        $btnRefresh.ForeColor = $global:Theme.White
+
+        $controlsPanel.Controls.Add($btnRefresh)
+
+        # Clear button
+        $btnClear = [System.Windows.Forms.Button]::new()
+        $btnClear.Name = 'btnClear'
+        $btnClear.Text = 'CLEAR'
+        $btnClear.Width = 120
+        $btnClear.Height = 35
+        $btnClear.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnClear.BackColor = $global:Theme.LightGray
+        $btnClear.ForeColor = $global:Theme.PrimaryDark
+
+        $controlsPanel.Controls.Add($btnClear)
+
+        # Return refs
+        return @{ 
+            LogTextBox = $logTextBox
+            SearchBox = $searchBox
+            SearchButton = $searchBtn
+            RefreshButton = $btnRefresh
+            ClearButton = $btnClear 
+        }
+    } finally {
+        $ContentPanel.ResumeLayout($true)
+    }
+}
+
+
+
+<#
+    .SYNOPSIS
+        Fetches logs data from the VMware environment.
+    .DESCRIPTION
+            Retrieves recent events if connected and logged in.
+    .OUTPUTS
+        Hashtable with Events and LastUpdated.
+#>
+function Get-LogsData {
+    [CmdletBinding()]
+    param()
+
+    try {
+        if (-not $global:IsLoggedIn) { return $null }
+
+        $conn = $global:AppState.VMware.Connection
+        if (-not $conn) { return $null }
+
+        $events = Get-VIEvent -Server $conn -MaxSamples 100 -ErrorAction Stop
+
+        return @{ 
+            Events = $events; 
+            LastUpdated = Get-Date 
+        }
+
+    } catch {
+        Write-Verbose "Failed to load logs: $_"
+        return $null
+    }
+}
+
+
+
+<#
+    .SYNOPSIS
+        Updates the logs view with new data.
+    .DESCRIPTION
+            Populates the log textbox and wires search/refresh/clear handlers.
+    .PARAMETER UiRefs
+        Hashtable of UI element references.
+    .PARAMETER Data
+        Hashtable containing events and timestamp.
+#>
+function Update-LogsWithData {
+    [CmdletBinding()]
+    param([hashtable]$UiRefs, [hashtable]$Data)
+    
+    try {
+        $UiRefs.LogTextBox.Clear()
+
+        if (-not $Data.Events) { 
+            $UiRefs.LogTextBox.Text = 'No log data available or not connected.'; 
+            return 
+        }
+
+        foreach ($ev in $Data.Events) {
+            $ts = $ev.CreatedTime.ToString('G'); 
+            $user = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
+            $msg = $($ev.FullFormattedMessage)
+            $UiRefs.LogTextBox.AppendText("[$ts] ($user) $message`r`n")
+        }
+
+        # Event handlers
+        $UiRefs.SearchButton.Add_Click({
+            $f = $UiRefs.SearchBox.Text.Trim()
+
+            if ($f) {
+                $lines = $UiRefs.LogTextBox.Text -split "`r`n"
+                $filteredLines = $lines | Where-Object { $_ -match $filterText }
+                $UiRefs.LogTextBox.Text = $filteredLines -join "`r`n"
+            }
+        })
+
+        $UiRefs.RefreshButton.Add_Click({
+            $d = Get-LogsData; 
+            if ($d) { Update-LogsWithData -UiRefs $UiRefs -Data $d }
+        })
+
+        $UiRefs.ClearButton.Add_Click({ $UiRefs.LogTextBox.Clear() })
+
+        $UiRefs.SearchBox.Add_KeyDown({ 
+            if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { 
+                $UiRefs.SearchButton.PerformClick(); 
+                $_.SuppressKeyPress=$true 
+            } 
+        })
+    } catch {
+        Write-Verbose "Failed to update logs view: $_"
+        $UiRefs.LogTextBox.AppendText('Error loading logs. Please try again.`r`n')
+    }
 }

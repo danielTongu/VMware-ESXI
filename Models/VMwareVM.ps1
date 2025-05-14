@@ -55,10 +55,6 @@ class VMwareVM {
         VMware vSphere server connection, or $null if offline.
     #>
     hidden [object] GetConnectionSafe() {
-        if ($global:VMwareConfig.OfflineMode) {
-            Write-Warning "Offline mode: cannot establish connection."
-            return $null
-        }
         if ($null -ne $global:VMwareConfig.Connection) {
             return $global:VMwareConfig.Connection
         }

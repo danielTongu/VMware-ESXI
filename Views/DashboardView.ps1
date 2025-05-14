@@ -1,18 +1,18 @@
-<#
-.SYNOPSIS
-    Resilient VMware ESXi Dashboard with Offline Support
-.DESCRIPTION
-    Displays comprehensive overview with:
-    - Online/offline mode detection
-    - Graceful degradation when disconnected
-    - Cached data display options
-    - Enhanced error handling
-#>
-
+# Import required assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms.DataVisualization
 
+
+
+<#
+    .SYNOPSIS
+        Renders the ESXi dashboard into a WinForms panel.
+    .DESCRIPTION
+        Builds layout, retrieves vSphere data, and injects into UI.
+    .PARAMETER ContentPanel
+        The parent WinForms Panel for rendering.
+#>
 function Show-DashboardView {
     [CmdletBinding()]
     param(
@@ -20,376 +20,450 @@ function Show-DashboardView {
         [System.Windows.Forms.Panel]$ContentPanel
     )
 
-    # Clear previous content
-    $ContentPanel.Controls.Clear()
+    try {
+        # Build UI skeleton
+        $uiRefs = New-DashboardLayout -ContentPanel $ContentPanel
 
-    # Create main container with scrolling
-    $mainPanel = New-Object System.Windows.Forms.Panel
-    $mainPanel.Dock = 'Fill'
-    $mainPanel.AutoScroll = $true
-    $mainPanel.BackColor = [System.Drawing.Color]::White
-    $ContentPanel.Controls.Add($mainPanel)
-
-    # -----------------------------
-    # Dashboard Header
-    # -----------------------------
-    $yPos = 20
-    $offlineMode = $global:VMwareConfig.OfflineMode
-
-    $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "VMware ESXi Dashboard" + $(if ($offlineMode) { " [OFFLINE MODE]" })
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-    $lblTitle.Location = New-Object System.Drawing.Point(20, $yPos)
-    $lblTitle.AutoSize = $true
-    $lblTitle.ForeColor = if ($offlineMode) { [System.Drawing.Color]::Gray } else { [System.Drawing.Color]::Black }
-    $mainPanel.Controls.Add($lblTitle)
-
-    $yPos += 40
-
-    # Connection status label
-    $lblConnectionStatus = New-Object System.Windows.Forms.Label
-    $lblConnectionStatus.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblConnectionStatus.Location = New-Object System.Drawing.Point(20, $yPos)
-    $lblConnectionStatus.AutoSize = $true
-    $mainPanel.Controls.Add($lblConnectionStatus)
-
-    $yPos += 30
-
-    $lblLastRefresh = New-Object System.Windows.Forms.Label
-    $lblLastRefresh.Text = "Last refresh: $(Get-Date -Format 'G')"
-    $lblLastRefresh.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
-    $lblLastRefresh.Location = New-Object System.Drawing.Point(20, $yPos)
-    $lblLastRefresh.AutoSize = $true
-    $mainPanel.Controls.Add($lblLastRefresh)
-
-    $yPos += 40
-
-    # -----------------------------
-    # Data Collection
-    # -----------------------------
-    $data = @{
-        HostInfo    = $null
-        VMs         = $null
-        Datastores  = $null
-        Events      = $null
-        Alarms      = $null
-    }
-
-    if (-not $offlineMode) {
-        try {
-            $conn = [VMServerConnection]::GetInstance().GetConnection()
-            $data.HostInfo = Get-VMHost -Server $conn -ErrorAction Stop
-            $data.VMs = Get-VM -Server $conn -ErrorAction Stop
-            $data.Datastores = Get-Datastore -Server $conn -ErrorAction Stop
-            $data.Events = Get-VIEvent -Server $conn -MaxSamples 10 -ErrorAction SilentlyContinue
-            $data.Alarms = Get-AlarmDefinition -Server $conn -ErrorAction SilentlyContinue
-            
-            $lblConnectionStatus.Text = "Connected to: $($data.HostInfo.Name) | Version: $($data.HostInfo.Version)"
-            $lblConnectionStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+        # Populate with data if connected
+        $data = Get-DashboardData
+        if ($data) {
+            Update-DashboardWithData -UiRefs $uiRefs -Data $data
+        } else {
+            $uiRefs['StatusLabel'].Text = 'No connection to VMware server'
+            $uiRefs['StatusLabel'].ForeColor = $global:Theme.Error
         }
-        catch {
-            $offlineMode = $true
-            $global:VMwareConfig.OfflineMode = $true
-            $lblTitle.Text += " [OFFLINE MODE]"
-            $lblTitle.ForeColor = [System.Drawing.Color]::Gray
-            
-            $lblConnectionStatus.Text = "Connection Error: $($_.Exception.Message)"
-            $lblConnectionStatus.ForeColor = [System.Drawing.Color]::Red
-        }
+    } catch {
+        Write-Verbose "Dashboard initialization failed: $_"
     }
-    else {
-        $lblConnectionStatus.Text = "Working in offline mode - displaying cached data"
-        $lblConnectionStatus.ForeColor = [System.Drawing.Color]::Orange
-    }
-
-    # -----------------------------
-    # Quick Stats Cards (Works in offline mode)
-    # -----------------------------
-    $statsPanel = New-Object System.Windows.Forms.Panel
-    $statsPanel.Location = New-Object System.Drawing.Point(20, $yPos)
-    $statsPanel.Size = New-Object System.Drawing.Size(900, 120)
-    $statsPanel.BorderStyle = 'FixedSingle'
-    $mainPanel.Controls.Add($statsPanel)
-
-    $statCards = @(
-        @{ 
-            Title = "Total VMs" 
-            Value = if ($data.VMs) { $data.VMs.Count } else { "N/A" }
-        },
-        @{ 
-            Title = "Running VMs" 
-            Value = if ($data.VMs) { 
-                $running = ($data.VMs | Where-Object { $_.PowerState -eq 'PoweredOn' }).Count
-                "$running ($([math]::Round(($running/$data.VMs.Count)*100))%)"
-            } else { "N/A" }
-        },
-        @{ 
-            Title = "CPU Usage" 
-            Value = if ($data.HostInfo) { 
-                $cpu = [math]::Round(($data.HostInfo.CpuUsageMhz / $data.HostInfo.CpuTotalMhz) * 100, 1)
-                "$cpu%"
-            } else { "N/A" }
-            Warning = $cpu -gt 80 -and $data.HostInfo
-        },
-        @{ 
-            Title = "Memory Usage" 
-            Value = if ($data.HostInfo) { 
-                $mem = [math]::Round(($data.HostInfo.MemoryUsageGB / $data.HostInfo.MemoryTotalGB) * 100, 1)
-                "$mem%"
-            } else { "N/A" }
-            Warning = $mem -gt 80 -and $data.HostInfo
-        },
-        @{ 
-            Title = "Datastores" 
-            Value = if ($data.Datastores) { $data.Datastores.Count } else { "N/A" }
-        }
-    )
-
-    $xCard = 10
-    foreach ($card in $statCards) {
-        $cardPanel = New-Object System.Windows.Forms.Panel
-        $cardPanel.Location = New-Object System.Drawing.Point($xCard, 10)
-        $cardPanel.Size = New-Object System.Drawing.Size(160, 100)
-        $cardPanel.BackColor = if ($card.Warning) { [System.Drawing.Color]::LightPink } else { [System.Drawing.Color]::White }
-        $cardPanel.BorderStyle = 'FixedSingle'
-
-        $lblIcon = New-Object System.Windows.Forms.Label
-        $lblIcon.Text = $card.Icon
-        $lblIcon.Font = New-Object System.Drawing.Font("Segoe UI", 24)
-        $lblIcon.Location = New-Object System.Drawing.Point(10, 10)
-        $lblIcon.AutoSize = $true
-        $cardPanel.Controls.Add($lblIcon)
-
-        $lblTitle = New-Object System.Windows.Forms.Label
-        $lblTitle.Text = $card.Title
-        $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-        $lblTitle.Location = New-Object System.Drawing.Point(60, 15)
-        $lblTitle.AutoSize = $true
-        $cardPanel.Controls.Add($lblTitle)
-
-        $lblValue = New-Object System.Windows.Forms.Label
-        $lblValue.Text = $card.Value
-        $lblValue.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-        $lblValue.Location = New-Object System.Drawing.Point(60, 40)
-        $lblValue.AutoSize = $true
-        $cardPanel.Controls.Add($lblValue)
-
-        $statsPanel.Controls.Add($cardPanel)
-        $xCard += 170
-    }
-
-    $yPos += 140
-
-    # -----------------------------
-    # Resource Utilization (Only in online mode)
-    # -----------------------------
-    if (-not $offlineMode -and $data.HostInfo) {
-        $lblResources = New-Object System.Windows.Forms.Label
-        $lblResources.Text = "Resource Utilization"
-        $lblResources.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-        $lblResources.Location = New-Object System.Drawing.Point(20, $yPos)
-        $lblResources.AutoSize = $true
-        $mainPanel.Controls.Add($lblResources)
-
-        $yPos += 30
-
-        # CPU Usage Chart
-        $cpuChart = New-Object System.Windows.Forms.DataVisualization.Charting.Chart
-        $cpuChart.Location = New-Object System.Drawing.Point(20, $yPos)
-        $cpuChart.Size = New-Object System.Drawing.Size(430, 200)
-        
-        $cpuChartArea = New-Object System.Windows.Forms.DataVisualization.Charting.ChartArea
-        $cpuChart.ChartAreas.Add($cpuChartArea)
-        
-        $cpuSeries = New-Object System.Windows.Forms.DataVisualization.Charting.Series
-        $cpuSeries.ChartType = 'Column'
-        $cpuSeries.Points.AddXY("Used", $data.HostInfo.CpuUsageMhz)
-        $cpuSeries.Points.AddXY("Available", ($data.HostInfo.CpuTotalMhz - $data.HostInfo.CpuUsageMhz))
-        $cpuChart.Series.Add($cpuSeries)
-        
-        $cpuChart.Titles.Add("CPU Usage (MHz)") | Out-Null
-        $mainPanel.Controls.Add($cpuChart)
-
-        # Memory Usage Chart
-        $memChart = New-Object System.Windows.Forms.DataVisualization.Charting.Chart
-        $memChart.Location = New-Object System.Drawing.Point(470, $yPos)
-        $memChart.Size = New-Object System.Drawing.Size(430, 200)
-        
-        $memChartArea = New-Object System.Windows.Forms.DataVisualization.Charting.ChartArea
-        $memChart.ChartAreas.Add($memChartArea)
-        
-        $memSeries = New-Object System.Windows.Forms.DataVisualization.Charting.Series
-        $memSeries.ChartType = 'Column'
-        $memSeries.Points.AddXY("Used", $data.HostInfo.MemoryUsageGB)
-        $memSeries.Points.AddXY("Available", ($data.HostInfo.MemoryTotalGB - $data.HostInfo.MemoryUsageGB))
-        $memChart.Series.Add($memSeries)
-        
-        $memChart.Titles.Add("Memory Usage (GB)") | Out-Null
-        $mainPanel.Controls.Add($memChart)
-
-        $yPos += 230
-    }
-    else {
-        $lblNoResources = New-Object System.Windows.Forms.Label
-        $lblNoResources.Text = "Resource data unavailable in offline mode"
-        $lblNoResources.Font = New-Object System.Drawing.Font("Segoe UI", 12)
-        $lblNoResources.ForeColor = [System.Drawing.Color]::Gray
-        $lblNoResources.Location = New-Object System.Drawing.Point(20, $yPos)
-        $lblNoResources.AutoSize = $true
-        $mainPanel.Controls.Add($lblNoResources)
-        $yPos += 50
-    }
-
-    # -----------------------------
-    # Recent Alerts (Works with cached data)
-    # -----------------------------
-    $lblAlerts = New-Object System.Windows.Forms.Label
-    $lblAlerts.Text = "Recent Alerts and Events"
-    $lblAlerts.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-    $lblAlerts.Location = New-Object System.Drawing.Point(20, $yPos)
-    $lblAlerts.AutoSize = $true
-    $mainPanel.Controls.Add($lblAlerts)
-
-    $yPos += 30
-
-    $dgvEvents = New-Object System.Windows.Forms.DataGridView
-    $dgvEvents.Location = New-Object System.Drawing.Point(20, $yPos)
-    $dgvEvents.Size = New-Object System.Drawing.Size(880, 200)
-    $dgvEvents.AutoSizeColumnsMode = 'Fill'
-    $dgvEvents.SelectionMode = 'FullRowSelect'
-    $dgvEvents.ReadOnly = $true
-    $dgvEvents.RowHeadersVisible = $false
-    $dgvEvents.BackgroundColor = if ($offlineMode) { [System.Drawing.Color]::WhiteSmoke } else { [System.Drawing.Color]::White }
-
-    # Add columns
-    $columns = @(
-        @{ Name = "Time"; HeaderText = "Time" },
-        @{ Name = "Type"; HeaderText = "Type" },
-        @{ Name = "Message"; HeaderText = "Message" },
-        @{ Name = "Object"; HeaderText = "Object" }
-    )
-
-    foreach ($col in $columns) {
-        $column = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-        $column.Name = $col.Name
-        $column.HeaderText = $col.HeaderText
-        $dgvEvents.Columns.Add($column)
-    }
-
-    # Add event data or placeholder
-    if ($data.Events -and $data.Events.Count -gt 0) {
-        foreach ($event in $data.Events) {
-            $dgvEvents.Rows.Add(
-                $event.CreatedTime,
-                $event.GetType().Name,
-                $event.FullFormattedMessage,
-                $event.ObjectName
-            ) | Out-Null
-        }
-    }
-    else {
-        $dgvEvents.Rows.Add(
-            [DateTime]::Now,
-            "Information",
-            "No recent events available",
-            "System"
-        ) | Out-Null
-        $dgvEvents.Rows[0].DefaultCellStyle.ForeColor = [System.Drawing.Color]::Gray
-    }
-
-    $mainPanel.Controls.Add($dgvEvents)
-    $yPos += 220
-
-    # -----------------------------
-    # Storage Overview (Works with cached data)
-    # -----------------------------
-    $lblStorage = New-Object System.Windows.Forms.Label
-    $lblStorage.Text = "Storage Overview"
-    $lblStorage.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-    $lblStorage.Location = New-Object System.Drawing.Point(20, $yPos)
-    $lblStorage.AutoSize = $true
-    $mainPanel.Controls.Add($lblStorage)
-
-    $yPos += 30
-
-    $dgvStorage = New-Object System.Windows.Forms.DataGridView
-    $dgvStorage.Location = New-Object System.Drawing.Point(20, $yPos)
-    $dgvStorage.Size = New-Object System.Drawing.Size(880, 150)
-    $dgvStorage.AutoSizeColumnsMode = 'Fill'
-    $dgvStorage.SelectionMode = 'FullRowSelect'
-    $dgvStorage.ReadOnly = $true
-    $dgvStorage.RowHeadersVisible = $false
-    $dgvStorage.BackgroundColor = if ($offlineMode) { [System.Drawing.Color]::WhiteSmoke } else { [System.Drawing.Color]::White }
-
-    # Add columns
-    $storageColumns = @(
-        @{ Name = "Name"; HeaderText = "Datastore" },
-        @{ Name = "CapacityGB"; HeaderText = "Capacity (GB)" },
-        @{ Name = "FreeSpaceGB"; HeaderText = "Free (GB)" },
-        @{ Name = "PercentFree"; HeaderText = "% Free" }
-    )
-
-    foreach ($col in $storageColumns) {
-        $column = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-        $column.Name = $col.Name
-        $column.HeaderText = $col.HeaderText
-        $dgvStorage.Columns.Add($column)
-    }
-
-    # Add storage data or placeholder
-    if ($data.Datastores -and $data.Datastores.Count -gt 0) {
-        foreach ($ds in $data.Datastores) {
-            $percentFree = [math]::Round(($ds.FreeSpaceGB / $ds.CapacityGB) * 100, 1)
-            $dgvStorage.Rows.Add(
-                $ds.Name,
-                [math]::Round($ds.CapacityGB, 1),
-                [math]::Round($ds.FreeSpaceGB, 1),
-                "$percentFree%"
-            ) | Out-Null
-        }
-    }
-    else {
-        $dgvStorage.Rows.Add(
-            "No storage data",
-            "N/A",
-            "N/A",
-            "N/A"
-        ) | Out-Null
-        $dgvStorage.Rows[0].DefaultCellStyle.ForeColor = [System.Drawing.Color]::Gray
-    }
-
-    $mainPanel.Controls.Add($dgvStorage)
-    $yPos += 170
-
-    # -----------------------------
-    # Action Buttons
-    # -----------------------------
-    $btnPanel = New-Object System.Windows.Forms.Panel
-    $btnPanel.Location = New-Object System.Drawing.Point(20, $yPos)
-    $btnPanel.Size = New-Object System.Drawing.Size(880, 50)
-    $mainPanel.Controls.Add($btnPanel)
-
-    # Refresh button
-    $btnRefresh = New-Object System.Windows.Forms.Button
-    $btnRefresh.Text = "Refresh Data"
-    $btnRefresh.Size = New-Object System.Drawing.Size(120, 40)
-    $btnRefresh.Location = New-Object System.Drawing.Point(0, 0)
-    $btnRefresh.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $btnRefresh.Add_Click({
-        $global:VMwareConfig.OfflineMode = $false
-        Show-DashboardView -ContentPanel $ContentPanel
-    })
-    $btnPanel.Controls.Add($btnRefresh)
-
-    # Offline mode toggle
-    $btnOffline = New-Object System.Windows.Forms.Button
-    $btnOffline.Text = if ($offlineMode) { "Go Online" } else { "Work Offline" }
-    $btnOffline.Size = New-Object System.Drawing.Size(120, 40)
-    $btnOffline.Location = New-Object System.Drawing.Point(130, 0)
-    $btnOffline.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $btnOffline.Add_Click({
-        $global:VMwareConfig.OfflineMode = -not $global:VMwareConfig.OfflineMode
-        Show-DashboardView -ContentPanel $ContentPanel
-    })
-    $btnPanel.Controls.Add($btnOffline)
 }
+
+
+
+<#
+    .SYNOPSIS
+        Retrieves dashboard data from vSphere.
+    .DESCRIPTION
+        Gathers host, VM, datastore, event, adapter, template, port group, and orphan file info.
+    .OUTPUTS
+        Hashtable of data collections or $null if disconnected.
+#>
+function Get-DashboardData {
+    [CmdletBinding()]
+    param()
+
+    try {
+        $conn = [VMServerConnection]::GetInstance().GetConnection()
+        if (-not $conn) { return $null }
+
+        $data = @{
+            HostInfo   = Get-VMHost -Server $conn -ErrorAction SilentlyContinue
+            VMs        = Get-VM -Server $conn -ErrorAction SilentlyContinue
+            Datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue
+            Events     = Get-VIEvent -Server $conn -MaxSamples 10 -ErrorAction SilentlyContinue
+            Adapters   = Get-VMHostNetworkAdapter -Server $conn -ErrorAction SilentlyContinue
+            Templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue
+        }
+
+        $data.PortGroups   = try { [VMwareNetwork]::ListPortGroups() } catch { @() }
+
+        $data.OrphanedFiles = try { 
+            if ($data.Datastores) { [OrphanCleaner]::FindOrphanedFiles($data.Datastores[0].Name) } 
+            else { @() } 
+        } catch { @() }
+
+        return $data
+    } catch {
+        Write-Verbose "Data collection failed: $_"
+        return $null
+    }
+}
+
+
+
+<#
+    .SYNOPSIS
+        Creates the dashboard layout: header, tabs, actions, footer.
+    .PARAMETER ContentPanel
+        Panel into which the layout is rendered.
+    .OUTPUTS
+        Hashtable of UI element references.
+#>
+function New-DashboardLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Windows.Forms.Panel]$ContentPanel
+    )
+
+    try {
+        $ContentPanel.SuspendLayout()
+        $ContentPanel.Controls.Clear()
+        $ContentPanel.BackColor = $global:Theme.LightGray
+
+        # Root layout
+        $root = [System.Windows.Forms.TableLayoutPanel]::new()
+        $root.Dock = 'Fill'; 
+        $root.ColumnCount = 1; 
+        $root.RowCount = 4
+        $root.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Header
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100)) # Tabs
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Actions
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Footer
+        
+        $ContentPanel.Controls.Add($root)
+
+        # Header
+        $root.Controls.Add((New-DashboardHeader), 0, 0)
+
+        # Tabs
+        $tabs = [System.Windows.Forms.TabControl]::new()
+        $tabs.Dock = 'Fill'; 
+        $tabs.SizeMode = 'Fixed'; 
+        $tabs.ItemSize = [System.Drawing.Size]::new(250,40)
+        $tabs.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $tabs.BackColor = $global:Theme.LightGray
+        
+        $root.Controls.Add($tabs,0,1)
+        $refs = @{}
+
+        # Stats Tab
+        $tabStats = [System.Windows.Forms.TabPage]::new('Host Statistics')
+        $statsPanel = New-DashboardStats -Refs ([ref]$refs)
+        $tabStats.Controls.Add($statsPanel)
+        
+        $tabs.TabPages.Add($tabStats)
+
+        # Alerts Tab
+        $tabAlerts = [System.Windows.Forms.TabPage]::new('Recent Alerts and Events')
+        $tabAlerts.BackColor = $global:Theme.LightGray
+        $alertsTable = New-DashboardTable -Columns @('Time','Severity','Message','Object') -Name 'AlertsTable' -Refs ([ref]$refs)
+        $tabAlerts.Controls.Add($alertsTable)
+        
+        $tabs.TabPages.Add($tabAlerts)
+
+        # Storage Tab
+        $tabStorage = [System.Windows.Forms.TabPage]::new('Storage Overview')
+        $tabStorage.BackColor = $global:Theme.LightGray
+        $storageTable = New-DashboardTable -Columns @('Datastore','Capacity (GB)','Used (GB)','Free (GB)','Usage') -Name 'StorageTable' -Refs ([ref]$refs)
+        $tabStorage.Controls.Add($storageTable)
+        $tabs.TabPages.Add($tabStorage)
+
+        # Actions bar
+        $actions = New-DashboardActions -Refs ([ref]$refs) -ParentPanel $ContentPanel
+        $root.Controls.Add($actions,0,2)
+
+        # Footer
+        $footer = [System.Windows.Forms.Panel]::new()
+        $footer.Dock = 'Bottom'; 
+        $footer.Height = 30; 
+        $footer.BackColor = $global:Theme.LightGray
+
+        $status = [System.Windows.Forms.Label]::new()
+        $status.Name = 'StatusLabel'; 
+        $status.AutoSize = $true
+        $status.Font = [System.Drawing.Font]::new('Segoe UI',9)
+        $status.ForeColor = $global:Theme.Error
+        $status.Text = 'DISCONNECTED'
+
+        $footer.Controls.Add($status)
+        $root.Controls.Add($footer,0,3)
+
+        $refs['StatusLabel'] = $status
+
+        return $refs
+
+    } finally { 
+        $ContentPanel.ResumeLayout($true)
+    }
+}
+
+
+<#
+    .SYNOPSIS
+        Creates the colored header bar with title and last-refresh time.
+#>
+function New-DashboardHeader {
+    $p = [System.Windows.Forms.Panel]::new()
+    $p.Dock = 'Top'; 
+    $p.Height = 100; 
+    $p.BackColor = $global:Theme.Primary
+
+    $lbl = [System.Windows.Forms.Label]::new()
+    $lbl.Text = 'DASHBOARD';
+    $lbl.Font = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+    $lbl.ForeColor = $global:Theme.White; 
+    $lbl.Location = [System.Drawing.Point]::new(20,20)
+    $lbl.AutoSize = $true; 
+    
+    $p.Controls.Add($lbl)
+
+    $ref = [System.Windows.Forms.Label]::new()
+    $ref.Name = 'LastRefreshLabel'; 
+    $ref.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $ref.Font = [System.Drawing.Font]::new('Segoe UI',9)
+    $ref.ForeColor = $global:Theme.White; 
+    $ref.Location = [System.Drawing.Point]::new(20,60)
+    $ref.AutoSize = $true; $p.Controls.Add($ref)
+
+    return $p
+}
+
+
+
+<#
+    .SYNOPSIS
+        Generates the stats card panel.
+    .PARAMETER Refs
+        Reference hashtable for card value labels.
+#>
+function New-DashboardStats {
+    param([ref]$Refs)
+
+    $p = [System.Windows.Forms.FlowLayoutPanel]::new()
+    $p.Dock = 'Fill'; 
+    $p.AutoScroll = $true
+    $p.Padding = 10; 
+    $p.WrapContents = $true; 
+    $p.AutoScroll = $true
+    $p.BackColor = $global:Theme.White
+
+    $cards = @(
+        @{Key='TotalVMs';      Title='TOTAL VMS';     Icon=[char]0xE8F1},
+        @{Key='RunningVMs';    Title='RUNNING VMS';   Icon=[char]0xE768},
+        @{Key='Datastores';    Title='DATASTORES';    Icon=[char]0xE958},
+        @{Key='Adapters';      Title='ADAPTERS';      Icon=[char]0xE8EF},
+        @{Key='Templates';     Title='TEMPLATES';     Icon=[char]0xE8A5},
+        @{Key='PortGroups';    Title='PORT GROUPS';   Icon=[char]0xE8EE},
+        @{Key='OrphanedFiles'; Title='ORPHAN FILES';  Icon=[char]0xE7BA}
+    )
+
+    foreach ($c in $cards) {
+        $card = [System.Windows.Forms.Panel]::new()
+        $card.Size = [System.Drawing.Size]::new(150,100); 
+        $card.Padding = 5; 
+        $card.Margin = 5
+        $card.BackColor = $global:Theme.White; 
+        $card.BorderStyle = 'FixedSingle'
+
+        $t = [System.Windows.Forms.Label]::new()
+        $t.Text = $c.Title; 
+        $t.Font = [System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+        $t.Location = [System.Drawing.Point]::new(5,5); 
+        $t.AutoSize = $true; 
+        
+        $card.Controls.Add($t)
+
+        $v = [System.Windows.Forms.Label]::new()
+        $v.Name = "${($c.Key)}Value";
+        $v.Text = '--'
+        $v.Font = [System.Drawing.Font]::new('Segoe UI',14)
+        $v.Location = [System.Drawing.Point]::new(5,25); 
+        $v.AutoSize = $true; 
+        
+        $card.Controls.Add($v)
+
+        $i = [System.Windows.Forms.Label]::new()
+        $i.Text = $c.Icon; 
+        $i.Font = [System.Drawing.Font]::new('Segoe MDL2 Assets',20)
+        $i.Location = [System.Drawing.Point]::new(5,65); 
+        $i.AutoSize = $true
+        $i.ForeColor = $global:Theme.Primary; 
+        
+        $card.Controls.Add($i)
+        $p.Controls.Add($card)
+
+        $Refs.Value["${($c.Key)}Value"] = $v
+    }
+    return $p
+}
+
+
+
+<#
+    .SYNOPSIS
+        Builds a DataGridView wrapped in a panel.
+    .PARAMETER Columns
+        Array of column names to create.
+    .PARAMETER Name
+        Control name for reference.
+    .PARAMETER Refs
+        Reference hashtable to store control reference.
+#>
+function New-DashboardTable {
+    param(
+        [string[]]$Columns,
+        [string]$Name,
+        [ref]$Refs
+    )
+
+    $container = [System.Windows.Forms.Panel]::new()
+    $container.Dock = 'Fill'
+    $container.AutoScroll = $true
+    $container.Padding = [System.Windows.Forms.Padding]::new(10)
+    $container.BackColor = $global:Theme.White
+
+    $grid = [System.Windows.Forms.DataGridView]::new()
+    $grid.Name = $Name; 
+    $grid.Dock = 'Fill'
+    $grid.AutoSizeColumnsMode = 'Fill'; 
+    $grid.RowHeadersVisible = $false
+    $grid.ReadOnly = $true; 
+    $grid.AllowUserToAddRows = $false
+    $grid.AllowUserToDeleteRows = $false; 
+    $grid.AllowUserToResizeRows = $false
+    $grid.AutoSizeRowsMode = 'AllCells'; 
+    $grid.BackgroundColor = $global:Theme.White
+    $grid.BorderStyle = 'FixedSingle'; 
+    $grid.EnableHeadersVisualStyles = $false
+    $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+    $grid.DefaultCellStyle.BackColor = $global:Theme.White
+    $grid.DefaultCellStyle.ForeColor = $global:Theme.PrimaryDark
+    $grid.DefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',9)
+
+    foreach ($col in $Columns) {
+        $safe = 'col_' + ($col -replace '[^a-zA-Z0-9_]','')
+
+        $c = [System.Windows.Forms.DataGridViewTextBoxColumn]::new()
+        $c.Name = $safe;
+        $c.HeaderText = $col; 
+        $c.SortMode = 'NotSortable'
+
+        [void]$grid.Columns.Add($c)
+    }
+
+    # Placeholder row
+    $rowIndex = $grid.Rows.Add()
+
+    for ($i = 0; $i -lt $Columns.Count; $i++) {
+        $cell = $grid.Rows[$rowIndex].Cells[$i]
+        $cell.Value = if ($i -eq 0) { 'No data available' } else { '--' }
+        $cell.Style.Font = [System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    }
+
+    $container.Controls.Add($grid)
+    $Refs.Value[$Name] = $grid
+
+    return $container
+}
+
+
+
+<#
+    .SYNOPSIS
+        Creates the Refresh button action bar.
+    .PARAMETER Refs
+        Reference hashtable for UI elements.
+    .PARAMETER ParentPanel
+        The main content panel to refresh.
+#>
+function New-DashboardActions {
+    param([ref]$Refs, [System.Windows.Forms.Panel]$ParentPanel)
+
+    $flow = [System.Windows.Forms.FlowLayoutPanel]::new()
+    $flow.Dock = 'Fill'; 
+    $flow.Padding = 10; 
+    $flow.AutoSize = $true
+    $flow.BackColor = $global:Theme.LightGray
+
+    $btnRefresh = [System.Windows.Forms.Button]::new()
+    $btnRefresh.Text = 'REFRESH'; 
+    $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnRefresh.Size = [System.Drawing.Size]::new(120,35)
+    $btnRefresh.BackColor = $global:Theme.Primary; 
+    $btnRefresh.ForeColor = $global:Theme.White
+    $btnRefresh.FlatStyle = 'Flat'
+    $btnRefresh.Add_Click({ Show-DashboardView -ContentPanel $ParentPanel })
+
+    $flow.Controls.Add($btnRefresh)
+
+    return $flow
+}
+
+
+
+<#
+    .SYNOPSIS
+        Injects live VMware data into the UI controls.
+    .PARAMETER UiRefs
+        Hashtable of UI element references.
+    .PARAMETER Data
+        Hashtable containing collections fetched from vSphere.
+#>
+function Update-DashboardWithData {
+    [CmdletBinding()]
+    param(
+        [hashtable]$UiRefs,
+        [hashtable]$Data
+    )
+
+    # Update stats
+    $map = @{ 
+        TotalVMs = $Data.VMs.Count; 
+        RunningVMs = ($Data.VMs|Where-Object PowerState -eq 'PoweredOn').Count;
+        Datastores = $Data.Datastores.Count; 
+        Adapters = $Data.Adapters.Count;
+        Templates = $Data.Templates.Count; 
+        PortGroups = $Data.PortGroups.Count;
+        OrphanedFiles = $Data.OrphanedFiles.Count 
+    }
+
+    foreach ($k in $map.Keys) {
+        $UiRefs["${k}Value"].Text = $map[$k]
+        $UiRefs["${k}Value"].ForeColor = $global:Theme.Primary
+    }
+
+    # Connection status
+    if ($Data.HostInfo) {
+        $h = $Data.HostInfo
+        $UiRefs['StatusLabel'].Text = "CONNECTED to $($h.Name) | vSphere $($h.Version)"
+        $UiRefs['StatusLabel'].ForeColor = $global:Theme.Success
+    }
+
+    # Last refresh
+    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+
+    # Alerts table
+    if ($Data.Events) {
+        $g = $UiRefs['AlertsTable']; $g.Rows.Clear()
+
+        foreach ($e in $Data.Events) {
+            $idx = $g.Rows.Add()
+            
+            $g.Rows[$idx].Cells['col_Time'].Value     = $e.CreatedTime
+            $g.Rows[$idx].Cells['col_Severity'].Value = $e.GetType().Name
+            $g.Rows[$idx].Cells['col_Message'].Value  = $e.FullFormattedMessage
+            $g.Rows[$idx].Cells['col_Object'].Value   = $e.ObjectName
+
+            if ($e.GetType().Name -match 'Error|Warning') {
+                $g.Rows[$idx].Cells['col_Severity'].Style.ForeColor = $global:Theme.Error
+            }
+        }
+    }
+
+    # Storage table
+    if ($Data.Datastores) {
+        $g = $UiRefs['StorageTable']; $g.Rows.Clear()
+
+        foreach ($d in $Data.Datastores) {
+            $idx = $g.Rows.Add()
+
+            $cap  = [math]::Round($d.CapacityGB,1)
+            $free = [math]::Round($d.FreeSpaceGB,1)
+            $used = $cap - $free; 
+            $pct = 100 - $d.PercentFree
+
+            $g.Rows[$idx].Cells['col_Datastore'].Value       = $d.Name
+            $g.Rows[$idx].Cells['col_CapacityGB'].Value      = $cap
+            $g.Rows[$idx].Cells['col_UsedGB'].Value          = $used
+            $g.Rows[$idx].Cells['col_FreeGB'].Value          = $free
+            $g.Rows[$idx].Cells['col_Usage'].Value           = "${pct}%"
+            
+            if ($d.PercentFree -lt 15) {
+                $g.Rows[$idx].Cells['col_Usage'].Style.ForeColor = $global:Theme.Error
+                $g.Rows[$idx].Cells['col_Usage'].Style.Font     = [System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+            }
+        }
+    }
+}
+
