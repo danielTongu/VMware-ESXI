@@ -155,8 +155,8 @@ function New-ClassManagerLayout {
         $basicContent.Dock = 'Fill'; 
         $basicContent.ColumnCount = 2; 
         $basicContent.RowCount = 2
-        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         
         $basicLayout.Controls.Add($basicContent,0,1)
 
@@ -178,14 +178,15 @@ function New-ClassManagerLayout {
 
         # Students list
         $lblStud = [System.Windows.Forms.Label]::new(); 
-        $lblStud.Text = 'Students:'; 
+        $lblStud.Text = 'Students (ID per line):';
+        $lblStud.Autosize = $true #dont wrap
         $lblStud.Font = [System.Drawing.Font]::new('Segoe UI',10)
         $lblStud.Dock = 'Fill'; 
-        $lblStud.TextAlign = 'MiddleRight'; 
+        $lblStud.TextAlign = 'TopRight'; 
 
         $basicContent.Controls.Add($lblStud,0,1)
 
-        $txtStud = [System.Windows.Forms.TextBox]::new(); 
+        $txtStud = [System.Windows.Forms.TextBox]::new()
         $txtStud.Multiline = $true; 
         $txtStud.ScrollBars = 'Vertical'; 
         $txtStud.Dock = 'Fill'; 
@@ -233,8 +234,8 @@ function New-ClassManagerLayout {
         $advContent.Dock = 'Fill'; 
         $advContent.ColumnCount = 2; 
         $advContent.RowCount = 4
-        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         
         $advLayout.Controls.Add($advContent,0,1)
 
@@ -264,7 +265,7 @@ function New-ClassManagerLayout {
         $advContent.Controls.Add($lblTemp,0,1)
 
         $cmbTemp = [System.Windows.Forms.ComboBox]::new(); 
-        $cmbTemp.Dock = 'Fill'; 
+        $cmbTemp.Dock = 'Fill'
         $cmbTemp.BackColor = $global:Theme.White;
 
         $advContent.Controls.Add($cmbTemp,1,1)
@@ -291,7 +292,7 @@ function New-ClassManagerLayout {
         $lblNet.Text = 'Networks:'; 
         $lblNet.Font = [System.Drawing.Font]::new('Segoe UI',10)
         $lblNet.Dock = 'Fill'; 
-        $lblNet.TextAlign = 'MiddleRight';
+        $lblNet.TextAlign = 'TopRight';
 
         $advContent.Controls.Add($lblNet,0,3)
 
