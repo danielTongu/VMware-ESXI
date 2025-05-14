@@ -308,8 +308,6 @@ function Handle-Login {
 #>
 function Handle-Offline {
     param( [System.Windows.Forms.Form]$mainForm )
-
-    $global:AppState.VMware.OfflineMode = $true
     $script:LoginResult = $true
     $mainForm.Close()
 }
