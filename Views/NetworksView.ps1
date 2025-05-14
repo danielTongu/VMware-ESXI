@@ -160,12 +160,14 @@ function New-NetworkLayout {
         $portGroupLayout.Dock = 'Fill'
         $portGroupLayout.ColumnCount = 2
         $portGroupLayout.RowCount = 4
-        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         $portGroupLayout.Padding = [System.Windows.Forms.Padding]::new(10)
         $tabPortGroups.Controls.Add($portGroupLayout)
 
-        $lblName = [System.Windows.Forms.Label]::new('Port Group Name:')   
+        $lblName = [System.Windows.Forms.Label]::new()
+        $lblName.Text = 'Port Group Name:'
+        $lblName.Autosize = $true #dont wrap
         $lblName.Font = [System.Drawing.Font]::new('Segoe UI',11)
         $lblName.Dock = 'Fill'   
         $lblName.TextAlign = 'MiddleRight'   
@@ -179,7 +181,8 @@ function New-NetworkLayout {
         $portGroupLayout.Controls.Add($txtName,1,0)
         $refs.Tabs.PortGroups.NameText = $txtName
 
-        $lblSwitch = [System.Windows.Forms.Label]::new('vSwitch:')   
+        $lblSwitch = [System.Windows.Forms.Label]::new()
+        $lblSwitch.Text = 'vSwitch:'
         $lblSwitch.Font = [System.Drawing.Font]::new('Segoe UI',11)
         $lblSwitch.Dock = 'Fill'   
         $lblSwitch.TextAlign = 'MiddleRight'  
@@ -194,7 +197,8 @@ function New-NetworkLayout {
         $portGroupLayout.Controls.Add($cmbSwitch,1,1)
         $refs.Tabs.PortGroups.SwitchCombo = $cmbSwitch
 
-        $lblVLAN = [System.Windows.Forms.Label]::new('VLAN ID:')  
+        $lblVLAN = [System.Windows.Forms.Label]::new()
+        $lblVLAN.Text = 'VLAN ID:'
         $lblVLAN.Font = [System.Drawing.Font]::new('Segoe UI',11)
         $lblVLAN.Dock = 'Fill'   
         $lblVLAN.TextAlign = 'MiddleRight'  
@@ -209,10 +213,8 @@ function New-NetworkLayout {
         $refs.Tabs.PortGroups.VLANText = $txtVLAN
 
         $portGroupButtons = [System.Windows.Forms.FlowLayoutPanel]::new()   
-        $portGroupButtons.Dock = 'Fill'   
-        $portGroupButtons.Padding = [System.Windows.Forms.Padding]::new(5)
-        $portGroupButtons.BackColor = $global:Theme.LightGray  
-        $portGroupLayout.Controls.Add($portGroupButtons,0,3)
+        $portGroupButtons.Dock = 'Fill'
+        $portGroupLayout.Controls.Add($portGroupButtons,1,3)
         $portGroupLayout.SetColumnSpan($portGroupButtons,2)
 
         $btnAdd = [System.Windows.Forms.Button]::new()  
@@ -245,12 +247,13 @@ function New-NetworkLayout {
         $bulkLayout.Dock = 'Fill'   
         $bulkLayout.ColumnCount = 2   
         $bulkLayout.RowCount = 3
-        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         $bulkLayout.Padding = [System.Windows.Forms.Padding]::new(10)   
         $tabBulkNetworks.Controls.Add($bulkLayout)
 
-        $lblCourse = [System.Windows.Forms.Label]::new('Course Prefix:')  
+        $lblCourse = [System.Windows.Forms.Label]::new()
+        $lblCourse.Text = 'Course Prefix:'
         $lblCourse.Font = [System.Drawing.Font]::new('Segoe UI',11)
         $lblCourse.Dock = 'Fill'   
         $lblCourse.TextAlign = 'MiddleRight'  
@@ -264,15 +267,17 @@ function New-NetworkLayout {
         $bulkLayout.Controls.Add($txtCourse,1,0)
         $refs.Tabs.BulkNetworks.CoursePrefixText = $txtCourse
 
-        $lblRange = [System.Windows.Forms.Label]::new('Student Range:')  
+        $lblRange = [System.Windows.Forms.Label]::new()
+        $lblRange.Text = 'Student Range:'
+        $lblRange.Autosize = $true #dont wrap
         $lblRange.Font = [System.Drawing.Font]::new('Segoe UI',11)
         $lblRange.Dock = 'Fill'  
-        $lblRange.TextAlign = 'MiddleRight'  
+        $lblRange.TextAlign = 'TopRight'  
         $bulkLayout.Controls.Add($lblRange,0,1)
 
         $rangePanel = [System.Windows.Forms.FlowLayoutPanel]::new()   
         $rangePanel.Dock = 'Fill'  
-        $rangePanel.WrapContents = $false  
+        $rangePanel.WrapContents = $false
         $bulkLayout.Controls.Add($rangePanel,1,1)
 
         $txtStart = [System.Windows.Forms.TextBox]::new()  
@@ -284,7 +289,8 @@ function New-NetworkLayout {
         $rangePanel.Controls.Add($txtStart)
         $refs.Tabs.BulkNetworks.RangeStartText = $txtStart
 
-        $lblTo = [System.Windows.Forms.Label]::new(' to ')  
+        $lblTo = [System.Windows.Forms.Label]::new()
+        $lblTo.Text = ' to '
         $lblTo.Font = [System.Drawing.Font]::new('Segoe UI',11)  
         $lblTo.AutoSize = $true  
         $lblTo.Margin = [System.Windows.Forms.Padding]::new(5,5,0,0)
@@ -300,10 +306,8 @@ function New-NetworkLayout {
         $refs.Tabs.BulkNetworks.RangeEndText = $txtEnd
 
         $bulkButtons = [System.Windows.Forms.FlowLayoutPanel]::new()  
-        $bulkButtons.Dock = 'Fill'  
-        $bulkButtons.Padding = [System.Windows.Forms.Padding]::new(5)  
-        $bulkButtons.BackColor = $global:Theme.LightGray  
-        $bulkLayout.Controls.Add($bulkButtons,0,2)  
+        $bulkButtons.Dock = 'Fill'
+        $bulkLayout.Controls.Add($bulkButtons,1,2)  
         $bulkLayout.SetColumnSpan($bulkButtons,2)
 
         $btnBulkAdd = [System.Windows.Forms.Button]::new()  
