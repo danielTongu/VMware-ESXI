@@ -17,6 +17,12 @@ function Show-LoginView {
     [CmdletBinding()]
     param()
 
+    # if the user is logged in, it skips the login form
+    # and return true which then redirects to dashboard
+    if ($global:IsLoggedIn) { 
+        return $true 
+    }
+
     $script:LoginResult = $false
     $credPath = "$env:APPDATA\VMwareManagement\credentials.xml"
 
