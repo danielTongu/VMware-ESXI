@@ -12,6 +12,11 @@ Add-Type -AssemblyName 'System.Drawing'
     .PARAMETER ContentPanel
     The Panel control where this view is rendered.
 #>
+
+Add-Type -AssemblyName 'System.Windows.Forms'
+Add-Type -AssemblyName 'System.Drawing'
+
+
 function Show-VMsView {
     [CmdletBinding()]
     param(
