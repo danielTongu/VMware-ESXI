@@ -5,7 +5,7 @@
     Initializes the application environment and starts the user interface.
 .NOTES
     Version: 1.0
-    Author: 
+    Author: Daniel Tongu
     Date: $(Get-Date -Format 'yyyy-MM-dd')
 #>
 
@@ -126,7 +126,7 @@ try {
     )
 } finally {
     # Cleanup resources if needed
-    if ($global:AppState.VMware.Connection -ne $null) {
+    if ($null -ne $global:AppState.VMware.Connection) {
         try {
             Disconnect-VIServer -Server $global:AppState.VMware.Connection -Confirm:$false
         } catch {

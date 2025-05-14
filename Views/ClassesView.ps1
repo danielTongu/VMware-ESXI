@@ -95,27 +95,34 @@ function New-ClassManagerLayout {
         $refs = @{ TabControl = $tabControl; Tabs = @{} }
 
         # Dashboard Tab
-        $tabDash = [System.Windows.Forms.TabPage]::new('Dashboard');
-        $tabDash.BackColor = $global:Theme.White
+        $tabOverview = [System.Windows.Forms.TabPage]::new('Overview');
+        $tabOverview.BackColor = $global:Theme.White
 
-        $tabControl.TabPages.Add($tabDash);
+        $tabControl.TabPages.Add($tabOverview);
         $refs.Tabs.Dashboard = @{}
 
         # Tree view for classes
-        $dashLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
-        $dashLayout.Dock = 'Fill';
-        $dashLayout.RowCount = 2
-        $dashLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $dashLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        $overviewLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $overviewLayout.Dock = 'Fill';
+        $overviewLayout.RowCount = 2
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
         
-        $tabDash.Controls.Add($dashLayout)
+        $tabOverview.Controls.Add($overviewLayout)
+
+        $treePanel = [System.Windows.Forms.Panel]::new()
+        $treePanel.Dock = 'Fill'
+        $treePanel.AutoScroll = $true
+        $treePanel.Padding = [System.Windows.Forms.Padding]::new(10)
+        $treePanel.BackColor = $global:Theme.White
+
+        $overviewLayout.Controls.Add($treePanel,0,0);
         
         $tree = [System.Windows.Forms.TreeView]::new(); 
         $tree.Dock = 'Fill'; 
         $tree.BackColor = $global:Theme.White; 
         $tree.ForeColor = $global:Theme.PrimaryDark
-
-        $dashLayout.Controls.Add($tree,0,0); 
+        $treePanel.Controls.Add($tree); 
         $refs.Tabs.Dashboard.ClassTree = $tree
 
         $dashButtons = [System.Windows.Forms.FlowLayoutPanel]::new(); 
@@ -123,7 +130,7 @@ function New-ClassManagerLayout {
         $dashButtons.BackColor = $global:Theme.White; 
         $dashButtons.Padding = [System.Windows.Forms.Padding]::new(5)
 
-        $dashLayout.Controls.Add($dashButtons,0,1)
+        $overviewLayout.Controls.Add($dashButtons,0,1)
 
         $btnRefresh = [System.Windows.Forms.Button]::new(); 
         $btnRefresh.Text = 'REFRESH'; 
@@ -155,8 +162,8 @@ function New-ClassManagerLayout {
         $basicContent.Dock = 'Fill'; 
         $basicContent.ColumnCount = 2; 
         $basicContent.RowCount = 2
-        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         
         $basicLayout.Controls.Add($basicContent,0,1)
 
@@ -178,14 +185,15 @@ function New-ClassManagerLayout {
 
         # Students list
         $lblStud = [System.Windows.Forms.Label]::new(); 
-        $lblStud.Text = 'Students:'; 
+        $lblStud.Text = 'Students (ID per line):';
+        $lblStud.Autosize = $true #dont wrap
         $lblStud.Font = [System.Drawing.Font]::new('Segoe UI',10)
         $lblStud.Dock = 'Fill'; 
-        $lblStud.TextAlign = 'MiddleRight'; 
+        $lblStud.TextAlign = 'TopRight'; 
 
         $basicContent.Controls.Add($lblStud,0,1)
 
-        $txtStud = [System.Windows.Forms.TextBox]::new(); 
+        $txtStud = [System.Windows.Forms.TextBox]::new()
         $txtStud.Multiline = $true; 
         $txtStud.ScrollBars = 'Vertical'; 
         $txtStud.Dock = 'Fill'; 
@@ -233,8 +241,8 @@ function New-ClassManagerLayout {
         $advContent.Dock = 'Fill'; 
         $advContent.ColumnCount = 2; 
         $advContent.RowCount = 4
-        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,30))
-        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,70))
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
         
         $advLayout.Controls.Add($advContent,0,1)
 
@@ -264,7 +272,7 @@ function New-ClassManagerLayout {
         $advContent.Controls.Add($lblTemp,0,1)
 
         $cmbTemp = [System.Windows.Forms.ComboBox]::new(); 
-        $cmbTemp.Dock = 'Fill'; 
+        $cmbTemp.Dock = 'Fill'
         $cmbTemp.BackColor = $global:Theme.White;
 
         $advContent.Controls.Add($cmbTemp,1,1)
@@ -291,7 +299,7 @@ function New-ClassManagerLayout {
         $lblNet.Text = 'Networks:'; 
         $lblNet.Font = [System.Drawing.Font]::new('Segoe UI',10)
         $lblNet.Dock = 'Fill'; 
-        $lblNet.TextAlign = 'MiddleRight';
+        $lblNet.TextAlign = 'TopRight';
 
         $advContent.Controls.Add($lblNet,0,3)
 

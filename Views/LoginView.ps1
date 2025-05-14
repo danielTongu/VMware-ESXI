@@ -249,7 +249,6 @@ function Handle-Login {
     
     $mainForm.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     $lblStatus.Text = 'Authenticating...'
-    $lblStatus.ForeColor = $global:AppConfig.Theme.TextSecondary
 
     $mainForm.Refresh()
 
@@ -278,7 +277,7 @@ function Handle-Login {
             }
             $securePwd | Export-Clixml -Path $global:Paths.Credentials -Force
         } elseif (Test-Path $global:Paths.Credentials) {
-            Remove-Item $global:AppConfig.Paths.Credentials -ErrorAction SilentlyContinue
+            Remove-Item $global:Paths.Credentials -ErrorAction SilentlyContinue
         }
 
         $script:LoginResult = $true
@@ -309,8 +308,6 @@ function Handle-Login {
 #>
 function Handle-Offline {
     param( [System.Windows.Forms.Form]$mainForm )
-
-    $global:AppState.VMware.OfflineMode = $true
     $script:LoginResult = $true
     $mainForm.Close()
 }

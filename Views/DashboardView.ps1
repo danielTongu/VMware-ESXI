@@ -221,8 +221,8 @@ function New-DashboardStats {
     param([ref]$Refs)
 
     $p = [System.Windows.Forms.FlowLayoutPanel]::new()
-    $p.Dock = 'Top'; 
-    $p.AutoSize = $true; 
+    $p.Dock = 'Fill'; 
+    $p.AutoScroll = $true
     $p.Padding = 10; 
     $p.WrapContents = $true; 
     $p.AutoScroll = $true
@@ -241,7 +241,8 @@ function New-DashboardStats {
     foreach ($c in $cards) {
         $card = [System.Windows.Forms.Panel]::new()
         $card.Size = [System.Drawing.Size]::new(150,100); 
-        $card.Padding = 5; $card.Margin = 5
+        $card.Padding = 5; 
+        $card.Margin = 5
         $card.BackColor = $global:Theme.White; 
         $card.BorderStyle = 'FixedSingle'
 
@@ -297,7 +298,8 @@ function New-DashboardTable {
     )
 
     $container = [System.Windows.Forms.Panel]::new()
-    $container.Dock = 'Fill'; 
+    $container.Dock = 'Fill'
+    $container.AutoScroll = $true
     $container.Padding = [System.Windows.Forms.Padding]::new(10)
     $container.BackColor = $global:Theme.White
 

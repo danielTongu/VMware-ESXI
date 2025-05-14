@@ -149,6 +149,13 @@ function New-OrphanCleanerLayout {
         $filterPanel.Controls.Add($btnSearch)
 
         # Data grid
+        $gridScroller = [System.Windows.Forms.Panel]::new()
+        $gridScroller.Dock = 'Fill'
+        $gridScroller.AutoScroll = $true
+        $gridScroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $gridScroller.BackColor = $global:Theme.White
+        $root.Controls.Add($gridScroller, 0, 2)
+
         $grid = [System.Windows.Forms.DataGridView]::new()
         $grid.Name = 'gvOrphans'; 
         $grid.Dock = 'Fill'
@@ -165,7 +172,7 @@ function New-OrphanCleanerLayout {
         $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
         $grid.ColumnHeadersDefaultCellStyle.BackColor = $global:Theme.LightGray
 
-        $root.Controls.Add($grid, 0, 2)
+        $gridScroller.Controls.Add($grid)
 
         # Controls footer
         $controlsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
