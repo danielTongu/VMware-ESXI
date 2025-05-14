@@ -1,28 +1,16 @@
+# Required assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
 
-# ────────────────────────────────────────────────────────────────────────────
-#                       views/ClassesView.ps1
-# ────────────────────────────────────────────────────────────────────────────
-
-
-
 <#
     .SYNOPSIS
-        Class Manager View for Course Manager
-
+        Class Manager View for Course Manager.
     .DESCRIPTION
-        This script creates a UI for managing classes in VMware Course Manager.
-        It includes tabs for Dashboard, Basic Setup, and Advanced settings.
-
+        Initializes the Class Manager UI with tabs for Dashboard, Basic Setup, and Advanced settings.
     .PARAMETER ContentPanel
-        The panel where the class manager UI will be displayed.
-
-    .EXAMPLE
-        Show-ClassesView -ContentPanel $mainPanel
-        Displays the class manager UI in the specified content panel.
+        The Windows.Forms.Panel where this view is rendered.
 #>
 function Show-ClassesView {
     [CmdletBinding()]
@@ -30,41 +18,31 @@ function Show-ClassesView {
         [Parameter(Mandatory)]
         [System.Windows.Forms.Panel]$ContentPanel
     )
-
     try {
-        # Build UI (empty)
         $uiRefs = New-ClassManagerLayout -ContentPanel $ContentPanel
-
-        # Populate with data if connected
         $data = Get-ClassManagerData
-        if ($data) { Update-ClassManagerWithData -UiRefs $uiRefs -Data $data 
+        if ($data) {
+            Update-ClassManagerWithData -UiRefs $uiRefs -Data $data
         } else {
-            $uiRefs.StatusLabel.Text = "No connection to VMware server"
-            $uiRefs.StatusLabel.ForeColor = $global:theme.Error
+            $uiRefs.StatusLabel.Text = 'No connection to VMware server'
+            $uiRefs.StatusLabel.ForeColor = $global:Theme.Error
         }
-    } catch { 
-        Write-Verbose "Class manager initialization failed: $_" 
+    } catch {
+        Write-Verbose "Class manager initialization failed: $_"
     }
 }
-
-
 
 
 
 <#
     .SYNOPSIS
         Creates the layout for the Class Manager UI.
-
     .DESCRIPTION
-        This function sets up the layout for the Class Manager UI, including tabs,
-        buttons, and labels. It returns a hashtable of UI references for further use.
-
+        Builds header, TabControl, and status panel using CWU theme colors.
     .PARAMETER ContentPanel
-        The panel where the class manager UI will be displayed.
-
-    .EXAMPLE
-        $uiRefs = New-ClassManagerLayout -ContentPanel $mainPanel
-        Creates the class manager layout and stores references in $uiRefs.
+        The Windows.Forms.Panel to populate.
+    .OUTPUTS
+        Hashtable of UI element references.
 #>
 function New-ClassManagerLayout {
     [CmdletBinding()]
@@ -76,440 +54,396 @@ function New-ClassManagerLayout {
     try {
         $ContentPanel.SuspendLayout()
         $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $global:theme.Background
+        $ContentPanel.BackColor = $global:Theme.LightGray
 
-        # ── ROOT LAYOUT (3 rows) ──────────────────────────────────────────────
-        $root = New-Object System.Windows.Forms.TableLayoutPanel
-        $root.Dock = 'Fill'
-        $root.ColumnCount = 1
+        # Root layout: Header, Tabs, Status
+        $root = [System.Windows.Forms.TableLayoutPanel]::new()
+        $root.Dock = 'Fill'; 
+        $root.ColumnCount = 1; 
         $root.RowCount = 3
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))   # Header
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100))) # Tabs
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))   # Status
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Header
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100)) # Tabs
+        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))   # Status
+        
         $ContentPanel.Controls.Add($root)
 
+        # Header panel
+        $header = [System.Windows.Forms.Panel]::new()
+        $header.Dock = 'Fill'; 
+        $header.Height = 80; 
+        $header.BackColor = $global:Theme.Primary
 
+        $root.Controls.Add($header,0,0)
+
+        $title = [System.Windows.Forms.Label]::new()
+        $title.Text = 'COURSE MANAGER'; 
+        $title.Font = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+        $title.ForeColor = $global:Theme.White; 
+        $title.AutoSize = $true; 
+        $title.Location = [System.Drawing.Point]::new(20,20)
         
-        #===== Row [1️] HEADER ==================================================
-        $header = New-Object System.Windows.Forms.Panel
-        $header.Dock = 'Fill'
-        $header.Height = 80
-        $header.BackColor = $global:theme.Primary
-        $root.Controls.Add($header, 0, 0)
+        $header.Controls.Add($title)
 
-        $titleLabel = New-Object System.Windows.Forms.Label
-        $titleLabel.Text = 'COURSE MANAGER'
-        $titleLabel.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
-        $titleLabel.ForeColor = [System.Drawing.Color]::White
-        $titleLabel.Location = New-Object System.Drawing.Point(20, 20)
-        $titleLabel.AutoSize = $true
-        $header.Controls.Add($titleLabel)
+        # TabControl for Dashboard, Basic, Advanced
+        $tabControl = [System.Windows.Forms.TabControl]::new()
+        $tabControl.Dock = 'Fill'; 
+        $tabControl.ItemSize = [System.Drawing.Size]::new(150,40)
+        $tabControl.SizeMode = 'Fixed'; 
+        $tabControl.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        
+        $root.Controls.Add($tabControl,0,1)
+        $refs = @{ TabControl = $tabControl; Tabs = @{} }
 
+        # Dashboard Tab
+        $tabOverview = [System.Windows.Forms.TabPage]::new('Overview');
+        $tabOverview.BackColor = $global:Theme.White
 
-
-        #===== Row [2] TABCONTROL =============================================
-
-        $tabControl = New-Object System.Windows.Forms.TabControl
-        $tabControl.Dock = 'Fill'
-        $tabControl.SizeMode = 'Fixed'
-        $tabControl.ItemSize = New-Object System.Drawing.Size(150, 40)
-        $tabControl.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $root.Controls.Add($tabControl, 0, 1)
-
-        # Hashtable for UI references
-        $refs = @{
-            TabControl = $tabControl
-            Tabs = @{}
-        }
-
-
-        # ----------------------------------------------------------------
-        # --- Dashboard Tab ----------------------------------------------
-        # ----------------------------------------------------------------
-        $tabDashboard = New-Object System.Windows.Forms.TabPage
-        $tabDashboard.Text = "Dashboard"
-        $tabDashboard.BackColor = $global:theme.Background
-        $tabControl.TabPages.Add($tabDashboard)
+        $tabControl.TabPages.Add($tabOverview);
         $refs.Tabs.Dashboard = @{}
 
-        # Dashboard layout
-        $dashboardLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $dashboardLayout.Dock = 'Fill'
-        $dashboardLayout.RowCount = 2
-        $dashboardLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $dashboardLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $tabDashboard.Controls.Add($dashboardLayout)
+        # Tree view for classes
+        $overviewLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $overviewLayout.Dock = 'Fill';
+        $overviewLayout.RowCount = 2
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        
+        $tabOverview.Controls.Add($overviewLayout)
 
-        # Class tree view
-        $treeClasses = New-Object System.Windows.Forms.TreeView
-        $treeClasses.Dock = 'Fill'
-        $treeClasses.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $treeClasses.BackColor = $global:theme.CardBackground
-        $treeClasses.ForeColor = $global:theme.TextPrimary
-        $dashboardLayout.Controls.Add($treeClasses, 0, 0)
-        $refs.Tabs.Dashboard.ClassTree = $treeClasses
+        $treePanel = [System.Windows.Forms.Panel]::new()
+        $treePanel.Dock = 'Fill'
+        $treePanel.AutoScroll = $true
+        $treePanel.Padding = [System.Windows.Forms.Padding]::new(10)
+        $treePanel.BackColor = $global:Theme.White
 
-        # Dashboard buttons panel
-        $dashboardButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $dashboardButtons.Dock = 'Fill'
-        $dashboardButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $dashboardButtons.BackColor = $global:theme.Background
-        $dashboardLayout.Controls.Add($dashboardButtons, 0, 1)
+        $overviewLayout.Controls.Add($treePanel,0,0);
+        
+        $tree = [System.Windows.Forms.TreeView]::new(); 
+        $tree.Dock = 'Fill'; 
+        $tree.BackColor = $global:Theme.White; 
+        $tree.ForeColor = $global:Theme.PrimaryDark
+        $treePanel.Controls.Add($tree); 
+        $refs.Tabs.Dashboard.ClassTree = $tree
 
-        # Refresh button
-        $btnRefresh = New-Object System.Windows.Forms.Button
-        $btnRefresh.Name = 'btnRefresh'
-        $btnRefresh.Text = 'REFRESH'
-        $btnRefresh.Size = New-Object System.Drawing.Size(120, 40)
-        $btnRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnRefresh.BackColor = $global:theme.Secondary
-        $btnRefresh.ForeColor = [System.Drawing.Color]::White
-        $dashboardButtons.Controls.Add($btnRefresh)
+        $dashButtons = [System.Windows.Forms.FlowLayoutPanel]::new(); 
+        $dashButtons.Dock='Fill'; 
+        $dashButtons.BackColor = $global:Theme.White; 
+        $dashButtons.Padding = [System.Windows.Forms.Padding]::new(5)
+
+        $overviewLayout.Controls.Add($dashButtons,0,1)
+
+        $btnRefresh = [System.Windows.Forms.Button]::new(); 
+        $btnRefresh.Text = 'REFRESH'; 
+        $btnRefresh.Size = [System.Drawing.Size]::new(120,40)
+        $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold); 
+        $btnRefresh.BackColor = $global:Theme.Primary; 
+        $btnRefresh.ForeColor = $global:Theme.White
+        $dashButtons.Controls.Add($btnRefresh); 
         $refs.Tabs.Dashboard.RefreshButton = $btnRefresh
 
+        # Basic Setup Tab
+        $tabBasic = [System.Windows.Forms.TabPage]::new('Basic Setup'); 
+        $tabBasic.BackColor = $global:Theme.White
+        $tabControl.TabPages.Add($tabBasic); 
 
-        # -----------------------------------------------------------------
-        # ---- Basic Tab --------------------------------------------------
-        # -----------------------------------------------------------------
-        $tabBasic = New-Object System.Windows.Forms.TabPage
-        $tabBasic.Text = "Basic Setup"
-        $tabBasic.BackColor = $global:theme.Background
-        $tabControl.TabPages.Add($tabBasic)
         $refs.Tabs.Basic = @{}
 
-        # Basic layout
-        $basicLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $basicLayout.Dock = 'Fill'
+        $basicLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $basicLayout.Dock = 'Fill'; 
         $basicLayout.RowCount = 3
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $basicLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        $basicLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $basicLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        
         $tabBasic.Controls.Add($basicLayout)
 
-        # Basic content
-        $basicContent = New-Object System.Windows.Forms.TableLayoutPanel
-        $basicContent.Dock = 'Fill'
-        $basicContent.ColumnCount = 2
+        # Inputs panel
+        $basicContent = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $basicContent.Dock = 'Fill'; 
+        $basicContent.ColumnCount = 2; 
         $basicContent.RowCount = 2
-        $basicContent.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,30)))
-        $basicContent.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,70)))
-        $basicContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $basicContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $basicLayout.Controls.Add($basicContent, 0, 1)
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $basicContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        
+        $basicLayout.Controls.Add($basicContent,0,1)
 
-        # New class name
-        $lblNewClass = New-Object System.Windows.Forms.Label
-        $lblNewClass.Text = 'Class Name:'
-        $lblNewClass.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblNewClass.Dock = 'Fill'
-        $lblNewClass.TextAlign = 'MiddleRight'
-        $basicContent.Controls.Add($lblNewClass, 0, 0)
+        # Class name
+        $lblNew = [System.Windows.Forms.Label]::new(); 
+        $lblNew.Text = 'Class Name:'; 
+        $lblNew.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblNew.Dock = 'Fill'; 
+        $lblNew.TextAlign = 'MiddleRight';
 
-        $txtNewClass = New-Object System.Windows.Forms.TextBox
-        $txtNewClass.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $txtNewClass.Dock = 'Fill'
-        $txtNewClass.BackColor = $global:theme.CardBackground
-        $basicContent.Controls.Add($txtNewClass, 1, 0)
-        $refs.Tabs.Basic.NewClassTextBox = $txtNewClass
+        $basicContent.Controls.Add($lblNew,0,0)
+
+        $txtNew = [System.Windows.Forms.TextBox]::new(); 
+        $txtNew.Dock = 'Fill'; 
+        $txtNew.BackColor = $global:Theme.White; 
+
+        $basicContent.Controls.Add($txtNew,1,0); 
+        $refs.Tabs.Basic.NewClassTextBox = $txtNew
 
         # Students list
-        $lblStudents = New-Object System.Windows.Forms.Label
-        $lblStudents.Text = 'Students:'
-        $lblStudents.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblStudents.Dock = 'Fill'
-        $lblStudents.TextAlign = 'MiddleRight'
-        $basicContent.Controls.Add($lblStudents, 0, 1)
+        $lblStud = [System.Windows.Forms.Label]::new(); 
+        $lblStud.Text = 'Students (ID per line):';
+        $lblStud.Autosize = $true #dont wrap
+        $lblStud.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblStud.Dock = 'Fill'; 
+        $lblStud.TextAlign = 'TopRight'; 
 
-        $txtStudents = New-Object System.Windows.Forms.TextBox
-        $txtStudents.Multiline = $true
-        $txtStudents.ScrollBars = 'Vertical'
-        $txtStudents.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $txtStudents.Dock = 'Fill'
-        $txtStudents.BackColor = $global:theme.CardBackground
-        $basicContent.Controls.Add($txtStudents, 1, 1)
-        $refs.Tabs.Basic.StudentsTextBox = $txtStudents
+        $basicContent.Controls.Add($lblStud,0,1)
 
-        # Basic buttons panel
-        $basicButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $basicButtons.Dock = 'Fill'
-        $basicButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $basicButtons.BackColor = $global:theme.Background
-        $basicLayout.Controls.Add($basicButtons, 0, 2)
+        $txtStud = [System.Windows.Forms.TextBox]::new()
+        $txtStud.Multiline = $true; 
+        $txtStud.ScrollBars = 'Vertical'; 
+        $txtStud.Dock = 'Fill'; 
+        $txtStud.BackColor = $global:Theme.White
+        
+        $basicContent.Controls.Add($txtStud,1,1); 
+        $refs.Tabs.Basic.StudentsTextBox = $txtStud
 
-        # Create Folders button
-        $btnCreateFolders = New-Object System.Windows.Forms.Button
-        $btnCreateFolders.Name = 'btnCreateFolders'
-        $btnCreateFolders.Text = 'CREATE FOLDERS'
-        $btnCreateFolders.Size = New-Object System.Drawing.Size(150, 40)
-        $btnCreateFolders.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnCreateFolders.BackColor = $global:theme.Primary
-        $btnCreateFolders.ForeColor = [System.Drawing.Color]::White
-        $basicButtons.Controls.Add($btnCreateFolders)
-        $refs.Tabs.Basic.CreateFoldersButton = $btnCreateFolders
+        # Basic buttons
+        $basicButtons = [System.Windows.Forms.FlowLayoutPanel]::new(); 
+        $basicButtons.Dock = 'Fill'; 
+        $basicButtons.BackColor = $global:Theme.White; 
+        $basicButtons.Padding = [System.Windows.Forms.Padding]::new(5)
+        
+        $basicLayout.Controls.Add($basicButtons,0,2)
+        
+        $btnCreate = [System.Windows.Forms.Button]::new(); 
+        $btnCreate.Text = 'CREATE FOLDERS'; 
+        $btnCreate.Size = [System.Drawing.Size]::new(150,40)
+        $btnCreate.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold); 
+        $btnCreate.BackColor = $global:Theme.Primary; 
+        $btnCreate.ForeColor = $global:Theme.White
+        
+        $basicButtons.Controls.Add($btnCreate); 
+        $refs.Tabs.Basic.CreateFoldersButton = $btnCreate
 
+        # Advanced Tab
+        $tabAdv = [System.Windows.Forms.TabPage]::new('Advanced'); 
+        $tabAdv.BackColor = $global:Theme.White
 
-        # -------------------------------------------------------------------
-        # ---- Advanced Tab -------------------------------------------------
-        # -------------------------------------------------------------------
-        $tabAdvanced = New-Object System.Windows.Forms.TabPage
-        $tabAdvanced.Text = "Advanced"
-        $tabAdvanced.BackColor = $global:theme.Background
-        $tabControl.TabPages.Add($tabAdvanced)
+        $tabControl.TabPages.Add($tabAdv); 
         $refs.Tabs.Advanced = @{}
 
-        # Advanced layout
-        $advancedLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $advancedLayout.Dock = 'Fill'
-        $advancedLayout.RowCount = 3
-        $advancedLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $advancedLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $advancedLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $tabAdvanced.Controls.Add($advancedLayout)
+        $advLayout = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $advLayout.Dock = 'Fill'; 
+        $advLayout.RowCount = 3
+        $advLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        $advLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        $advLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+        
+        $tabAdv.Controls.Add($advLayout)
 
         # Advanced content
-        $advancedContent = New-Object System.Windows.Forms.TableLayoutPanel
-        $advancedContent.Dock = 'Fill'
-        $advancedContent.ColumnCount = 2
-        $advancedContent.RowCount = 4
-        $advancedContent.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,30)))
-        $advancedContent.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,70)))
-        $advancedContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $advancedContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $advancedContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        $advancedContent.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $advancedLayout.Controls.Add($advancedContent, 0, 1)
+        $advContent = [System.Windows.Forms.TableLayoutPanel]::new(); 
+        $advContent.Dock = 'Fill'; 
+        $advContent.ColumnCount = 2; 
+        $advContent.RowCount = 4
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
+        $advContent.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+        
+        $advLayout.Controls.Add($advContent,0,1)
 
-        # Class selector
-        $lblClassSelect = New-Object System.Windows.Forms.Label
-        $lblClassSelect.Text = 'Class:'
-        $lblClassSelect.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblClassSelect.Dock = 'Fill'
-        $lblClassSelect.TextAlign = 'MiddleRight'
-        $advancedContent.Controls.Add($lblClassSelect, 0, 0)
+        # Class combo
+        $lblClass = [System.Windows.Forms.Label]::new(); 
+        $lblClass.Text = 'Class:'; 
+        $lblClass.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblClass.Dock = 'Fill'; 
+        $lblClass.TextAlign = 'MiddleRight';
 
-        $cmbClasses = New-Object System.Windows.Forms.ComboBox
-        $cmbClasses.DropDownStyle = 'DropDownList'
-        $cmbClasses.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $cmbClasses.Dock = 'Fill'
-        $advancedContent.Controls.Add($cmbClasses, 1, 0)
-        $refs.Tabs.Advanced.ClassComboBox = $cmbClasses
+        $advContent.Controls.Add($lblClass,0,0)
 
-        # Template selector
-        $lblTemplate = New-Object System.Windows.Forms.Label
-        $lblTemplate.Text = 'Template:'
-        $lblTemplate.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblTemplate.Dock = 'Fill'
-        $lblTemplate.TextAlign = 'MiddleRight'
-        $advancedContent.Controls.Add($lblTemplate, 0, 1)
+        $cmbClass = [System.Windows.Forms.ComboBox]::new(); 
+        $cmbClass.Dock = 'Fill'; 
+        $cmbClass.BackColor = $global:Theme.White; 
 
-        $cmbTemplate = New-Object System.Windows.Forms.ComboBox
-        $cmbTemplate.DropDownStyle = 'DropDownList'
-        $cmbTemplate.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $cmbTemplate.Dock = 'Fill'
-        $advancedContent.Controls.Add($cmbTemplate, 1, 1)
-        $refs.Tabs.Advanced.TemplateComboBox = $cmbTemplate
+        $advContent.Controls.Add($cmbClass,1,0)
+        $refs.Tabs.Advanced.ClassComboBox = $cmbClass
 
-        # Datastore selector
-        $lblDatastore = New-Object System.Windows.Forms.Label
-        $lblDatastore.Text = 'Datastore:'
-        $lblDatastore.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblDatastore.Dock = 'Fill'
-        $lblDatastore.TextAlign = 'MiddleRight'
-        $advancedContent.Controls.Add($lblDatastore, 0, 2)
+        # Template combo
+        $lblTemp = [System.Windows.Forms.Label]::new(); 
+        $lblTemp.Text = 'Template:'; 
+        $lblTemp.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblTemp.Dock = 'Fill'; 
+        $lblTemp.TextAlign = 'MiddleRight'; 
 
-        $cmbDatastore = New-Object System.Windows.Forms.ComboBox
-        $cmbDatastore.DropDownStyle = 'DropDownList'
-        $cmbDatastore.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $cmbDatastore.Dock = 'Fill'
-        $advancedContent.Controls.Add($cmbDatastore, 1, 2)
-        $refs.Tabs.Advanced.DatastoreComboBox = $cmbDatastore
+        $advContent.Controls.Add($lblTemp,0,1)
 
-        # Network adapters
-        $lblNetworks = New-Object System.Windows.Forms.Label
-        $lblNetworks.Text = 'Networks:'
-        $lblNetworks.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $lblNetworks.Dock = 'Fill'
-        $lblNetworks.TextAlign = 'MiddleRight'
-        $advancedContent.Controls.Add($lblNetworks, 0, 3)
+        $cmbTemp = [System.Windows.Forms.ComboBox]::new(); 
+        $cmbTemp.Dock = 'Fill'
+        $cmbTemp.BackColor = $global:Theme.White;
 
-        $clbNetworks = New-Object System.Windows.Forms.CheckedListBox
-        $clbNetworks.CheckOnClick = $true
-        $clbNetworks.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-        $clbNetworks.Dock = 'Fill'
-        $clbNetworks.BackColor = $global:theme.CardBackground
-        $advancedContent.Controls.Add($clbNetworks, 1, 3)
-        $refs.Tabs.Advanced.NetworkListBox = $clbNetworks
+        $advContent.Controls.Add($cmbTemp,1,1)
+        $refs.Tabs.Advanced.TemplateComboBox = $cmbTemp
 
-        # Advanced buttons panel
-        $advancedButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $advancedButtons.Dock = 'Fill'
-        $advancedButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $advancedButtons.BackColor = $global:theme.Background
-        $advancedLayout.Controls.Add($advancedButtons, 0, 2)
+        # Datastore combo
+        $lblStore = [System.Windows.Forms.Label]::new(); 
+        $lblStore.Text = 'Datastore:'; 
+        $lblStore.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblStore.Dock = 'Fill'; 
+        $lblStore.TextAlign = 'MiddleRight';
 
-        # Create VMs button
-        $btnCreateVMs = New-Object System.Windows.Forms.Button
-        $btnCreateVMs.Name = 'btnCreateVMs'
-        $btnCreateVMs.Text = 'CREATE VMs'
-        $btnCreateVMs.Size = New-Object System.Drawing.Size(150, 40)
-        $btnCreateVMs.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnCreateVMs.BackColor = $global:theme.Primary
-        $btnCreateVMs.ForeColor = [System.Drawing.Color]::White
-        $advancedButtons.Controls.Add($btnCreateVMs)
+        $advContent.Controls.Add($lblStore,0,2)
+
+        $cmbStore = [System.Windows.Forms.ComboBox]::new(); 
+        $cmbStore.Dock = 'Fill'; 
+        $cmbStore.BackColor = $global:Theme.White;
+
+        $advContent.Controls.Add($cmbStore,1,2)
+        $refs.Tabs.Advanced.DatastoreComboBox = $cmbStore
+
+        # Networks list
+        $lblNet = [System.Windows.Forms.Label]::new(); 
+        $lblNet.Text = 'Networks:'; 
+        $lblNet.Font = [System.Drawing.Font]::new('Segoe UI',10)
+        $lblNet.Dock = 'Fill'; 
+        $lblNet.TextAlign = 'TopRight';
+
+        $advContent.Controls.Add($lblNet,0,3)
+
+        $clbNet = [System.Windows.Forms.CheckedListBox]::new(); 
+        $clbNet.CheckOnClick = $true; 
+        $clbNet.BackColor = $global:Theme.White;
+
+        $advContent.Controls.Add($clbNet,1,3)
+        $refs.Tabs.Advanced.NetworkListBox = $clbNet
+
+        # Advanced buttons
+        $advButtons = [System.Windows.Forms.FlowLayoutPanel]::new(); 
+        $advButtons.Dock = 'Fill'; 
+        $advButtons.BackColor = $global:Theme.White; 
+        $advButtons.Padding = [System.Windows.Forms.Padding]::new(5)
+
+        $advLayout.Controls.Add($advButtons,0,2)
+
+        $btnCreateVMs = [System.Windows.Forms.Button]::new();
+        $btnCreateVMs.Text = 'CREATE VMs';
+        $btnCreateVMs.Size = [System.Drawing.Size]::new(150,40)
+        $btnCreateVMs.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold);
+        $btnCreateVMs.BackColor = $global:Theme.Primary; 
+        $btnCreateVMs.ForeColor = $global:Theme.White
+
+        $advButtons.Controls.Add($btnCreateVMs);
         $refs.Tabs.Advanced.CreateVMsButton = $btnCreateVMs
 
-        # Delete Class button
-        $btnDeleteClass = New-Object System.Windows.Forms.Button
-        $btnDeleteClass.Name = 'btnDeleteClass'
-        $btnDeleteClass.Text = 'DELETE CLASS'
-        $btnDeleteClass.Size = New-Object System.Drawing.Size(150, 40)
-        $btnDeleteClass.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $btnDeleteClass.BackColor = $global:theme.Error
-        $btnDeleteClass.ForeColor = [System.Drawing.Color]::White
-        $advancedButtons.Controls.Add($btnDeleteClass)
-        $refs.Tabs.Advanced.DeleteClassButton = $btnDeleteClass
+        $btnDelete = [System.Windows.Forms.Button]::new();
+        $btnDelete.Text = 'DELETE CLASS';
+        $btnDelete.Size = [System.Drawing.Size]::new(150,40)
+        $btnDelete.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold);
+        $btnDelete.BackColor = $global:Theme.Error; 
+        $btnDelete.ForeColor = $global:Theme.White
 
+        $advButtons.Controls.Add($btnDelete);
+        $refs.Tabs.Advanced.DeleteClassButton = $btnDelete
 
-        
-        #===== Row [3] STATUS SECTION ====================================
+        # Status panel
+        $statusPanel = [System.Windows.Forms.Panel]::new();
+        $statusPanel.Dock = 'Fill'; $statusPanel.Height = 30;
+        $statusPanel.BackColor = $global:Theme.LightGray
 
-        $statusPanel = New-Object System.Windows.Forms.Panel
-        $statusPanel.Dock = 'Fill'
-        $statusPanel.Height = 30
-        $statusPanel.BackColor = $global:theme.Background
-        $root.Controls.Add($statusPanel, 0, 2)
+        $root.Controls.Add($statusPanel,0,2)
 
-        $statusLabel = New-Object System.Windows.Forms.Label
-        $statusLabel.Name = 'StatusLabel'
+        $statusLabel = [System.Windows.Forms.Label]::new();
+        $statusLabel.Name = 'StatusLabel'; 
         $statusLabel.Text = 'DISCONNECTED'
-        $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-        $statusLabel.Dock = 'Fill'
+        $statusLabel.Font = [System.Drawing.Font]::new('Segoe UI',9);
+        $statusLabel.ForeColor = $global:Theme.PrimaryDark;
+        $statusLabel.Dock = 'Fill';
         $statusLabel.TextAlign = 'MiddleLeft'
-        $statusLabel.ForeColor = $global:theme.TextSecondary
-        $statusPanel.Controls.Add($statusLabel)
+
+        $statusPanel.Controls.Add($statusLabel); 
         $refs.StatusLabel = $statusLabel
 
         return $refs
-    }
-    finally {
-        $ContentPanel.ResumeLayout($true)
+    } finally { 
+        $ContentPanel.ResumeLayout($true) 
     }
 }
-
 
 
 
 <#
     .SYNOPSIS
         Fetches class manager data from VMware and CourseManager.
-
     .DESCRIPTION
-        This function retrieves data such as templates, datastores, networks,
-        and classes from the VMware server and CourseManager.
-
-    .EXAMPLE
-        $data = Get-ClassManagerData
-        Retrieves class manager data and stores it in the $data variable.
+        Retrieves templates, datastores, networks, and classes.
+    .OUTPUTS
+        Hashtable with data and LastUpdated timestamp.
 #>
 function Get-ClassManagerData {
     [CmdletBinding()]
     param()
-
     try {
         $conn = [VMServerConnection]::GetInstance().GetConnection()
-        if (-not $conn) { return $null}
-        
-        # Initialize data structure
-        $data = @{
-            Templates = @()
-            Datastores = @()
-            Networks = @()
-            Classes = @()
-            LastUpdated = $null
-        }
+        if(-not $conn){return $null}
 
-        # Fetch data from VMware and CourseManager
-        $data.Templates = try { Get-Template -Server $conn | Select-Object -ExpandProperty Name } catch { @() }
-        $data.Datastores = try { Get-Datastore -Server $conn | Select-Object -ExpandProperty Name } catch { @() }
-        $data.Networks = try { [VMwareNetwork]::ListPortGroups() | Select-Object -ExpandProperty Name } catch { @() }
-        $data.Classes = try { [CourseManager]::ListClasses() } catch { @() }
-        $data.LastUpdated = (Get-Date)
+        $data = @{ Templates = @(); Datastores = @(); Networks = @(); Classes = @(); LastUpdated = Get-Date }
+
+        $data.Templates = (Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+        $data.Datastores = (Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+        $data.Networks = [VMwareNetwork]::ListPortGroups() | Select-Object -ExpandProperty Name
+        $data.Classes = [CourseManager]::ListClasses()
 
         return $data
-    } catch {
-        Write-Verbose "Class manager data collection failed: $_"
-        return $null
+
+    } catch { 
+        Write-Verbose "Class manager data collection failed: $_"; 
+        return $null 
     }
 }
 
 
 
-
 <#
-    .SYNOPSIS
-        Updates the Class Manager UI with new data.
-
-    .DESCRIPTION
-        This function updates the dropdowns and tree view in the Class Manager UI
-        with the latest data from VMware and CourseManager.
-
-    .PARAMETER UiRefs
-        A hashtable containing references to UI elements.
-
-    .PARAMETER Data
-        A hashtable containing the latest data for templates, datastores, networks,
-        and classes.
-
-    .EXAMPLE
-        Update-ClassManagerWithData -UiRefs $uiRefs -Data $data
-        Updates the class manager UI with the provided data.
+.SYNOPSIS
+    Updates the Class Manager UI with new data.
+.PARAMETER UiRefs
+    Hashtable of UI references.
+.PARAMETER Data
+    Hashtable containing the latest data.
 #>
 function Update-ClassManagerWithData {
     [CmdletBinding()]
-    param(
-        [hashtable]$UiRefs,
-        [hashtable]$Data
-    )
+    param([hashtable]$UiRefs,[hashtable]$Data)
 
     try {
-        # Update dropdowns in Advanced tab
-        $UiRefs.Tabs.Advanced.TemplateComboBox.Items.Clear()
+        # Populate Advanced dropdowns
+        $UiRefs.Tabs.Advanced.TemplateComboBox.Items.Clear(); 
         $UiRefs.Tabs.Advanced.TemplateComboBox.Items.AddRange($Data.Templates)
-        
-        $UiRefs.Tabs.Advanced.DatastoreComboBox.Items.Clear()
+
+        $UiRefs.Tabs.Advanced.DatastoreComboBox.Items.Clear();
         $UiRefs.Tabs.Advanced.DatastoreComboBox.Items.AddRange($Data.Datastores)
-        
-        $UiRefs.Tabs.Advanced.NetworkListBox.Items.Clear()
+
+        $UiRefs.Tabs.Advanced.NetworkListBox.Items.Clear(); 
         $UiRefs.Tabs.Advanced.NetworkListBox.Items.AddRange($Data.Networks)
-        
-        $UiRefs.Tabs.Advanced.ClassComboBox.Items.Clear()
+
+        $UiRefs.Tabs.Advanced.ClassComboBox.Items.Clear(); 
         $UiRefs.Tabs.Advanced.ClassComboBox.Items.AddRange($Data.Classes)
 
-        # Update class tree in Dashboard tab
+        # Populate Dashboard tree
         $UiRefs.Tabs.Dashboard.ClassTree.Nodes.Clear()
-        foreach ($class in $Data.Classes) {
-            $classNode = New-Object System.Windows.Forms.TreeNode($class)
-            $students = try { [CourseManager]::GetClassStudents($class) } catch { @() }
-            
-            foreach ($student in $students) {
-                $studentNode = New-Object System.Windows.Forms.TreeNode($student)
-                $vms = try { [CourseManager]::GetStudentVMs($class, $student) } catch { @() }
-                
-                foreach ($vm in $vms) {
-                    $vmNode = New-Object System.Windows.Forms.TreeNode($vm)
-                    $studentNode.Nodes.Add($vmNode)
-                }
-                
-                $classNode.Nodes.Add($studentNode)
+
+        foreach($class in $Data.Classes){
+            $classNode = [System.Windows.Forms.TreeNode]::new($class)
+            $students = [CourseManager]::GetClassStudents($class) -as [string[]]
+
+            foreach($student in $students){
+                $studNode = [System.Windows.Forms.TreeNode]::new($student)
+                $vms = [CourseManager]::GetStudentVMs($class,$student) -as [string[]]
+
+                foreach($vm in $vms){ $studNode.Nodes.Add($vm) }
+
+                $classNode.Nodes.Add($studNode)
             }
-            
+
             $UiRefs.Tabs.Dashboard.ClassTree.Nodes.Add($classNode)
         }
-
         $UiRefs.StatusLabel.Text = "Data loaded at $($Data.LastUpdated.ToString('HH:mm:ss'))"
-    }
-    catch {
-        Write-Verbose "Failed to update class manager view: $_"
-        $UiRefs.StatusLabel.Text = "Error loading data"
+
+    } catch { 
+        Write-Verbose "Failed to update class manager view: $_"; 
+        $UiRefs.StatusLabel.Text = 'Error loading data' 
     }
 }
