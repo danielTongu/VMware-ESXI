@@ -177,46 +177,6 @@ function New-DashboardLayout {
         $tabHosts.Controls.Add($hostsTable)
         $tabs.TabPages.Add($tabHosts)
 
-        # 5. Network Adapters ------------------------------------------------------
-        $tabNics          = New-Object System.Windows.Forms.TabPage 'Network Adapters'
-        $tabNics.BackColor = $script:Theme.White
-        $nicsTable        = New-DashboardTable `
-                                -Columns  @('Host','Name','MAC','Speed (Mbps)','Connected') `
-                                -Name     'NicsTable' `
-                                -Refs     ([ref]$refs)
-        $tabNics.Controls.Add($nicsTable)
-        $tabs.TabPages.Add($tabNics)
-
-        # 6. Templates -------------------------------------------------------------
-        $tabTpl           = New-Object System.Windows.Forms.TabPage 'Templates'
-        $tabTpl.BackColor = $script:Theme.White
-        $tplTable         = New-DashboardTable `
-                                -Columns  @('Template','Guest OS','CPU','Memory GB','Disk GB') `
-                                -Name     'TemplatesTable' `
-                                -Refs     ([ref]$refs)
-        $tabTpl.Controls.Add($tplTable)
-        $tabs.TabPages.Add($tabTpl)
-
-        # 7. Port Groups -----------------------------------------------------------
-        $tabPg            = New-Object System.Windows.Forms.TabPage 'Port Groups'
-        $tabPg.BackColor  = $script:Theme.White
-        $pgTable          = New-DashboardTable `
-                                -Columns  @('Name','VLAN','vSwitch','Active Ports') `
-                                -Name     'PortGroupsTable' `
-                                -Refs     ([ref]$refs)
-        $tabPg.Controls.Add($pgTable)
-        $tabs.TabPages.Add($tabPg)
-
-        # 8. Orphaned files --------------------------------------------------------
-        $tabOrphan        = New-Object System.Windows.Forms.TabPage 'Orphaned Files'
-        $tabOrphan.BackColor = $script:Theme.White
-        $orphTable        = New-DashboardTable `
-                                -Columns  @('File','Size (MB)','Datastore') `
-                                -Name     'OrphansTable' `
-                                -Refs     ([ref]$refs)
-        $tabOrphan.Controls.Add($orphTable)
-        $tabs.TabPages.Add($tabOrphan)
-
         # ── Actions bar -----------------------------------------------------------
         $actionsPanel     = New-DashboardActions -Refs ([ref]$refs) -ParentPanel $ContentPanel
         $root.Controls.Add($actionsPanel, 0, 2)
@@ -557,59 +517,6 @@ function Update-DashboardWithData {
         # Highlight high memory utilisation
         $memPct = if ($h.MemoryTotalGB -gt 0) { [math]::Round(($h.MemoryUsageGB / $h.MemoryTotalGB)*100,1) } else { 0 }
         if ($memPct -ge 90) {
-            $grid.Rows[$rowIdx].DefaultCellStyle.ForeColor = $script:Theme.Error
-        }
-    }
-
-    # ── Network adapters ---------------------------------------------------------
-    $grid = $UiRefs['NicsTable']
-    $grid.Rows.Clear()
-    foreach ($nic in $Data.Adapters) {
-        $rowIdx = $grid.Rows.Add()
-        $grid.Rows[$rowIdx].Cells['col_Host'       ].Value = $nic.VMHost.Name
-        $grid.Rows[$rowIdx].Cells['col_Name'       ].Value = $nic.Name
-        $grid.Rows[$rowIdx].Cells['col_MAC'        ].Value = $nic.Mac
-        $grid.Rows[$rowIdx].Cells['col_SpeedMbps'  ].Value = $nic.SpeedMb
-        $grid.Rows[$rowIdx].Cells['col_Connected'  ].Value = $nic.Connected
-
-        if ($nic.SpeedMb -eq 0) {
-            $grid.Rows[$rowIdx].DefaultCellStyle.ForeColor = $script:Theme.Error
-        }
-    }
-
-    # ── Templates ----------------------------------------------------------------
-    $grid = $UiRefs['TemplatesTable']
-    $grid.Rows.Clear()
-    foreach ($tpl in $Data.Templates) {
-        $rowIdx = $grid.Rows.Add()
-        $grid.Rows[$rowIdx].Cells['col_Template' ].Value = $tpl.Name
-        $grid.Rows[$rowIdx].Cells['col_GuestOS'  ].Value = $tpl.Guest
-        $grid.Rows[$rowIdx].Cells['col_CPU'      ].Value = $tpl.NumCPU
-        $grid.Rows[$rowIdx].Cells['col_MemoryGB' ].Value = $tpl.MemoryGB
-        $grid.Rows[$rowIdx].Cells['col_DiskGB'   ].Value = [math]::Round($tpl.ProvisionedSpaceGB,1)
-    }
-
-    # ── Port groups --------------------------------------------------------------
-    $grid = $UiRefs['PortGroupsTable']
-    $grid.Rows.Clear()
-    foreach ($pg in $Data.PortGroups) {
-        $rowIdx = $grid.Rows.Add()
-        $grid.Rows[$rowIdx].Cells['col_Name'       ].Value = $pg.Name
-        $grid.Rows[$rowIdx].Cells['col_VLAN'       ].Value = $pg.VlanId
-        $grid.Rows[$rowIdx].Cells['col_vSwitch'    ].Value = $pg.VSwitch
-        $grid.Rows[$rowIdx].Cells['col_ActivePorts'].Value = $pg.ActivePorts
-    }
-
-    # ── Orphaned files -----------------------------------------------------------
-    $grid = $UiRefs['OrphansTable']
-    $grid.Rows.Clear()
-    foreach ($file in $Data.OrphanedFiles) {
-        $rowIdx = $grid.Rows.Add()
-        $grid.Rows[$rowIdx].Cells['col_File'     ].Value = $file.Path
-        $grid.Rows[$rowIdx].Cells['col_SizeMB'   ].Value = [math]::Round($file.SizeMB,1)
-        $grid.Rows[$rowIdx].Cells['col_Datastore'].Value = $file.Datastore
-
-        if ($file.SizeMB -gt 1024) {
             $grid.Rows[$rowIdx].DefaultCellStyle.ForeColor = $script:Theme.Error
         }
     }
