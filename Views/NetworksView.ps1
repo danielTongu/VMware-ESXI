@@ -1,32 +1,25 @@
-# Import required assemblies
+# ─────────────────────────  Assemblies  ──────────────────────────────────────
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
-
-<#
-    .SYNOPSIS
-        Displays the Network Manager UI for managing virtual networks.
-    .DESCRIPTION
-        Initializes the Network Manager UI with overview and operations tabs.
-    .PARAMETER ContentPanel
-        The Panel where the Network Manager UI is rendered.
-#>
+# ─────────────────────────  Public entry point  ──────────────────────────────
+# Entry point: show network view
 function Show-NetworksView {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [System.Windows.Forms.Panel]$ContentPanel
+        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
     )
-
     try {
         $uiRefs = New-NetworkLayout -ContentPanel $ContentPanel
-        $data = Get-NetworkData
+        $data   = Get-NetworkData
+
         if ($data) {
-            Update-NetworkWithData -UiRefs $uiRefs -Data $data
+            Update-NetworkViewWithData -UiRefs $uiRefs -Data $data
+            $ContentPanel.Refresh()
         } else {
-            $uiRefs.StatusLabel.Text = 'No connection to server'
-            $uiRefs.StatusLabel.ForeColor = $global:Theme.Error
+            $uiRefs.StatusLabel.Text      = 'No connection to VMware server'
+            $uiRefs.StatusLabel.ForeColor = $script:Theme.Error
         }
     } catch {
         Write-Verbose "Network view initialization failed: $_"
@@ -34,412 +27,693 @@ function Show-NetworksView {
 }
 
 
-
-<#
-    .SYNOPSIS
-        Creates the layout for the Network Manager UI.
-    .DESCRIPTION
-        Builds header, tabs, and status area using CWU theme colors.
-    .PARAMETER ContentPanel
-        The parent Panel to populate.
-    .OUTPUTS
-        Hashtable of UI references.
-#>
-function New-NetworkLayout {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [System.Windows.Forms.Panel]$ContentPanel
-    )
-
-    try {
-        $ContentPanel.SuspendLayout()
-        $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $global:Theme.LightGray
-
-        # Root layout
-        $root = [System.Windows.Forms.TableLayoutPanel]::new()
-        $root.Dock = 'Fill'  
-        $root.ColumnCount = 1  
-        $root.RowCount = 3
-        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-        
-        $ContentPanel.Controls.Add($root)
-
-        # Header
-        $header = [System.Windows.Forms.Panel]::new()
-        $header.Dock = 'Fill'  
-        $header.Height = 80
-        $header.BackColor = $global:Theme.Primary
-        $root.Controls.Add($header,0,0)
-
-        $titleLabel = [System.Windows.Forms.Label]::new()
-        $titleLabel.Text = 'NETWORK MANAGER'
-        $titleLabel.Font = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
-        $titleLabel.ForeColor = $global:Theme.White
-        $titleLabel.Location = [System.Drawing.Point]::new(20,20)
-        $titleLabel.AutoSize = $true
-        $header.Controls.Add($titleLabel)
-
-        # Main Tab Control
-        $tabControl = [System.Windows.Forms.TabControl]::new()
-        $tabControl.Dock = 'Fill'
-        $tabControl.SizeMode = 'Fixed'
-        $tabControl.ItemSize = [System.Drawing.Size]::new(150,40)
-        $tabControl.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $root.Controls.Add($tabControl,0,1)
-        $refs = @{ TabControl = $tabControl; Tabs = @{} }
-
-        # Overview Tab
-        $tabOverview = [System.Windows.Forms.TabPage]::new('Overview')
-        $tabOverview.BackColor = $global:Theme.White
-        $tabControl.TabPages.Add($tabOverview)
-        $refs.Tabs.Overview = @{}
-
-        $overviewLayout = [System.Windows.Forms.TableLayoutPanel]::new()
-        $overviewLayout.Dock = 'Fill'   
-        $overviewLayout.RowCount = 2
-        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $overviewLayout.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-        $tabOverview.Controls.Add($overviewLayout)
-
-
-        $gridScroller = [System.Windows.Forms.Panel]::new()
-        $gridScroller.Dock = 'Fill'
-        $gridScroller.AutoScroll = $true
-        $gridScroller.Padding = [System.Windows.Forms.Padding]::new(10)
-        $gridScroller.BackColor = $global:Theme.White
-        $overviewLayout.Controls.Add($gridScroller,0,0)
-
-        $grid = [System.Windows.Forms.DataGridView]::new()
-        $grid.Name = 'grdNetworks'  
-        $grid.Dock = 'Fill'
-        $grid.ReadOnly = $true  
-        $grid.AllowUserToAddRows = $false  
-        $grid.SelectionMode = 'FullRowSelect'
-        $grid.AutoSizeColumnsMode = 'Fill'  
-        $grid.BackgroundColor = $global:Theme.White
-        $grid.GridColor = $global:Theme.PrimaryDark  
-        $grid.BorderStyle = 'Fixed3D'
-        $grid.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
-        $grid.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::AliceBlue
-        $gridScroller.Controls.Add($grid)
-        $refs.Tabs.Overview.NetworkGrid = $grid
-
-        $cols = @(
-            @{Name='Name';Header='Name'}, @{Name='Type';Header='Type'}, @{Name='vSwitch';Header='vSwitch'},
-            @{Name='VLAN';Header='VLAN'}, @{Name='Ports';Header='Ports'}, @{Name='Used';Header='Used'}
-        )
-        foreach ($col in $cols) {
-            $c = [System.Windows.Forms.DataGridViewTextBoxColumn]::new()
-            $c.Name = $col.Name; 
-            $c.HeaderText = $col.Header
-            $grid.Columns.Add($c) | Out-Null
-        }
-
-        $overviewButtons = [System.Windows.Forms.FlowLayoutPanel]::new()
-        $overviewButtons.Dock = 'Fill'   
-        $overviewButtons.Padding = [System.Windows.Forms.Padding]::new(5)
-        $overviewButtons.BackColor = $global:Theme.White  
-        $overviewButtons.FlowDirection = 'RightToLeft'
-        $overviewLayout.Controls.Add($overviewButtons,0,1)
-
-        $btnRefresh = [System.Windows.Forms.Button]::new()
-        $btnRefresh.Name = 'btnRefresh'  
-        $btnRefresh.Text = 'REFRESH'
-        $btnRefresh.Size = [System.Drawing.Size]::new(150,40)
-        $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnRefresh.BackColor = $global:Theme.Primary   
-        $btnRefresh.ForeColor = $global:Theme.White
-        $overviewButtons.Controls.Add($btnRefresh)
-        $refs.Tabs.Overview.RefreshButton = $btnRefresh
-
-        # Port Group Operations Tab
-        $tabPortGroups = [System.Windows.Forms.TabPage]::new('Port Groups')
-        $tabPortGroups.BackColor = $global:Theme.White
-        $tabControl.TabPages.Add($tabPortGroups)
-        $refs.Tabs.PortGroups = @{}
-
-        $portGroupLayout = [System.Windows.Forms.TableLayoutPanel]::new()
-        $portGroupLayout.Dock = 'Fill'
-        $portGroupLayout.ColumnCount = 2
-        $portGroupLayout.RowCount = 4
-        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
-        $portGroupLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $portGroupLayout.Padding = [System.Windows.Forms.Padding]::new(10)
-        $tabPortGroups.Controls.Add($portGroupLayout)
-
-        $lblName = [System.Windows.Forms.Label]::new()
-        $lblName.Text = 'Port Group Name:'
-        $lblName.Autosize = $true #dont wrap
-        $lblName.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $lblName.Dock = 'Fill'   
-        $lblName.TextAlign = 'MiddleRight'   
-        $portGroupLayout.Controls.Add($lblName,0,0)
-
-        $txtName = [System.Windows.Forms.TextBox]::new()   
-        $txtName.Name = 'txtPortGroupName'   
-        $txtName.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $txtName.Dock = 'Fill'   
-        $txtName.BackColor = $global:Theme.White  
-        $portGroupLayout.Controls.Add($txtName,1,0)
-        $refs.Tabs.PortGroups.NameText = $txtName
-
-        $lblSwitch = [System.Windows.Forms.Label]::new()
-        $lblSwitch.Text = 'vSwitch:'
-        $lblSwitch.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $lblSwitch.Dock = 'Fill'   
-        $lblSwitch.TextAlign = 'MiddleRight'  
-        $portGroupLayout.Controls.Add($lblSwitch,0,1)
-
-        $cmbSwitch = [System.Windows.Forms.ComboBox]::new()   
-        $cmbSwitch.Name = 'cmbSwitch'  
-        $cmbSwitch.DropDownStyle = 'DropDownList'
-        $cmbSwitch.Font = [System.Drawing.Font]::new('Segoe UI',11)   
-        $cmbSwitch.Dock = 'Fill'  
-        $cmbSwitch.BackColor = $global:Theme.White  
-        $portGroupLayout.Controls.Add($cmbSwitch,1,1)
-        $refs.Tabs.PortGroups.SwitchCombo = $cmbSwitch
-
-        $lblVLAN = [System.Windows.Forms.Label]::new()
-        $lblVLAN.Text = 'VLAN ID:'
-        $lblVLAN.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $lblVLAN.Dock = 'Fill'   
-        $lblVLAN.TextAlign = 'MiddleRight'  
-        $portGroupLayout.Controls.Add($lblVLAN,0,2)
-
-        $txtVLAN = [System.Windows.Forms.TextBox]::new()   
-        $txtVLAN.Name = 'txtVLAN'   
-        $txtVLAN.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $txtVLAN.Dock = 'Fill'   
-        $txtVLAN.BackColor = $global:Theme.White   
-        $portGroupLayout.Controls.Add($txtVLAN,1,2)
-        $refs.Tabs.PortGroups.VLANText = $txtVLAN
-
-        $portGroupButtons = [System.Windows.Forms.FlowLayoutPanel]::new()   
-        $portGroupButtons.Dock = 'Fill'
-        $portGroupLayout.Controls.Add($portGroupButtons,1,3)
-        $portGroupLayout.SetColumnSpan($portGroupButtons,2)
-
-        $btnAdd = [System.Windows.Forms.Button]::new()  
-        $btnAdd.Name = 'btnAddPortGroup'  
-        $btnAdd.Text = 'ADD PORT GROUP'
-        $btnAdd.Size = [System.Drawing.Size]::new(180,40)   
-        $btnAdd.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnAdd.BackColor = $global:Theme.Primary   
-        $btnAdd.ForeColor = $global:Theme.White  
-        $portGroupButtons.Controls.Add($btnAdd)
-        $refs.Tabs.PortGroups.AddButton = $btnAdd
-
-        $btnRemove = [System.Windows.Forms.Button]::new()  
-        $btnRemove.Name = 'btnRemovePortGroup'  
-        $btnRemove.Text = 'REMOVE PORT GROUP'
-        $btnRemove.Size = [System.Drawing.Size]::new(180,40)  
-        $btnRemove.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnRemove.BackColor = $global:Theme.Error  
-        $btnRemove.ForeColor = $global:Theme.White  
-        $portGroupButtons.Controls.Add($btnRemove)
-        $refs.Tabs.PortGroups.RemoveButton = $btnRemove
-
-        # Bulk Networks Tab
-        $tabBulkNetworks = [System.Windows.Forms.TabPage]::new('Bulk Networks')
-        $tabBulkNetworks.BackColor = $global:Theme.White
-        $tabControl.TabPages.Add($tabBulkNetworks)
-        $refs.Tabs.BulkNetworks = @{}
-
-        $bulkLayout = [System.Windows.Forms.TableLayoutPanel]::new()   
-        $bulkLayout.Dock = 'Fill'   
-        $bulkLayout.ColumnCount = 2   
-        $bulkLayout.RowCount = 3
-        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Autosize))
-        $bulkLayout.ColumnStyles.Add([System.Windows.Forms.ColumnStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-        $bulkLayout.Padding = [System.Windows.Forms.Padding]::new(10)   
-        $tabBulkNetworks.Controls.Add($bulkLayout)
-
-        $lblCourse = [System.Windows.Forms.Label]::new()
-        $lblCourse.Text = 'Course Prefix:'
-        $lblCourse.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $lblCourse.Dock = 'Fill'   
-        $lblCourse.TextAlign = 'MiddleRight'  
-        $bulkLayout.Controls.Add($lblCourse,0,0)
-
-        $txtCourse = [System.Windows.Forms.TextBox]::new()  
-        $txtCourse.Name = 'txtCoursePrefix'  
-        $txtCourse.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $txtCourse.Dock = 'Fill'   
-        $txtCourse.BackColor = $global:Theme.White  
-        $bulkLayout.Controls.Add($txtCourse,1,0)
-        $refs.Tabs.BulkNetworks.CoursePrefixText = $txtCourse
-
-        $lblRange = [System.Windows.Forms.Label]::new()
-        $lblRange.Text = 'Student Range:'
-        $lblRange.Autosize = $true #dont wrap
-        $lblRange.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $lblRange.Dock = 'Fill'  
-        $lblRange.TextAlign = 'TopRight'  
-        $bulkLayout.Controls.Add($lblRange,0,1)
-
-        $rangePanel = [System.Windows.Forms.FlowLayoutPanel]::new()   
-        $rangePanel.Dock = 'Fill'  
-        $rangePanel.WrapContents = $false
-        $bulkLayout.Controls.Add($rangePanel,1,1)
-
-        $txtStart = [System.Windows.Forms.TextBox]::new()  
-        $txtStart.Name = 'txtRangeStart'  
-        $txtStart.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $txtStart.Size = [System.Drawing.Size]::new(50,25)  
-        $txtStart.Text = '1'  
-        $txtStart.BackColor = $global:Theme.White   
-        $rangePanel.Controls.Add($txtStart)
-        $refs.Tabs.BulkNetworks.RangeStartText = $txtStart
-
-        $lblTo = [System.Windows.Forms.Label]::new()
-        $lblTo.Text = ' to '
-        $lblTo.Font = [System.Drawing.Font]::new('Segoe UI',11)  
-        $lblTo.AutoSize = $true  
-        $lblTo.Margin = [System.Windows.Forms.Padding]::new(5,5,0,0)
-        $rangePanel.Controls.Add($lblTo)
-
-        $txtEnd = [System.Windows.Forms.TextBox]::new()   
-        $txtEnd.Name = 'txtRangeEnd'   
-        $txtEnd.Font = [System.Drawing.Font]::new('Segoe UI',11)
-        $txtEnd.Size = [System.Drawing.Size]::new(50,25)   
-        $txtEnd.Text = '10'   
-        $txtEnd.BackColor = $global:Theme.White  
-        $rangePanel.Controls.Add($txtEnd)
-        $refs.Tabs.BulkNetworks.RangeEndText = $txtEnd
-
-        $bulkButtons = [System.Windows.Forms.FlowLayoutPanel]::new()  
-        $bulkButtons.Dock = 'Fill'
-        $bulkLayout.Controls.Add($bulkButtons,1,2)  
-        $bulkLayout.SetColumnSpan($bulkButtons,2)
-
-        $btnBulkAdd = [System.Windows.Forms.Button]::new()  
-        $btnBulkAdd.Name = 'btnBulkAdd'  
-        $btnBulkAdd.Text = 'CREATE NETWORKS'
-        $btnBulkAdd.Size = [System.Drawing.Size]::new(180,40)  
-        $btnBulkAdd.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnBulkAdd.BackColor = $global:Theme.Primary  
-        $btnBulkAdd.ForeColor = $global:Theme.White  
-        $bulkButtons.Controls.Add($btnBulkAdd)
-        $refs.Tabs.BulkNetworks.BulkAddButton = $btnBulkAdd
-
-        $btnBulkRem = [System.Windows.Forms.Button]::new()   
-        $btnBulkRem.Name = 'btnBulkRemove'   
-        $btnBulkRem.Text = 'REMOVE NETWORKS'
-        $btnBulkRem.Size = [System.Drawing.Size]::new(180,40)   
-        $btnBulkRem.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnBulkRem.BackColor = $global:Theme.Error   
-        $btnBulkRem.ForeColor = $global:Theme.White  
-        $bulkButtons.Controls.Add($btnBulkRem)
-        $refs.Tabs.BulkNetworks.BulkRemoveButton = $btnBulkRem
-
-        # Status section
-        $statusPanel = [System.Windows.Forms.Panel]::new()   
-        $statusPanel.Dock = 'Fill'  
-        $statusPanel.Height = 30  
-        $statusPanel.BackColor = $global:Theme.LightGray
-        $root.Controls.Add($statusPanel,0,2)
-
-        $statusLabel = [System.Windows.Forms.Label]::new()  
-        $statusLabel.Name = 'StatusLabel'  
-        $statusLabel.Text = 'Ready'
-        $statusLabel.Font = [System.Drawing.Font]::new('Segoe UI',9)   
-        $statusLabel.Dock = 'Fill'   
-        $statusLabel.TextAlign = 'MiddleLeft'
-        $statusLabel.ForeColor = $global:Theme.PrimaryDark   
-        $statusPanel.Controls.Add($statusLabel)
-        $refs.StatusLabel = $statusLabel
-
-        return $refs
-    } finally { 
-        $ContentPanel.ResumeLayout($true) 
-    }
-}
-
-
-
-<#
-    .SYNOPSIS
-        Retrieves network data from the server.
-    .DESCRIPTION
-        Gets virtual switches and port groups; returns hashtable or $null if disconnected.
-#>
+# ─────────────────────────  Data collection  ─────────────────────────────────
+# Retrieve network data
 function Get-NetworkData {
+    [CmdletBinding()]
+    param()
     try {
-        $conn = [VMServerConnection]::GetInstance().GetConnection()
-        if (-not $conn) { return $null }
-
-        $vs = Get-VirtualSwitch -Server $conn -ErrorAction SilentlyContinue
-        $pgs = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue
-
-        return @{ 
-            VirtualSwitches = $vs   
-            PortGroups = $pgs   
-            LastUpdated = Get-Date 
+        if (-not $script:Connection) { return $null }
+        $conn = $script:Connection
+        
+        return @{
+            PortGroups = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue
+            Hosts      = Get-VMHost            -Server $conn -ErrorAction SilentlyContinue
+            Adapters   = Get-VMHostNetworkAdapter -Server $conn -ErrorAction SilentlyContinue
+            Templates  = Get-Template          -Server $conn -ErrorAction SilentlyContinue
+            VMs        = Get-VM                -Server $conn -ErrorAction SilentlyContinue
         }
     } catch {
         Write-Verbose "Network data collection failed: $_"
-        return $null 
+        return $null
+    }
+}
+
+# ─────────────────────────  Layout builders  ─────────────────────────────────
+# Build layout + controls
+function New-NetworkLayout {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
+    )
+    $ContentPanel.Controls.Clear()
+    $ContentPanel.BackColor = $script:Theme.LightGray
+
+    # Root table
+    $root = New-Object System.Windows.Forms.TableLayoutPanel
+    $root.Dock = 'Fill' 
+    $root.ColumnCount = 1
+    $root.RowCount = 3
+    $null = $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $ContentPanel.Controls.Add($root)
+
+    # Header
+    $root.Controls.Add((New-NetworkHeader), 0, 0)
+
+    # TabControl
+    $tabControl = New-Object System.Windows.Forms.TabControl
+    $tabControl.Dock = 'Fill'
+    $tabControl.Padding = New-Object System.Drawing.Point(20,10)
+    $tabControl.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $tabControl.BackColor = $script:Theme.LightGray
+    $root.Controls.Add($tabControl, 0, 1)
+
+    # Prepare refs
+    $refs = @{ TabControl = $tabControl; Tabs = @{} }
+
+    # Overview
+    $tabOv = New-Object System.Windows.Forms.TabPage 'Overview'
+    $tabOv.BackColor = $script:Theme.White
+    $ovWrapper = New-NetworkTable -Columns @() -Name 'dgOverview'
+    $tabOv.Controls.Add($ovWrapper)
+    $refs.Tabs['Overview'] = @{ DataGrid = $ovWrapper.Controls[0] }
+    
+    $tabControl.TabPages.Add($tabOv)
+
+    # PortGroups
+    $tabPG = New-Object System.Windows.Forms.TabPage 'Port Groups'
+    $tabPG.BackColor = $script:Theme.White
+    $pgCtrls = New-NetworkPortGroupControls -Parent $tabPG
+    $tabPG.Controls.Add($pgCtrls.Container)
+    $refs.Tabs['PortGroups'] = $pgCtrls
+    $tabControl.TabPages.Add($tabPG)
+
+    # Hosts
+    $tabH = New-Object System.Windows.Forms.TabPage 'Hosts'
+    $tabH.BackColor = $script:Theme.White
+    $hCtrls = New-NetworkHostControls -Parent $tabH
+    $tabH.Controls.Add($hCtrls.Container)
+    $refs.Tabs['Hosts'] = $hCtrls
+    $tabControl.TabPages.Add($tabH)
+
+    # Adapters
+    $tabA = New-Object System.Windows.Forms.TabPage 'Adapters'
+    $tabA.BackColor = $script:Theme.White
+    $aCtrls = New-NetworkAdapterControls -Parent $tabA
+    $tabA.Controls.Add($aCtrls.Container)
+    $refs.Tabs['Adapters'] = $aCtrls
+    $tabControl.TabPages.Add($tabA)
+
+    # Templates
+    $tabT = New-Object System.Windows.Forms.TabPage 'Templates'
+    $tabT.BackColor = $script:Theme.White
+    $tCtrls = New-NetworkTemplateControls -Parent $tabT
+    $tabT.Controls.Add($tCtrls.Container)
+    $refs.Tabs['Templates'] = $tCtrls
+    $tabControl.TabPages.Add($tabT)
+
+    # Footer
+    $footer = New-Object System.Windows.Forms.Panel
+    $footer.Dock='Bottom'
+    $footer.Height=30
+    $footer.BackColor=$script:Theme.LightGray
+    $status = New-Object System.Windows.Forms.Label
+    $status.Name='StatusLabel'; $status.AutoSize=$true
+    $status.Font=New-Object System.Drawing.Font('Segoe UI',9)
+    $status.ForeColor=$script:Theme.Error
+    $status.Text='---'
+    $footer.Controls.Add($status)
+    $root.Controls.Add($footer,0,2)
+    $refs.StatusLabel = $status
+
+    return $refs
+}
+
+
+
+
+function New-NetworkHeader {
+    <#
+    .SYNOPSIS
+        Returns the colored network view header bar.
+    #>
+    $panel              = New-Object System.Windows.Forms.Panel
+    $panel.Dock         = 'Top'
+    $panel.Height       = 80
+    $panel.BackColor    = $script:Theme.Primary
+
+    $lblTitle           = New-Object System.Windows.Forms.Label
+    $lblTitle.Text      = 'NETWORK MANAGER'
+    $lblTitle.Font      = New-Object System.Drawing.Font('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = $script:Theme.White
+    $lblTitle.Location  = New-Object System.Drawing.Point(20,20)
+    $lblTitle.AutoSize  = $true
+    $panel.Controls.Add($lblTitle)
+
+    return $panel
+}
+
+
+
+# Styled DataGridView container
+function New-NetworkTable {
+    [CmdletBinding()] param([string[]] $Columns, [string] $Name)
+
+    $c = New-Object System.Windows.Forms.Panel
+    $c.Dock='Fill'
+    $c.Padding=New-Object System.Windows.Forms.Padding(10)
+    $c.AutoScroll=$true
+    $c.BackColor=$script:Theme.White
+
+    $g = New-Object System.Windows.Forms.DataGridView
+    $g.Name=$Name
+    $g.Dock='Fill'
+    $g.AutoGenerateColumns=$true
+    $g.AutoSizeColumnsMode='Fill'
+    $g.RowHeadersVisible=$false
+    $g.ReadOnly=$true
+    $g.AllowUserToAddRows=$false
+    $g.AllowUserToDeleteRows=$false
+    $g.AllowUserToResizeRows=$false
+    $g.AutoSizeRowsMode='AllCells'
+    $g.BackgroundColor=$script:Theme.White
+    $g.BorderStyle='FixedSingle'
+    $g.EnableHeadersVisualStyles=$false
+    $g.ColumnHeadersDefaultCellStyle.Font=New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+    $g.DefaultCellStyle.Font=New-Object System.Drawing.Font('Segoe UI',9)
+    $g.DefaultCellStyle.ForeColor=$script:Theme.PrimaryDark
+
+    $c.Controls.Add($g)
+    
+    return $c
+}
+
+
+
+
+
+function New-NetworkPortGroupControls {
+    <#
+    .SYNOPSIS
+        Creates the controls for Port Groups tab operations.
+    #>
+    param([System.Windows.Forms.Panel]$Parent)
+
+    $container = New-Object System.Windows.Forms.TableLayoutPanel
+    $container.Dock = 'Fill'
+    $container.RowCount = 2
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',90))
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',10))
+    $Parent.Controls.Add($container)
+
+    $dataGrid = $Parent.Controls[0].Controls[0] # Get the grid from the parent panel
+
+    $opPanel = New-Object System.Windows.Forms.Panel
+    $opPanel.Dock = 'Fill'
+    $container.Controls.Add($opPanel, 0, 1)
+
+    $inputBox = New-Object System.Windows.Forms.TextBox
+    $inputBox.Width = 180
+    $inputBox.Location = New-Object System.Drawing.Point(5,5)
+    $inputBox.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $opPanel.Controls.Add($inputBox)
+
+    $addBtn = New-Object System.Windows.Forms.Button
+    $addBtn.Text = "Add"
+    $addBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $addBtn.Width = 80
+    $addBtn.Location = New-Object System.Drawing.Point(200,3)
+    $opPanel.Controls.Add($addBtn)
+
+    $removeBtn = New-Object System.Windows.Forms.Button
+    $removeBtn.Text = "Remove"
+    $removeBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $removeBtn.Width = 80
+    $removeBtn.Location = New-Object System.Drawing.Point(285,3)
+    $opPanel.Controls.Add($removeBtn)
+
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Text = ""
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    $statusLabel.ForeColor = $script:Theme.Primary
+    $statusLabel.Location = New-Object System.Drawing.Point(375,7)
+    $statusLabel.AutoSize = $true
+    $opPanel.Controls.Add($statusLabel)
+
+    # Event handlers
+    $addBtn.Add_Click({
+        $networkName = $inputBox.Text.Trim()
+        if (-not $networkName) {
+            $statusLabel.Text = "Enter a port group name."
+            return
+        }
+        try {
+            Add-PortGroup -NetworkName $networkName
+            $statusLabel.Text = "Added port group: $networkName"
+            Update-PortGroupsTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    $removeBtn.Add_Click({
+        $networkName = $inputBox.Text.Trim()
+        if (-not $networkName) {
+            $statusLabel.Text = "Enter a port group name."
+            return
+        }
+        try {
+            Remove-PortGroup -NetworkName $networkName
+            $statusLabel.Text = "Removed port group: $networkName"
+            Update-PortGroupsTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    return @{
+        Container = $container
+        DataGrid = $dataGrid
+        InputBox = $inputBox
+        AddButton = $addBtn
+        RemoveButton = $removeBtn
+        StatusLabel = $statusLabel
+    }
+}
+
+
+function New-NetworkHostControls {
+    <#
+    .SYNOPSIS
+        Creates the controls for Hosts tab operations.
+    #>
+    param([System.Windows.Forms.Panel]$Parent)
+
+    $container = New-Object System.Windows.Forms.TableLayoutPanel
+    $container.Dock = 'Fill'
+    $container.RowCount = 2
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',90))
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',10))
+    $Parent.Controls.Add($container)
+
+    $dataGrid = $Parent.Controls[0].Controls[0] # Get the grid from the parent panel
+
+    $opPanel = New-Object System.Windows.Forms.Panel
+    $opPanel.Dock = 'Fill'
+    $container.Controls.Add($opPanel, 0, 1)
+
+    # Class Folder
+    $lblClass = New-Object System.Windows.Forms.Label
+    $lblClass.Text = "Class Folder:"
+    $lblClass.Location = New-Object System.Drawing.Point(5,7)
+    $lblClass.AutoSize = $true
+    $opPanel.Controls.Add($lblClass)
+    
+    $inputClass = New-Object System.Windows.Forms.TextBox
+    $inputClass.Width = 70
+    $inputClass.Location = New-Object System.Drawing.Point(80,5)
+    $opPanel.Controls.Add($inputClass)
+
+    # Host Name
+    $lblHost = New-Object System.Windows.Forms.Label
+    $lblHost.Text = "Host Name:"
+    $lblHost.Location = New-Object System.Drawing.Point(160,7)
+    $lblHost.AutoSize = $true
+    $opPanel.Controls.Add($lblHost)
+    
+    $inputHost = New-Object System.Windows.Forms.TextBox
+    $inputHost.Width = 70
+    $inputHost.Location = New-Object System.Drawing.Point(240,5)
+    $opPanel.Controls.Add($inputHost)
+
+    # Start #
+    $lblStart = New-Object System.Windows.Forms.Label
+    $lblStart.Text = "Start #:"
+    $lblStart.Location = New-Object System.Drawing.Point(320,7)
+    $lblStart.AutoSize = $true
+    $opPanel.Controls.Add($lblStart)
+    
+    $inputStart = New-Object System.Windows.Forms.TextBox
+    $inputStart.Width = 35
+    $inputStart.Location = New-Object System.Drawing.Point(380,5)
+    $opPanel.Controls.Add($inputStart)
+
+    # End #
+    $lblEnd = New-Object System.Windows.Forms.Label
+    $lblEnd.Text = "End #:"
+    $lblEnd.Location = New-Object System.Drawing.Point(420,7)
+    $lblEnd.AutoSize = $true
+    $opPanel.Controls.Add($lblEnd)
+    
+    $inputEnd = New-Object System.Windows.Forms.TextBox
+    $inputEnd.Width = 35
+    $inputEnd.Location = New-Object System.Drawing.Point(480,5)
+    $opPanel.Controls.Add($inputEnd)
+
+    # Buttons
+    $addBtn = New-Object System.Windows.Forms.Button
+    $addBtn.Text = "Add"
+    $addBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $addBtn.Width = 60
+    $addBtn.Location = New-Object System.Drawing.Point(530,3)
+    $opPanel.Controls.Add($addBtn)
+
+    $removeBtn = New-Object System.Windows.Forms.Button
+    $removeBtn.Text = "Remove"
+    $removeBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $removeBtn.Width = 80
+    $removeBtn.Location = New-Object System.Drawing.Point(595,3)
+    $opPanel.Controls.Add($removeBtn)
+
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Text = ""
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    $statusLabel.ForeColor = $script:Theme.Primary
+    $statusLabel.Location = New-Object System.Drawing.Point(680,7)
+    $statusLabel.AutoSize = $true
+    $opPanel.Controls.Add($statusLabel)
+
+    # Event handlers
+    $addBtn.Add_Click({
+        $classFolder = $inputClass.Text.Trim()
+        $hostName = $inputHost.Text.Trim()
+        $start = $inputStart.Text.Trim()
+        $end = $inputEnd.Text.Trim()
+        
+        if (-not $classFolder -or -not $hostName -or -not $start -or -not $end) {
+            $statusLabel.Text = "All fields are required."
+            return
+        }
+        
+        try {
+            Add-HostEntity -ClassFolder $classFolder -HostName $hostName -StartStudents $start -EndStudents $end
+            $statusLabel.Text = "Hosts added."
+            Update-HostsTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    $removeBtn.Add_Click({
+        $classFolder = $inputClass.Text.Trim()
+        $hostName = $inputHost.Text.Trim()
+        $start = $inputStart.Text.Trim()
+        $end = $inputEnd.Text.Trim()
+        
+        if (-not $classFolder -or -not $hostName -or -not $start -or -not $end) {
+            $statusLabel.Text = "All fields are required."
+            return
+        }
+        
+        try {
+            Remove-HostEntity -ClassFolder $classFolder -HostName $hostName -StartStudents $start -EndStudents $end
+            $statusLabel.Text = "Hosts removed."
+            Update-HostsTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    return @{
+        Container = $container
+        DataGrid = $dataGrid
+        InputClass = $inputClass
+        InputHost = $inputHost
+        InputStart = $inputStart
+        InputEnd = $inputEnd
+        AddButton = $addBtn
+        RemoveButton = $removeBtn
+        StatusLabel = $statusLabel
+    }
+}
+
+
+function New-NetworkAdapterControls {
+    <#
+    .SYNOPSIS
+        Creates the controls for Adapters tab operations.
+    #>
+    param([System.Windows.Forms.Panel]$Parent)
+
+    $container = New-Object System.Windows.Forms.TableLayoutPanel
+    $container.Dock = 'Fill'
+    $container.RowCount = 2
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',90))
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',10))
+    $Parent.Controls.Add($container)
+
+    $dataGrid = $Parent.Controls[0].Controls[0] # Get the grid from the parent panel
+
+    $opPanel = New-Object System.Windows.Forms.Panel
+    $opPanel.Dock = 'Fill'
+    $container.Controls.Add($opPanel, 0, 1)
+
+    # VM Name
+    $lblVM = New-Object System.Windows.Forms.Label
+    $lblVM.Text = "VM Name:"
+    $lblVM.Location = New-Object System.Drawing.Point(5,7)
+    $lblVM.AutoSize = $true
+    $opPanel.Controls.Add($lblVM)
+    
+    $inputVM = New-Object System.Windows.Forms.TextBox
+    $inputVM.Width = 110
+    $inputVM.Location = New-Object System.Drawing.Point(70,5)
+    $opPanel.Controls.Add($inputVM)
+
+    # Network Name
+    $lblNet = New-Object System.Windows.Forms.Label
+    $lblNet.Text = "Network Name:"
+    $lblNet.Location = New-Object System.Drawing.Point(190,7)
+    $lblNet.AutoSize = $true
+    $opPanel.Controls.Add($lblNet)
+    
+    $inputNet = New-Object System.Windows.Forms.TextBox
+    $inputNet.Width = 110
+    $inputNet.Location = New-Object System.Drawing.Point(280,5)
+    $opPanel.Controls.Add($inputNet)
+
+    # Buttons
+    $addBtn = New-Object System.Windows.Forms.Button
+    $addBtn.Text = "Add"
+    $addBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $addBtn.Width = 60
+    $addBtn.Location = New-Object System.Drawing.Point(400,3)
+    $opPanel.Controls.Add($addBtn)
+
+    $removeBtn = New-Object System.Windows.Forms.Button
+    $removeBtn.Text = "Remove"
+    $removeBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $removeBtn.Width = 80
+    $removeBtn.Location = New-Object System.Drawing.Point(470,3)
+    $opPanel.Controls.Add($removeBtn)
+
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Text = ""
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    $statusLabel.ForeColor = $script:Theme.Primary
+    $statusLabel.Location = New-Object System.Drawing.Point(560,7)
+    $statusLabel.AutoSize = $true
+    $opPanel.Controls.Add($statusLabel)
+
+    # Event handlers
+    $addBtn.Add_Click({
+        $vmName = $inputVM.Text.Trim()
+        $netName = $inputNet.Text.Trim()
+        
+        if (-not $vmName -or -not $netName) {
+            $statusLabel.Text = "Both fields required."
+            return
+        }
+        
+        try {
+            Add-Adapter -VMName $vmName -NetworkName $netName
+            $statusLabel.Text = "Adapter added."
+            Update-AdaptersTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    $removeBtn.Add_Click({
+        $vmName = $inputVM.Text.Trim()
+        $netName = $inputNet.Text.Trim()
+        
+        if (-not $vmName -or -not $netName) {
+            $statusLabel.Text = "Both fields required."
+            return
+        }
+        
+        try {
+            Remove-Adapter -VMName $vmName -NetworkName $netName
+            $statusLabel.Text = "Adapter removed."
+            Update-AdaptersTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    return @{
+        Container = $container
+        DataGrid = $dataGrid
+        InputVM = $inputVM
+        InputNet = $inputNet
+        AddButton = $addBtn
+        RemoveButton = $removeBtn
+        StatusLabel = $statusLabel
+    }
+}
+
+function New-NetworkTemplateControls {
+    <#
+    .SYNOPSIS
+        Creates the controls for Templates tab operations.
+    #>
+    param([System.Windows.Forms.Panel]$Parent)
+
+    $container = New-Object System.Windows.Forms.TableLayoutPanel
+    $container.Dock = 'Fill'
+    $container.RowCount = 2
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',90))
+    $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',10))
+    $Parent.Controls.Add($container)
+
+    $dataGrid = $Parent.Controls[0].Controls[0] # Get the grid from the parent panel
+
+    $opPanel = New-Object System.Windows.Forms.Panel
+    $opPanel.Dock = 'Fill'
+    $container.Controls.Add($opPanel, 0, 1)
+
+    $inputBox = New-Object System.Windows.Forms.TextBox
+    $inputBox.Width = 160
+    $inputBox.Location = New-Object System.Drawing.Point(5,5)
+    $inputBox.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $opPanel.Controls.Add($inputBox)
+
+    $addBtn = New-Object System.Windows.Forms.Button
+    $addBtn.Text = "Add"
+    $addBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $addBtn.Width = 80
+    $addBtn.Location = New-Object System.Drawing.Point(180,3)
+    $opPanel.Controls.Add($addBtn)
+
+    $removeBtn = New-Object System.Windows.Forms.Button
+    $removeBtn.Text = "Remove"
+    $removeBtn.Font = New-Object System.Drawing.Font('Segoe UI',10)
+    $removeBtn.Width = 80
+    $removeBtn.Location = New-Object System.Drawing.Point(265,3)
+    $opPanel.Controls.Add($removeBtn)
+
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Text = ""
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    $statusLabel.ForeColor = $script:Theme.Primary
+    $statusLabel.Location = New-Object System.Drawing.Point(360,7)
+    $statusLabel.AutoSize = $true
+    $opPanel.Controls.Add($statusLabel)
+
+    # Event handlers
+    $addBtn.Add_Click({
+        $templateName = $inputBox.Text.Trim()
+        if (-not $templateName) {
+            $statusLabel.Text = "Enter a template name."
+            return
+        }
+        try {
+            Add-Template -TemplateName $templateName
+            $statusLabel.Text = "Template created."
+            Update-TemplatesTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    $removeBtn.Add_Click({
+        $templateName = $inputBox.Text.Trim()
+        if (-not $templateName) {
+            $statusLabel.Text = "Enter a template name."
+            return
+        }
+        try {
+            Remove-Template -TemplateName $templateName
+            $statusLabel.Text = "Template removed."
+            Update-TemplatesTab -DataGrid $dataGrid
+        }
+        catch {
+            $statusLabel.Text = "Failed: $_"
+        }
+    })
+
+    return @{
+        Container = $container
+        DataGrid = $dataGrid
+        InputBox = $inputBox
+        AddButton = $addBtn
+        RemoveButton = $removeBtn
+        StatusLabel = $statusLabel
     }
 }
 
 
 
-<#
-    .SYNOPSIS
-        Updates the network view with new data.
-    .PARAMETER UiRefs
-        Hashtable of UI references.
-    .PARAMETER Data
-        Hashtable containing network data.
-#>
-function Update-NetworkWithData {
-    param([hashtable]$UiRefs, [hashtable]$Data)
-    try {
-        $UiRefs.Tabs.Overview.NetworkGrid.DataSource = $null
-        $UiRefs.Tabs.Operations.SwitchCombo.Items.Clear()
+# ─────────────────────────  Data-to-UI binder  ───────────────────────────────
+# Bind data to grids
+function Update-NetworkViewWithData {
+    [CmdletBinding()] param([hashtable] $UiRefs, [hashtable] $Data)
 
-        foreach ($v in $Data.VirtualSwitches) { 
-            $UiRefs.Tabs.Operations.SwitchCombo.Items.Add($v.Name) | Out-Null 
-        }
-        
-        if ($UiRefs.Tabs.Operations.SwitchCombo.Items.Count) { 
-            $UiRefs.Tabs.Operations.SwitchCombo.SelectedIndex = 0 
-        }
+    if ($Data.Hosts.Count -gt 0) {
+        $h=$Data.Hosts[0]
+        $UiRefs.StatusLabel.Text = "CONNECTED to $($h.Name) | vSphere $($h.Version)"
+        $UiRefs.StatusLabel.ForeColor=$script:Theme.Success
+    }
+    # Bind sources
+    $UiRefs.Tabs['Overview'].DataGrid.DataSource = $Data.PortGroups
+    $UiRefs.Tabs['PortGroups'].DataGrid.DataSource = $Data.PortGroups
+    $UiRefs.Tabs['Hosts'].DataGrid.DataSource = $Data.Hosts
+    $UiRefs.Tabs['Adapters'].DataGrid.DataSource = $Data.Adapters
+    $UiRefs.Tabs['Templates'].DataGrid.DataSource = $Data.Templates
+}
 
-        $list = [System.Collections.ArrayList]::new()
 
-        foreach ($v in $Data.VirtualSwitches) {
-            $list.Add([PSCustomObject]@{ 
-                Name = $v.Name;
-                Type = 'vSwitch'; 
-                vSwitch = ''; 
-                VLAN = ''; 
-                Ports = $v.NumPorts; 
-                Used = $v.NumPortsAvailable 
-            }) | Out-Null
-        }
 
-        foreach ($p in $Data.PortGroups) {
-            $list.Add([PSCustomObject]@{ 
-                Name = $p.Name; 
-                Type = 'Port Group'; 
-                vSwitch = $p.VirtualSwitchName; 
-                VLAN = $p.VLanId;
-                Ports = '';
-                Used = '' 
-            }) | Out-Null
-        }
+# ─────────────────────────  Tab-specific functions  ──────────────────────────
 
-        $UiRefs.Tabs.Overview.NetworkGrid.DataSource = $list
-        $UiRefs.StatusLabel.Text = "Data loaded at $($Data.LastUpdated.ToString('HH:mm:ss'))"
-    } catch {
-        Write-Verbose "Failed to update network view: $_"
-        $UiRefs.StatusLabel.Text = 'Error loading data'
+
+
+function Update-PortGroupsTab {
+    param([System.Windows.Forms.DataGridView]$DataGrid)
+
+    $DataGrid.Rows.Clear()
+    $vmHost = Get-VMHost | Select-Object -First 1
+
+    foreach ($pg in Get-VirtualPortGroup -VMHost $vmHost) {
+        $DataGrid.Rows.Add($pg.Name, $pg.VirtualSwitchName)
+    }
+}
+
+
+
+function Add-PortGroup {
+    param([string]$NetworkName)
+    $vmHost = Get-VMHost | Select-Object -First 1
+
+    if (-not (Get-VirtualSwitch -Name $NetworkName -VMHost $vmHost -ErrorAction SilentlyContinue)) {
+        $vSwitch = New-VirtualSwitch -Name $NetworkName -VMHost $vmHost
+        $vPortGroup = New-VirtualPortGroup -Name $NetworkName -VirtualSwitch $vSwitch
+    }
+}
+
+function Remove-PortGroup {
+    param([string]$NetworkName)
+
+    $vmHost = Get-VMHost | Select-Object -First 1
+
+    $pg = Get-VirtualPortGroup -VMHost $vmHost -Name $NetworkName -ErrorAction SilentlyContinue
+    if ($pg) {
+        $pg | Remove-VirtualPortGroup -Confirm:$false
+    }
+
+    $vsw = Get-VirtualSwitch -Name $NetworkName -VMHost $vmHost -ErrorAction SilentlyContinue
+    if ($vsw) {
+        $vsw | Remove-VirtualSwitch -Confirm:$false
     }
 }
