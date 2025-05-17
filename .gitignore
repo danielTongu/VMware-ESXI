@@ -33,19 +33,3 @@ __pycache__/
 # Ignore all ESXi backend scripts locally
 ESXi Scripts/
 ESXi_Scripts/
-
-# --- Sensitive / Local-only data (do NOT commit) ---
-#ESXi_Scripts/GetCredential.ps1
-#ESXi_Scripts/GenericScripts/AllUserLoginTimes.csv
-#ESXi_Scripts/GenericScripts/AllUserLoginTimes.ps1
-
-# --- Optional: destructive/test-only scripts ---
-# Uncomment if you prefer to keep them out of the main branch
-# ESXi_Scripts/GenericScripts/addNetwork.ps1
-# ESXi_Scripts/GenericScripts/addNetworks.ps1
-# ESXi_Scripts/GenericScripts/deleteNetwork.ps1
-# ESXi_Scripts/GenericScripts/deleteNetworks.ps1
-# ESXi_Scripts/GenericScripts/DeleteOphanFilesFromDatastore.ps1
-
-# --- Note: we WANT to track all our real .ps1 and .psm1 modules! ---
-# No blanket "*.ps1" or "*.psm1" ignore rules here.
