@@ -1,205 +1,243 @@
-# Views/LoginView.ps1
 <#
 .SYNOPSIS
-    VMware Management System Login View with Offline Support
+    VMware Management — Login UI.
 .DESCRIPTION
-    Enhanced authentication with:
-      - Online login via Connect-VIServer
-      - Optional offline mode continuation
-      - Connection resilience and visual feedback
-      - Credential remember/unremember
+    Provides a WinForms-based login dialog for vCenter Server authentication.
 #>
 
+
+# Load Required Assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName 'Microsoft.VisualBasic'
+
 
 function Show-LoginView {
+    <#
+    .SYNOPSIS
+        Renders and shows the VMware Management System login dialog.
+    .OUTPUTS
+        [bool]  True if login succeeded; False otherwise.
+    #>
+
     [CmdletBinding()]
     param()
 
+    # Initialize result
     $script:LoginResult = $false
-    $form = [System.Windows.Forms.Form]::new()
-    $form.Text             = 'VMware Management System - Login'
-    $form.Size             = [System.Drawing.Size]::new(450,380)
-    $form.StartPosition    = 'CenterScreen'
-    $form.FormBorderStyle  = 'FixedDialog'
-    $form.MaximizeBox      = $false
-    $form.MinimizeBox      = $false
 
-<<<<<<< HEAD
-    # -----------------------------
-    # Create the login form window
-    # -----------------------------
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text            = 'Please Sign In'
-    $form.Size            = [System.Drawing.Size]::new(1100, 800)
-    $loginForm.BackColor  = [System.Drawing.Color]::DarkGray
-    $form.StartPosition   = 'CenterScreen'
-    $form.FormBorderStyle = 'FixedDialog'
-    $form.MaximizeBox     = $false
-    $form.MinimizeBox     = $false
-    $form.Topmost         = $true
+    # Create and configure the form
+    $form = New-Object System.Windows.Forms.Form -Property @{
+        Text            = 'VMware Management System'
+        StartPosition   = 'CenterScreen'
+        ClientSize      = [System.Drawing.Size]::new(400,500)
+        FormBorderStyle = 'FixedDialog'
+        MaximizeBox     = $false
+        MinimizeBox     = $false
+        BackColor       = $script:Theme.White
+        Font            = [System.Drawing.Font]::new('Segoe UI',10)
+        AutoScaleMode   = 'Font'
+    }
 
-    # -----------------------------
-    # Add cwu logo image
-    # -----------------------------
+    # Logo (optional)
     $logo = New-Object System.Windows.Forms.PictureBox
-    $logo.Location = New-Object System.Drawing.Point(430, 50)
-    $logo.Size = New-Object System.Drawing.Size(250, 200)
-    $logo.SizeMode = "Zoom"
-    $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\login.png")
-
-    $form.Controls.Add($logo)
-
-    # -----------------------------
-    # Email label and textbox
-    # -----------------------------
-    $lblEmail = New-Object System.Windows.Forms.Label
-    $lblEmail.Text     = 'Email:'
-    $lblEmail.Location = [System.Drawing.Point]::new(460, 250)
-    $lblEmail.AutoSize = $true
-    $lblEmail.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($lblEmail)
-
-    $txtEmail = New-Object System.Windows.Forms.TextBox
-    $txtEmail.Location = [System.Drawing.Point]::new(460, 275)
-    $txtEmail.Width    = 300
-    $txtEmail.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($txtEmail)
-
-    # -----------------------------
-    # Password label and textbox
-    # -----------------------------
-    $lblPass = New-Object System.Windows.Forms.Label
-    $lblPass.Text     = 'Password:'
-    $lblPass.Location = [System.Drawing.Point]::new(460, 320)
-    $lblPass.AutoSize = $true
-    $lblPass.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($lblPass)
-
-    $txtPass = New-Object System.Windows.Forms.TextBox
-    $txtPass.Location              = [System.Drawing.Point]::new(460, 320)
-    $txtPass.Width                 = 300
-    $txtPass.UseSystemPasswordChar = $true
-    $txtPass.Font                  = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($txtPass)
-
-    # -----------------------------
-    # Sign In and Cancel buttons
-    # -----------------------------
-    $btnOK = New-Object System.Windows.Forms.Button
-    $btnOK.Text     = 'Sign In'
-    $btnOK.Size     = [System.Drawing.Size]::new(100, 30)
-    $btnOK.Location = [System.Drawing.Point]::new(505, 390)
-    $btnOK.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($btnOK)
-
-    $btnCancel = New-Object System.Windows.Forms.Button
-    $btnCancel.Text     = 'Cancel'
-    $btnCancel.Size     = [System.Drawing.Size]::new(100, 30)
-    $btnCancel.Location = [System.Drawing.Point]::new(645, 390)
-    $btnCancel.Font     = [System.Drawing.Font]::new('Segoe UI', 10)
-
-    $form.Controls.Add($btnCancel)
-=======
-    # -- Logo --
-    $logo = [System.Windows.Forms.PictureBox]::new()
-    $logo.Size     = [System.Drawing.Size]::new(200,60)
-    $logo.Location = [System.Drawing.Point]::new(($form.ClientSize.Width - $logo.Width)/2,20)
-    try { $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\logo.png") } catch {}
     $logo.SizeMode = 'Zoom'
+    $logo.Size     = [System.Drawing.Size]::new(130,130)
+    $logo.Location = [System.Drawing.Point]::new(135,10)
+    try { $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png") } catch {}
     $form.Controls.Add($logo)
 
-    # -- Username --
-    $lblUser = [System.Windows.Forms.Label]::new(); $lblUser.Text='Username:'; $lblUser.Location=[System.Drawing.Point]::new(50,100); $lblUser.AutoSize=$true; $lblUser.Font=[System.Drawing.Font]::new('Segoe UI',10)
-    $txtUser = [System.Windows.Forms.TextBox]::new(); $txtUser.Location=[System.Drawing.Point]::new(50,125); $txtUser.Size=[System.Drawing.Size]::new(350,30); $txtUser.Font=[System.Drawing.Font]::new('Segoe UI',10)
+    # Header label
+    $lblHeader = New-Object System.Windows.Forms.Label
+    $lblHeader.Text      = 'Sign In'
+    $lblHeader.Font      = [System.Drawing.Font]::new('Segoe UI',20,[System.Drawing.FontStyle]::Bold)
+    $lblHeader.ForeColor = $script:Theme.Primary
+    $lblHeader.AutoSize  = $true
+    $lblHeader.Location  = [System.Drawing.Point]::new(150,150)
+    
+    $form.Controls.Add($lblHeader)
+
+    # Server selection
+    $lblServer = New-Object System.Windows.Forms.Label -Property @{ Text='vCenter Server'; Location=[System.Drawing.Point]::new(30,200) }
+    $cmbServer = New-Object System.Windows.Forms.ComboBox
+    $cmbServer.Items.AddRange(@($script:Server,'vcenter2.cs.cwu.edu','Other'))
+    $cmbServer.SelectedItem  = $script:Server
+    $cmbServer.DropDownStyle = 'DropDownList'
+    $cmbServer.Location      = [System.Drawing.Point]::new(30,224)
+    $cmbServer.Size          = [System.Drawing.Size]::new(340,35)
+    $cmbServer.Anchor        = 'Top,Left,Right'
+
+    $form.Controls.AddRange(@($lblServer,$cmbServer))
+
+    # Username field
+    $lblUser = New-Object System.Windows.Forms.Label -Property @{ 
+        Text = 'Username'
+        Location = [System.Drawing.Point]::new(30,270) 
+    }
+
+    $txtUser = New-Object System.Windows.Forms.TextBox -Property @{
+        Text     = $script:username
+        Location = [System.Drawing.Point]::new(30,294)
+        Size     = [System.Drawing.Size]::new(340,35)
+        Anchor   = 'Top,Left,Right'
+    }
+
     $form.Controls.AddRange(@($lblUser,$txtUser))
 
-    # -- Password --
-    $lblPass = [System.Windows.Forms.Label]::new(); $lblPass.Text='Password:'; $lblPass.Location=[System.Drawing.Point]::new(50,165); $lblPass.AutoSize=$true; $lblPass.Font=[System.Drawing.Font]::new('Segoe UI',10)
-    $txtPass = [System.Windows.Forms.TextBox]::new(); $txtPass.Location=[System.Drawing.Point]::new(50,190); $txtPass.Size=[System.Drawing.Size]::new(350,30); $txtPass.Font=[System.Drawing.Font]::new('Segoe UI',10); $txtPass.UseSystemPasswordChar=$true
+    # Password field
+    $lblPass = New-Object System.Windows.Forms.Label -Property @{ 
+        Text = 'Password' 
+        Location=[System.Drawing.Point]::new(30,330) 
+    }
+
+    $txtPass = New-Object System.Windows.Forms.TextBox -Property @{
+        Text                    = $script:password
+        UseSystemPasswordChar   = $true
+        MaxLength               = 100
+        Location                = [System.Drawing.Point]::new(30,354)
+        Size                    = [System.Drawing.Size]::new(340,35)
+        Anchor                  = 'Top,Left,Right'
+    }
+
     $form.Controls.AddRange(@($lblPass,$txtPass))
 
-    # -- Remember Me --
-    $chkRemember = [System.Windows.Forms.CheckBox]::new(); $chkRemember.Text='Remember my credentials'; $chkRemember.Location=[System.Drawing.Point]::new(50,230); $chkRemember.AutoSize=$true
-    $form.Controls.Add($chkRemember)
-
-    # -- Buttons --
-    $btnLogin = [System.Windows.Forms.Button]::new(); $btnLogin.Text='Login'; $btnLogin.Size=[System.Drawing.Size]::new(100,35); $btnLogin.Location=[System.Drawing.Point]::new(50,270); $btnLogin.Font=[System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold); $form.AcceptButton=$btnLogin
-    $btnCancel= [System.Windows.Forms.Button]::new(); $btnCancel.Text='Cancel';$btnCancel.Size=[System.Drawing.Size]::new(100,35); $btnCancel.Location=[System.Drawing.Point]::new(200,270); $btnCancel.Font=[System.Drawing.Font]::new('Segoe UI',10); $form.CancelButton=$btnCancel
-    $btnOffline=[System.Windows.Forms.Button]::new(); $btnOffline.Text='Continue Offline';$btnOffline.Size=[System.Drawing.Size]::new(150,35); $btnOffline.Location=[System.Drawing.Point]::new(50,315); $btnOffline.Font=[System.Drawing.Font]::new('Segoe UI',10); $btnOffline.BackColor=[System.Drawing.Color]::LightGray; $btnOffline.Visible=$false
-    $form.Controls.AddRange(@($btnLogin,$btnCancel,$btnOffline))
-
-    # -- Status Label --
-    $lblStatus=[System.Windows.Forms.Label]::new(); $lblStatus.Text=''; $lblStatus.Location=[System.Drawing.Point]::new(50,360); $lblStatus.AutoSize=$true; $lblStatus.Font=[System.Drawing.Font]::new('Segoe UI',9,[System.Drawing.FontStyle]::Italic)
+    # Status label
+    $lblStatus = New-Object System.Windows.Forms.Label -Property @{
+        Location  = [System.Drawing.Point]::new(30,400)
+        Size      = [System.Drawing.Size]::new(340,30)
+        ForeColor = $script:Theme.Error
+        TextAlign = 'MiddleCenter'
+    }
     $form.Controls.Add($lblStatus)
 
-    # -- Load remembered creds --
-    $credPath = "$env:APPDATA\VMwareManagement\credentials.xml"
-    if (Test-Path $credPath) {
-        try {
-            $secureString = Import-Clixml -Path $credPath
-            $psCred = New-Object System.Management.Automation.PSCredential('dummy',$secureString)
-            $txtUser.Text = $psCred.GetNetworkCredential().UserName
-            $txtPass.Text = $psCred.GetNetworkCredential().Password
-            $chkRemember.Checked = $true
-        } catch { Write-Warning "Credential load failed: $_" }
+    # Helper: create styled button
+    function New-StyledButton {
+        [CmdletBinding()]
+        param(
+            [string]                $Text,
+            [System.Drawing.Point]  $Location,
+            [System.Drawing.Color]  $BackColor,
+            [System.Drawing.Color]  $ForeColor,
+            [int]                   $Width = 150,
+            [int]                   $Height = 40
+        )
+
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Text      = $Text
+        $btn.Location  = $Location
+        $btn.Size      = [System.Drawing.Size]::new($Width,$Height)
+        $btn.Font      = [System.Drawing.Font]::new('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
+        $btn.FlatStyle = 'Flat'
+        $btn.FlatAppearance.BorderSize = 0
+        $btn.BackColor = $BackColor
+        $btn.ForeColor = $ForeColor
+        $btn.FlatAppearance.MouseOverBackColor = $BackColor
+        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(
+            [int]($BackColor.R * 0.7), [int]($BackColor.G * 0.7), [int]($BackColor.B * 0.7)
+        )
+
+        return $btn
     }
->>>>>>> 0c3c925 (view updated)
 
-    # -- Login handler --
+    # Create buttons
+    $btnLogin  = New-StyledButton -Text 'LOGIN'  -Location ([System.Drawing.Point]::new(30,440))  -BackColor $script:Theme.Primary     -ForeColor $script:Theme.White
+    $btnCancel = New-StyledButton -Text 'CANCEL' -Location ([System.Drawing.Point]::new(220,440)) -BackColor $script:Theme.PrimaryDark -ForeColor $script:Theme.White
+    $form.Controls.AddRange(@($btnLogin,$btnCancel))
+    $form.AcceptButton = $btnLogin
+    $form.CancelButton = $btnCancel
+
+    # Button event handlers
     $btnLogin.Add_Click({
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        $lblStatus.Text = 'Connecting...'; $lblStatus.ForeColor=[System.Drawing.Color]::Blue; $form.Refresh()
-        try {
-            $securePwd = ConvertTo-SecureString $txtPass.Text -AsPlainText -Force
-            $psCred = New-Object System.Management.Automation.PSCredential($txtUser.Text,$securePwd)
-            # Capture the VI connection
-            $viConnection = Connect-VIServer -Server $global:VMwareConfig.Server -Credential $psCred -ErrorAction Stop
-            # Persist to global state
-            $global:VMwareConfig.Connection = $viConnection
-            $global:VMwareConfig.User       = $psCred.UserName
-            $global:IsLoggedIn              = $true
-            if ($chkRemember.Checked) {
-                $folder = Split-Path $credPath -Parent
-                if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
-                $securePwd | Export-Clixml -Path $credPath -Force
-            } elseif (Test-Path $credPath) {
-                Remove-Item $credPath -ErrorAction SilentlyContinue
-            }
-            # Also inform our singleton model
-            [VMServerConnection]::GetInstance().SetConnection($viConnection)
-            [VMServerConnection]::GetInstance().SetCredentials($psCred)
-            $script:LoginResult = $true
-            $form.Close()
-        }
-        catch {
-            $lblStatus.Text = "Login failed: $($_.Exception.Message)"; $lblStatus.ForeColor=[System.Drawing.Color]::Red
-            $btnOffline.Visible = $true
-            $form.Size = [System.Drawing.Size]::new($form.Width,420)
-        }
-        finally { $form.Cursor = [System.Windows.Forms.Cursors]::Default }
+        $server = if ($cmbServer.Text -eq 'Other') {
+            [Microsoft.VisualBasic.Interaction]::InputBox('Enter vCenter Server Address:','Custom Server',$cmbServer.Items[0])
+        } else { $cmbServer.Text }
+        
+        Handle-Login -Form $form -LoginButton $btnLogin -CancelButton $btnCancel -StatusLabel $lblStatus -UserBox $txtUser -PassBox $txtPass -Server $server
     })
+    $btnCancel.Add_Click({ Handle-Cancel -Form $form })
 
-    # -- Continue offline handler --
-    $btnOffline.Add_Click({
-        $global:VMwareConfig.OfflineMode = $true
-        $global:IsLoggedIn = $false
-        $script:LoginResult = $true    # proceed into shell in offline mode
-        $form.Close()
-    })
+    # Show the dialog
+    try {
+        $form.ShowDialog() | Out-Null
+    } finally {
+        $logo.Dispose()
+        $form.Dispose()
+    }
 
-    # -- Cancel handler --
-    $btnCancel.Add_Click({
-        $script:LoginResult = $false
-        $form.Close()
-    })
-
-    $form.ShowDialog() | Out-Null
     return $script:LoginResult
+}
+
+
+
+
+function Handle-Login {
+    <#
+    .SYNOPSIS
+        Authenticates and stores the vCenter connection on success.
+    #>
+
+    [CmdletBinding()]
+    param(
+        [System.Windows.Forms.Form]    $Form,
+        [System.Windows.Forms.Button]  $LoginButton,
+        [System.Windows.Forms.Button]  $CancelButton,
+        [System.Windows.Forms.Label]   $StatusLabel,
+        [System.Windows.Forms.TextBox] $UserBox,
+        [System.Windows.Forms.TextBox] $PassBox,
+        [string]                       $Server
+    )
+
+    # Input validation
+    if ([string]::IsNullOrWhiteSpace($UserBox.Text) -or [string]::IsNullOrWhiteSpace($PassBox.Text)) {
+        $StatusLabel.Text = "Username and password are required"
+        return
+    }
+
+    # Disable UI
+    $LoginButton.Enabled = $false
+    $CancelButton.Enabled = $false
+    $Form.Cursor         = [System.Windows.Forms.Cursors]::WaitCursor
+    $StatusLabel.Text    = 'Authenticating...'
+    $Form.Refresh()
+
+    try {
+        # Build credentials and connect
+        $securePwd          = ConvertTo-SecureString $PassBox.Text -AsPlainText -Force
+        $psCred             = New-Object System.Management.Automation.PSCredential($UserBox.Text,$securePwd)
+        $LoginButton.Text   = 'CONNECTING...'
+        $LoginButton.Refresh()
+
+        $script:Server     = $Server
+        $script:Connection = Connect-VIServer -Server $Server -Credential $psCred -ErrorAction Stop
+
+        $script:LoginResult = $true
+        $Form.Close()
+    }
+    catch {
+        $StatusLabel.Text = "Login failed: $($_.Exception.Message)"
+    }
+    finally {
+        # Restore UI
+        $LoginButton.Text    = 'LOGIN'
+        $LoginButton.Enabled = $true
+        $CancelButton.Enabled= $true
+        $Form.Cursor         = [System.Windows.Forms.Cursors]::Default
+    }
+}
+
+
+
+
+function Handle-Cancel {
+    <#
+        .SYNOPSIS
+            Cancels login and closes the form.
+    #>
+
+    [CmdletBinding()] param(
+        [System.Windows.Forms.Form] $Form
+    )
+    $script:LoginResult = $false
+    $script:Connection  = $null
+    $Form.Close()
 }

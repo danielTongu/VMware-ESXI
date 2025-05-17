@@ -1,93 +1,72 @@
-# Main.ps1
 <#
 .SYNOPSIS
-    VMware Management Console - Main Entry Point
+    VMware Management — Main Entry.
 .DESCRIPTION
-    Always shows UI even when:
-      - Connection fails
-      - Login is cancelled
-      - Components fail to load
-    Integrates dynamic login/logout state and persists connection info.
+    Loads assemblies & theme, declares script-scoped state,
+    dot-sources the login UI, invokes login, then proceeds if authenticated.
 #>
 
 
-
-
-
-#region CONFIGURATION
-# Global configuration and state
-$global:VMwareConfig = @{
-    Server          = "csvcsa.cs.cwu.edu"
-    CredentialPath  = "$env:APPDATA\VMwareManagement\credentials.xml"
-    OfflineMode     = $false         # True if connection fails
-    Connection      = $null          # Will hold the VIServer connection
-    User            = $null          # Logged‐in username
+# ---------------------------------------------------------------------------
+# Load PowerCLI (if not already) and ignore SSL warnings
+# ---------------------------------------------------------------------------
+if (-not (Get-Module -Name VMware.PowerCLI)) {
+    Import-Module -Name VMware.PowerCLI -ErrorAction Stop
 }
-# Track authentication state for dynamic login/logout
-$global:IsLoggedIn = $false
-#endregion
+Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false | Out-Null
 
 
 
 
-#region DEPENDENCY LOADING
-try {
-    # Load core models and views (will work in offline mode)
-    . "$PSScriptRoot\Models\ConnectTo-VMServer.ps1"
-    . "$PSScriptRoot\Views\MainView.ps1"
-    . "$PSScriptRoot\Views\LoginView.ps1"
+# 1) Load Required Assemblies
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
-    # Attempt initial connection if credentials exist
-    if (Test-Path $global:VMwareConfig.CredentialPath) {
-        try {
-            $conn = [VMServerConnection]::GetInstance().GetConnection()
-            $global:VMwareConfig.Connection = $conn
-            $global:VMwareConfig.User       = $conn.User
-            Write-Host "Connected to $($conn.Name)" -ForegroundColor Green
-        }
-        catch {
-            $global:VMwareConfig.OfflineMode = $true
-            Write-Warning "Initial connection failed: $_ (Continuing in offline mode)"
-        }
+
+# 2) Initialize Theme (script scope)
+function Initialize-Theme {
+    <# .SYNOPSIS Defines UI color palette #>
+    $script:Theme = @{
+        Primary       = [System.Drawing.Color]::FromArgb(128,   0,  32)
+        PrimaryDark   = [System.Drawing.Color]::FromArgb( 37,  37,  38)
+        PrimaryDarker = [System.Drawing.Color]::FromArgb( 45,  45,  48)
+        LightGray     = [System.Drawing.Color]::FromArgb(192, 192, 192)
+        White         = [System.Drawing.Color]::White
+        Success       = [System.Drawing.Color]::FromArgb(  0, 128,   0)
+        Warning       = [System.Drawing.Color]::FromArgb(192,  64,   0)
+        Error         = [System.Drawing.Color]::FromArgb(180,   0,   0)
     }
 }
-catch {
-    Write-Warning "Component load warning: $_ (Some features may be limited)"
-}
-#endregion
+Initialize-Theme
 
 
+# 3) Declare script-scoped state for the login UI
+$script:Server      = 'csvcsa.cs.cwu.edu'  # default vCenter host
+$script:username    = ''                   # optional pre-fill
+$script:password    = ''                   # optional pre-fill
+$script:Connection  = $null                # will hold the VI.ServerConnection
+$script:LoginResult = $false               # set by the login form
 
 
-
-#region APPLICATION START
-try {
-    # Launch main view, which handles login/logout and shell
-    Show-MainView
-}
-catch {
-    # Fallback UI if errors occur
-    [System.Windows.Forms.MessageBox]::Show(
-        "Limited functionality available:`n$_",
-        "Fallback Mode Activated",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Warning
-    )
-    # Attempt to show shell directly
-    try { Show-MainShell } catch {}
+# 4) Dot-source and invoke the login UI
+. "$PSScriptRoot\Views\LoginView.ps1"
+if (-not (Show-LoginView)) {
+    Write-Host "Login canceled or failed."
+    exit 0
 }
 
 
+# 5) If we get here, $script:Connection is live
+Write-Host "✅ Connected to $script:Server as $($script:Connection.UserName)"
 
 
+# 6) Proceed to the UI for navigating views
+. "$PSScriptRoot\Views\MainView.ps1"
+Show-MainView
 
 
-finally {
-    # Safe cleanup on exit
-    try { 
-        if ($global:VMwareConfig.Connection) {
-            Disconnect-VIServer -Server $global:VMwareConfig.Connection -Confirm:$false
-        }
-    } catch {}
+# 6) Clean up
+if ($script:Connection) {
+    Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue
 }
-#endregion
+exit 0
