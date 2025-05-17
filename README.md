@@ -12,24 +12,18 @@ VMware-ESXI/
 ├── Images/                    # UI assets
 │   ├── login.png              # Login dialog background
 │   └── ... 
-├── Models/                    # Core automation scripts
-│   ├── ConnectTo-VMServer.ps1 # Connect and maintain vCenter connection
-│   ├── CourseManager.ps1      # Create and manage class VMs
-│   ├── OrphanCleaner.ps1      # Find orphaned VM files
-│   ├── SessionReporter.ps1    # Generate session reports and logs
-│   ├── VMwareNetwork.ps1      # Network port group automation
-│   └── VMwareVM.ps1           # VM power, clone, and remove operations
 ├── Views/                     # PowerShell WinForms UI views
 │   ├── MainView.ps1           # Shell: navigation menu + content panel
 │   ├── LoginView.ps1          # Login dialog
 │   ├── DashboardView.ps1      # Host, VM, and network summary stats
-│   ├── ClassManagerView.ps1   # UI for managing class VMs
+│   ├── ClassesView.ps1        # UI for managing class VMs
 │   ├── VMsView.ps1            # Grid: list, filter, power on/off, remove VMs
-│   ├── NetworkManagerView.ps1 # Add/remove port groups (bulk & single)
-│   ├── OrphanCleanerView.ps1  # Discover & delete orphaned VM files
+│   ├── NetworksView.ps1       # Add/remove port groups (bulk & single)
+│   ├── OrphansView.ps1        # Discover & delete orphaned VM files
 │   └── LogsView.ps1           # View and refresh VMware event logs
 ├── .gitignore                 # Exclude IDE and temp files
 ├── Main.ps1                   # Entry point: shows LoginView then MainShell
+├── Test.ps1                   # Isolating views
 └── README.md                  # This documentation
 ```
 
@@ -82,7 +76,7 @@ cd VMware-ESXI
 | **Classes**          | Create/delete student VMs for a course         |
 | **Virtual Machines** | Filterable grid: power, restart, remove VMs    |
 | **Networks**         | Add/remove port groups (single or bulk)        |
-| **Orphan Cleaner**   | Find and delete orphaned VM files on datastore |
+| **Orphans**          | Find and delete orphaned VM files on datastore |
 | **Logs**             | View and refresh the latest VMware events      |
 | **Logout**           | Signs out user and returns to login screen     |
 
@@ -118,12 +112,8 @@ For views, mock the WinForms `Panel` and verify controls/layout in Pester.
 ## 🤝 Contributing
 
 1. Fork the repo and create a feature branch.
-2. Write clear, commented code with Javadoc-style summaries.
+2. Write clear, commented code with summaries.
 3. Add or modify views and model logic as needed.
 4. Submit a PR with a description and UI screenshots (if applicable).
 
 ---
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
