@@ -32,7 +32,7 @@ function Show-OrphansView {
             $lblMessage = [System.Windows.Forms.Label]::new()
             $lblMessage.Text = 'Not connected to a server.'
             $lblMessage.Font = [System.Drawing.Font]::new('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
-            $lblMessage.ForeColor = $global:Theme.Error
+            $lblMessage.ForeColor = $script:Theme.Error
             $lblMessage.Location = [System.Drawing.Point]::new(20, 20)
             $lblMessage.AutoSize = $true
 
@@ -65,7 +65,7 @@ function New-OrphanCleanerLayout {
     try {
         $ContentPanel.SuspendLayout()
         $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $global:Theme.LightGray
+        $ContentPanel.BackColor = $script:Theme.LightGray
 
         # Root layout
         $root = [System.Windows.Forms.TableLayoutPanel]::new()
@@ -83,14 +83,14 @@ function New-OrphanCleanerLayout {
         $header = [System.Windows.Forms.Panel]::new()
         $header.Dock = 'Fill'; 
         $header.Height = 60
-        $header.BackColor = $global:Theme.Primary
+        $header.BackColor = $script:Theme.Primary
         
         $root.Controls.Add($header, 0, 0)
 
         $titleLabel = [System.Windows.Forms.Label]::new()
         $titleLabel.Text = 'ORPHANED VM FILES'
         $titleLabel.Font = [System.Drawing.Font]::new('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
-        $titleLabel.ForeColor = $global:Theme.White
+        $titleLabel.ForeColor = $script:Theme.White
         $titleLabel.Location = [System.Drawing.Point]::new(20,15)
         $titleLabel.AutoSize = $true
         
@@ -100,7 +100,7 @@ function New-OrphanCleanerLayout {
         $filterPanel = [System.Windows.Forms.Panel]::new()
         $filterPanel.Dock = 'Fill'; 
         $filterPanel.Height = 50
-        $filterPanel.BackColor = $global:Theme.LightGray
+        $filterPanel.BackColor = $script:Theme.LightGray
         
         $root.Controls.Add($filterPanel, 0, 1)
 
@@ -108,7 +108,7 @@ function New-OrphanCleanerLayout {
         $lblDatastore = [System.Windows.Forms.Label]::new()
         $lblDatastore.Text = 'Datastore:'
         $lblDatastore.Font = [System.Drawing.Font]::new('Segoe UI',10)
-        $lblDatastore.ForeColor = $global:Theme.PrimaryDarker
+        $lblDatastore.ForeColor = $script:Theme.PrimaryDarker
         $lblDatastore.Location = [System.Drawing.Point]::new(20,15)
         $lblDatastore.AutoSize = $true
 
@@ -120,8 +120,8 @@ function New-OrphanCleanerLayout {
         $cmbDatastores.Width = 250
         $cmbDatastores.Font = [System.Drawing.Font]::new('Segoe UI',10)
         $cmbDatastores.Location = [System.Drawing.Point]::new(100,10)
-        $cmbDatastores.BackColor = $global:Theme.White
-        $cmbDatastores.ForeColor = $global:Theme.PrimaryDark
+        $cmbDatastores.BackColor = $script:Theme.White
+        $cmbDatastores.ForeColor = $script:Theme.PrimaryDark
 
         $filterPanel.Controls.Add($cmbDatastores)
 
@@ -131,8 +131,8 @@ function New-OrphanCleanerLayout {
         $txtSearch.Height = 30
         $txtSearch.Location = [System.Drawing.Point]::new(370,10)
         $txtSearch.Font = [System.Drawing.Font]::new('Segoe UI',10)
-        $txtSearch.BackColor = $global:Theme.White
-        $txtSearch.ForeColor = $global:Theme.PrimaryDarker
+        $txtSearch.BackColor = $script:Theme.White
+        $txtSearch.ForeColor = $script:Theme.PrimaryDarker
 
         $filterPanel.Controls.Add($txtSearch)
 
@@ -143,12 +143,19 @@ function New-OrphanCleanerLayout {
         $btnSearch.Height = 30
         $btnSearch.Location = [System.Drawing.Point]::new(580,10)
         $btnSearch.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnSearch.BackColor = $global:Theme.Primary
-        $btnSearch.ForeColor = $global:Theme.White
+        $btnSearch.BackColor = $script:Theme.Primary
+        $btnSearch.ForeColor = $script:Theme.White
 
         $filterPanel.Controls.Add($btnSearch)
 
         # Data grid
+        $gridScroller = [System.Windows.Forms.Panel]::new()
+        $gridScroller.Dock = 'Fill'
+        $gridScroller.AutoScroll = $true
+        $gridScroller.Padding = [System.Windows.Forms.Padding]::new(10)
+        $gridScroller.BackColor = $script:Theme.White
+        $root.Controls.Add($gridScroller, 0, 2)
+
         $grid = [System.Windows.Forms.DataGridView]::new()
         $grid.Name = 'gvOrphans'; 
         $grid.Dock = 'Fill'
@@ -156,16 +163,16 @@ function New-OrphanCleanerLayout {
         $grid.SelectionMode = 'FullRowSelect'; 
         $grid.MultiSelect = $true
         $grid.AutoSizeColumnsMode = 'Fill'
-        $grid.BackgroundColor = $global:Theme.White
-        $grid.GridColor = $global:Theme.PrimaryDark
+        $grid.BackgroundColor = $script:Theme.White
+        $grid.GridColor = $script:Theme.PrimaryDark
         $grid.BorderStyle = 'FixedSingle'
         $grid.DefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10)
-        $grid.DefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
+        $grid.DefaultCellStyle.ForeColor = $script:Theme.PrimaryDarker
         $grid.ColumnHeadersDefaultCellStyle.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $grid.ColumnHeadersDefaultCellStyle.ForeColor = $global:Theme.PrimaryDarker
-        $grid.ColumnHeadersDefaultCellStyle.BackColor = $global:Theme.LightGray
+        $grid.ColumnHeadersDefaultCellStyle.ForeColor = $script:Theme.PrimaryDarker
+        $grid.ColumnHeadersDefaultCellStyle.BackColor = $script:Theme.LightGray
 
-        $root.Controls.Add($grid, 0, 2)
+        $gridScroller.Controls.Add($grid)
 
         # Controls footer
         $controlsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
@@ -173,7 +180,7 @@ function New-OrphanCleanerLayout {
         $controlsPanel.Height = 50
         $controlsPanel.FlowDirection = 'LeftToRight'
         $controlsPanel.Padding = [System.Windows.Forms.Padding]::new(10)
-        $controlsPanel.BackColor = $global:Theme.LightGray
+        $controlsPanel.BackColor = $script:Theme.LightGray
 
         $root.Controls.Add($controlsPanel, 0, 3)
 
@@ -183,8 +190,8 @@ function New-OrphanCleanerLayout {
         $btnRefresh.Width = 120;
         $btnRefresh.Height = 35
         $btnRefresh.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnRefresh.BackColor = $global:Theme.Primary
-        $btnRefresh.ForeColor = $global:Theme.White
+        $btnRefresh.BackColor = $script:Theme.Primary
+        $btnRefresh.ForeColor = $script:Theme.White
 
         $controlsPanel.Controls.Add($btnRefresh)
 
@@ -194,8 +201,8 @@ function New-OrphanCleanerLayout {
         $btnDelete.Width = 150;
         $btnDelete.Height = 35
         $btnDelete.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnDelete.BackColor = $global:Theme.Error
-        $btnDelete.ForeColor = $global:Theme.White
+        $btnDelete.BackColor = $script:Theme.Error
+        $btnDelete.ForeColor = $script:Theme.White
 
         $controlsPanel.Controls.Add($btnDelete)
 
