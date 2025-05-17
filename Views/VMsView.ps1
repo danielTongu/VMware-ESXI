@@ -1,347 +1,375 @@
-<#
-.SYNOPSIS
-    Renders the Virtual Machines management screen, resilient against connection failures.
-.DESCRIPTION
-    Displays a filterable grid of all VMs including Name, Folder, Status, IP, CPU, Memory, Template, and Datastore.
-    Allows filtering, powering on/off, restarting, and removing selected VMs.
-    Remains functional in offline mode or when errors occur.
-.PARAMETER ContentPanel
-    The Panel control where this view is rendered.
-.NOTES
-    Resilient design based on Main.ps1: always shows UI even if connection fails.
-.EXAMPLE
-    Show-VMsView -ContentPanel $split.Panel2
-#>
-
+# ---------------------------------------------------------------------------
+# Load WinForms assemblies
+# ---------------------------------------------------------------------------
 Add-Type -AssemblyName 'System.Windows.Forms'
 Add-Type -AssemblyName 'System.Drawing'
 
 
+
 function Show-VMsView {
+<#
+.SYNOPSIS
+    Renders the “Virtual Machines” view into the supplied WinForms panel.
+#>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
-        [System.Windows.Forms.Panel]$ContentPanel
+        [Parameter(Mandatory)]
+        [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    # Clear any existing UI controls
-    $ContentPanel.Controls.Clear()
+    try {
+        # 1 ─ Build UI and retrieve control references -----------------------------
+        $uiRefs = New-VMsLayout -ContentPanel $ContentPanel
 
-    # Title label
-    $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = 'Virtual Machines'
-    $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 16, [System.Drawing.FontStyle]::Bold)
-    $lblTitle.AutoSize = $true
-    $lblTitle.Location = New-Object System.Drawing.Point(10, 10)
-    $ContentPanel.Controls.Add($lblTitle)
+        # 2 ─ Collect VM data ------------------------------------------------------
+        $data = Get-VMsData
 
+        # 3 ─ Always add OriginalData property so the filter can access it ---------
+        Add-Member -InputObject $uiRefs -MemberType NoteProperty `
+                   -Name 'OriginalData' -Value $data -Force
 
-    # Offline mode indicator
-    if ($global:VMwareConfig.OfflineMode) {
-        $lblOffline = New-Object System.Windows.Forms.Label
-        $lblOffline.Text = 'OFFLINE MODE - Live data unavailable'
-        $lblOffline.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Italic)
-        $lblOffline.ForeColor = [System.Drawing.Color]::DarkRed
-        $lblOffline.AutoSize = $true
-        $lblOffline.Location = New-Object System.Drawing.Point(220, 16)
-        $ContentPanel.Controls.Add($lblOffline)
-    }
-
-
-    # Filter controls
-    $lblFilter = New-Object System.Windows.Forms.Label
-    $lblFilter.Text = 'Filter:'
-    $lblFilter.Location = [System.Drawing.Point]::new(10, 45)
-    $lblFilter.AutoSize = $true
-    $ContentPanel.Controls.Add($lblFilter)
-
-    $txtFilter = New-Object System.Windows.Forms.TextBox
-    $txtFilter.Location = [System.Drawing.Point]::new(60, 42)
-    $txtFilter.Width = 200
-    $ContentPanel.Controls.Add($txtFilter)
-
-
-    # Define action buttons
-    $btns = @{}
-    $buttonDefinitions = @(
-        @{ Id = 'Refresh'; Text = 'Refresh'; X = 280 }
-        @{ Id = 'PowerOn'; Text = 'Power On'; X = 390 }
-        @{ Id = 'PowerOff'; Text = 'Power Off'; X = 500 }
-        @{ Id = 'Restart'; Text = 'Restart'; X = 610 }
-        @{ Id = 'Remove'; Text = 'Remove'; X = 720 }
-    )
-
-    foreach ($def in $buttonDefinitions) {
-        $btn = New-Object System.Windows.Forms.Button
-        $btn.Name = "btn$($def.Id)"
-        $btn.Text = $def.Text
-        $btn.Size = [System.Drawing.Size]::new(100, 30)
-        $btn.Location = [System.Drawing.Point]::new($def.X, 38)
-        # Only Refresh is enabled by default
-        if ($def.Id -eq 'Refresh') {
-            $btn.Enabled = $true
-        } else {
-            $btn.Enabled = $false
+        # 4 ─ Populate grid (may be empty when disconnected) -----------------------
+        if ($data) {
+            Update-VMsWithData -UiRefs $uiRefs -Data $data
         }
-        $ContentPanel.Controls.Add($btn)
-        $btns[$def.Id] = $btn
+        else {
+            $uiRefs.StatusLabel.Text      = 'No connection to vSphere'
+            $uiRefs.StatusLabel.ForeColor = $script:Theme.Error
+            $uiRefs.Grid.Rows.Clear()
+        }
+
+        # 5 ─ Wire up filter behaviour (SEARCH click + Enter key) ------------------
+        Register-VMsFilter -UiRefs $uiRefs
     }
+    catch {
+        Write-Verbose "VMs view initialisation failed: $_"
+    }
+}
 
 
-    # Setup DataGridView
-    $grid = New-Object System.Windows.Forms.DataGridView
-    $grid.Name = 'gvVMs'
-    $grid.Location = [System.Drawing.Point]::new(10, 80)
-    $grid.Size = [System.Drawing.Size]::new(940, 400)
-    $grid.ReadOnly = $true
-    $grid.AllowUserToAddRows = $false
-    $grid.SelectionMode = 'FullRowSelect'
-    $grid.MultiSelect = $false
-    $grid.AutoGenerateColumns = $false
 
 
-    # Define grid columns
-    $columnDefinitions = @(
-        @{ Name = 'Name'; HeaderText = 'VM Name';   Width = 160; Type = 'System.String' }
-        @{ Name = 'Folder'; HeaderText = 'Folder';    Width = 150; Type = 'System.String' }
-        @{ Name = 'PowerState'; HeaderText = 'Status'; Width = 80;  Type = 'System.String' }
-        @{ Name = 'IP'; HeaderText = 'IP';           Width = 120; Type = 'System.String' }
-        @{ Name = 'CPU'; HeaderText = 'vCPUs';        Width = 60;  Type = 'System.Int32' }
-        @{ Name = 'MemoryGB'; HeaderText = 'Memory(GB)'; Width = 80; Type = 'System.Decimal' }
-        @{ Name = 'Template'; HeaderText = 'Template'; Width = 120; Type = 'System.String' }
-        @{ Name = 'Datastore'; HeaderText = 'Datastore'; Width = 120; Type = 'System.String' }
+
+function New-VMsLayout {
+<#
+.SYNOPSIS
+    Builds the WinForms layout and returns references to key controls.
+#>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    foreach ($colDef in $columnDefinitions) {
-        $col = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-        $col.Name = $colDef.Name
-        $col.HeaderText = $colDef.HeaderText
-        $col.Width = $colDef.Width
-        $col.ValueType = [Type]::GetType($colDef.Type)
-        $grid.Columns.Add($col) | Out-Null
-    }
+    try {
+        $ContentPanel.SuspendLayout()
+        $ContentPanel.Controls.Clear()
+        $ContentPanel.BackColor = $script:Theme.LightGray
 
+        # ----- Root TableLayoutPanel ---------------------------------------------
+        $root              = New-Object System.Windows.Forms.TableLayoutPanel
+        $root.Dock         = 'Fill'
+        $root.ColumnCount  = 1
+        $root.RowCount     = 5
+        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
+        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $ContentPanel.Controls.Add($root)
 
+        # ----- Header ------------------------------------------------------------
+        $header            = New-Object System.Windows.Forms.Panel
+        $header.Dock       = 'Fill'
+        $header.Height     = 60
+        $header.BackColor  = $script:Theme.Primary
+        $root.Controls.Add($header, 0, 0)
 
-    $ContentPanel.Controls.Add($grid)
+        $titleLabel                 = New-Object System.Windows.Forms.Label
+        $titleLabel.Text            = 'VIRTUAL MACHINES'
+        $titleLabel.Font            = New-Object System.Drawing.Font('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+        $titleLabel.ForeColor       = $script:Theme.White
+        $titleLabel.Location        = New-Object System.Drawing.Point(20,15)
+        $titleLabel.AutoSize        = $true
+        $header.Controls.Add($titleLabel)
 
+        # ----- Filter bar --------------------------------------------------------
+        $filterPanel                = New-Object System.Windows.Forms.Panel
+        $filterPanel.Dock           = 'Fill'
+        $filterPanel.Height         = 50
+        $filterPanel.BackColor      = $script:Theme.LightGray
+        $root.Controls.Add($filterPanel, 0, 1)
 
+        $searchBox                  = New-Object System.Windows.Forms.TextBox
+        $searchBox.Name             = 'txtFilter'
+        $searchBox.Width            = 300
+        $searchBox.Height           = 30
+        $searchBox.Location         = New-Object System.Drawing.Point(20,10)
+        $searchBox.Font             = New-Object System.Drawing.Font('Segoe UI',10)
+        $searchBox.BackColor        = $script:Theme.White
+        $searchBox.ForeColor        = $script:Theme.PrimaryDarker
+        $filterPanel.Controls.Add($searchBox)
 
-    <#
-    .SYNOPSIS
-        Parses class and student from folder path.
-    .PARAMETER folderPath
-        The full folder path string.
-    .OUTPUTS
-        Hashtable with Class and Student keys.
-    #>
-    function Get-ClassStudentFromFolder {
-        param(
-            [string]$folderPath
+        $searchBtn                  = New-Object System.Windows.Forms.Button
+        $searchBtn.Name             = 'btnSearch'
+        $searchBtn.Text             = 'SEARCH'
+        $searchBtn.Size             = New-Object System.Drawing.Size(100,30)
+        $searchBtn.Location         = New-Object System.Drawing.Point(330,10)
+        $searchBtn.Font             = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $searchBtn.BackColor        = $script:Theme.Primary
+        $searchBtn.ForeColor        = $script:Theme.White
+        $filterPanel.Controls.Add($searchBtn)
+
+        # ----- Grid container ----------------------------------------------------
+        $gridContainer              = New-Object System.Windows.Forms.Panel
+        $gridContainer.Dock         = 'Fill'
+        $gridContainer.AutoScroll   = $true
+        $gridContainer.Padding      = New-Object System.Windows.Forms.Padding(10)
+        $gridContainer.BackColor    = $script:Theme.White
+        $root.Controls.Add($gridContainer, 0, 2)
+
+        # ----- DataGridView ------------------------------------------------------
+        $grid                       = New-Object System.Windows.Forms.DataGridView
+        $grid.Name                  = 'gvVMs'
+        $grid.Dock                  = 'Fill'
+        $grid.AutoSizeColumnsMode   = 'Fill'
+        $grid.ReadOnly              = $true
+        $grid.AllowUserToAddRows    = $false
+        $grid.SelectionMode         = 'FullRowSelect'
+        $grid.MultiSelect           = $false
+        $grid.AutoGenerateColumns   = $false
+        $grid.BackgroundColor       = $script:Theme.White
+        $grid.BorderStyle           = 'FixedSingle'
+        $grid.ColumnHeadersDefaultCellStyle.Font =
+            New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $gridContainer.Controls.Add($grid)
+
+        # ----- Numbering column (#) ---------------------------------------------
+        $numCol                     = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+        $numCol.Name                = 'No'
+        $numCol.HeaderText          = '#'
+        $numCol.Width               = 50
+        $numCol.ReadOnly            = $true
+        $numCol.SortMode            = 'NotSortable'
+        $grid.Columns.Add($numCol) | Out-Null
+
+        # ----- Explicit VM columns ----------------------------------------------
+        $columns = @(
+            @{ Name='Name'      ; Header='VM Name'     },
+            @{ Name='PowerState'; Header='Status'      },
+            @{ Name='IP'        ; Header='IP Address'  },
+            @{ Name='CPU'       ; Header='vCPU'        },
+            @{ Name='MemoryGB'  ; Header='Memory (GB)' }
         )
-        $result = @{ Class = ''; Student = '' }
-        try {
-            if ($folderPath -match '\[(.*?)\]\s*(.*?)\\?$') {
-                $parts = $matches[2] -split '_'
-                if ($parts.Count -ge 2) {
-                    $result.Class = $parts[0]
-                    $result.Student = $parts[1]
-                }
-            }
-        } catch {
-            # Ignore parse errors
+
+        foreach ($col in $columns) {
+            $gridCol                       = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+            $gridCol.Name                  = $col.Name
+            $gridCol.HeaderText            = $col.Header
+            $gridCol.DataPropertyName      = $col.Name
+            $gridCol.ReadOnly              = $true
+            $grid.Columns.Add($gridCol) | Out-Null
         }
-        return $result
+
+        # ----- Action buttons ----------------------------------------------------
+        $actions                    = New-Object System.Windows.Forms.FlowLayoutPanel
+        $actions.Dock               = 'Fill'
+        $actions.Height             = 50
+        $actions.FlowDirection      = 'LeftToRight'
+        $actions.BackColor          = $script:Theme.LightGray
+        $actions.Padding            = New-Object System.Windows.Forms.Padding(10,5,10,5)
+        $root.Controls.Add($actions, 0, 3)
+
+        $actionDefs = @(
+            @{ Key='Refresh' ; Text='REFRESH'  },
+            @{ Key='PowerOn' ; Text='POWER ON' },
+            @{ Key='PowerOff'; Text='POWER OFF'},
+            @{ Key='Restart' ; Text='RESTART'  }
+        )
+
+        $btns = @{}
+        foreach ($def in $actionDefs) {
+            $b                     = New-Object System.Windows.Forms.Button
+            $b.Name                = "btn$($def.Key)"
+            $b.Text                = $def.Text
+            $b.Size                = New-Object System.Drawing.Size(120,35)
+            $b.Margin              = New-Object System.Windows.Forms.Padding(5)
+            $b.Font                = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+            $b.BackColor           = $script:Theme.Primary
+            $b.ForeColor           = $script:Theme.White
+            $actions.Controls.Add($b)
+            $btns[$def.Key]        = $b
+        }
+
+        # ----- Footer status label ----------------------------------------------
+        $statusLabel                = New-Object System.Windows.Forms.Label
+        $statusLabel.Name           = 'StatusLabel'
+        $statusLabel.Text           = 'DISCONNECTED'
+        $statusLabel.AutoSize       = $true
+        $statusLabel.Font           = New-Object System.Drawing.Font('Segoe UI',9)
+        $statusLabel.ForeColor      = $script:Theme.PrimaryDarker
+        $root.Controls.Add($statusLabel, 0, 4)
+
+        # ----- Return handles ----------------------------------------------------
+        return [PSCustomObject]@{
+            Grid         = $grid
+            SearchBox    = $searchBox
+            SearchButton = $searchBtn
+            StatusLabel  = $statusLabel
+            Buttons      = $btns
+        }
     }
+    finally {
+        $ContentPanel.ResumeLayout($true)
+    }
+}
 
 
 
 
-    <#
-    .SYNOPSIS
-        Refreshes the VM list in the grid.
-    .DESCRIPTION
-        Fetches VM data when online, or clears grid in offline mode.
-    #>
-    function Refresh-VMList {
+
+function Get-VMsData {
+<#
+.SYNOPSIS
+    Returns VM information from the active vSphere connection.
+
+.OUTPUTS
+    Array of PSObjects or $null when disconnected.
+#>
+    [CmdletBinding()] param()
+
+    if (-not $script:Connection) { return $null }
+
+    try {
+        $vms = Get-VM -Server $script:Connection -ErrorAction Stop | Select-Object `
+            Name,
+            PowerState,
+            @{ Name='IP'
+               Expression={
+                   if ($_.Guest.IPAddress -and $_.Guest.IPAddress.Count -gt 0) {
+                       $_.Guest.IPAddress[0]
+                   }
+                   else { '' }
+               }
+            },
+            @{ Name='CPU'      ; Expression={ $_.NumCpu } },
+            @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } }
+        return $vms
+    }
+    catch {
+        Write-Verbose "Failed to acquire VM data: $_"
+        return $null
+    }
+}
+
+
+
+
+
+function Update-VMsWithData {
+<#
+.SYNOPSIS
+    Populates the grid in un-bound mode using the supplied VM list.
+#>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [psobject]   $UiRefs,
+        [Parameter(Mandatory)] [psobject[]] $Data
+    )
+
+    try {
+        # Clear previous rows
+        $UiRefs.Grid.Rows.Clear()
+
+        # Insert one row per VM
+        foreach ($vm in $Data) {
+            $rowIndex = $UiRefs.Grid.Rows.Add()
+            $row      = $UiRefs.Grid.Rows[$rowIndex]
+
+            $row.Cells['No'        ].Value = $rowIndex + 1
+            $row.Cells['Name'      ].Value = $vm.Name
+            $row.Cells['PowerState'].Value = $vm.PowerState
+            $row.Cells['IP'        ].Value = $vm.IP
+            $row.Cells['CPU'       ].Value = $vm.CPU
+            $row.Cells['MemoryGB'  ].Value = $vm.MemoryGB
+
+            if ($vm.PowerState -eq 'PoweredOn') {
+                $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Green
+            }
+            else {
+                $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Red
+            }
+        }
+
+        # Update footer
+        $UiRefs.StatusLabel.Text      = "$($Data.Count) VMs found"
+        $UiRefs.StatusLabel.ForeColor = $script:Theme.Success
+
+        # Resize columns for readability
+        $UiRefs.Grid.AutoResizeColumns()
+    }
+    catch {
+        Write-Verbose "Grid update failed: $_"
+        $UiRefs.StatusLabel.Text      = 'Error displaying VM data'
+        $UiRefs.StatusLabel.ForeColor = $script:Theme.Error
+    }
+}
+
+
+
+
+
+function Register-VMsFilter {
+<#
+.SYNOPSIS
+    Hooks up SEARCH button and Enter key so the user can filter the grid.
+#>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [psobject] $UiRefs
+    )
+
+    # --- Local helper: performs the actual filter -------------------------------
+    $filterAction = {
         try {
-            if (-not $global:VMwareConfig.OfflineMode) {
-                # Attempt to get connection
-                $conn = [VMServerConnection]::GetInstance().GetConnection()
+            $needle = $UiRefs.SearchBox.Text.Trim()
 
-                # Retrieve VM data
-                $vms = Get-VM -Server $conn | Select-Object -Property Name, Folder, PowerState,
-                    @{ Name = 'IP'; Expression = { ($_.Guest.IPAddress -join ', ') } },
-                    @{ Name = 'CPU'; Expression = { $_.NumCpu } },
-                    @{ Name = 'MemoryGB'; Expression = { [math]::Round($_.MemoryGB, 2) } },
-                    @{ Name = 'Template'; Expression = { $_.ExtensionData.Config.Template } },
-                    @{ Name = 'Datastore'; Expression = { (Get-Datastore -Id $_.DatastoreIdList[0] -Server $conn).Name } }
+            # No filter text → show all
+            if ([string]::IsNullOrWhiteSpace($needle)) {
+                $filtered = $UiRefs.OriginalData
+            }
+            else {
+                $filtered = @()
 
-                # Build DataTable
-                $table = New-Object System.Data.DataTable
-                foreach ($colDef in $columnDefinitions) {
-                    $table.Columns.Add($colDef.Name, [Type]::GetType($colDef.Type)) | Out-Null
-                }
+                foreach ($vm in $UiRefs.OriginalData) {
+                    $nameMatch  = $vm.Name       -like "*$needle*"
+                    $ipMatch    = $vm.IP         -like "*$needle*"
+                    $stateMatch = $vm.PowerState -like "*$needle*"
 
-                # Populate rows
-                foreach ($vm in $vms) {
-                    $row = $table.NewRow()
-                    $row['Name'] = $vm.Name
-                    $row['Folder'] = $vm.Folder.Name
-                    $cs = Get-ClassStudentFromFolder -folderPath $vm.Folder.Path
-                    if ($cs.Class) {
-                        $row['Folder'] = "${cs.Class} [${cs.Student}]"
+                    if ($nameMatch -or $ipMatch -or $stateMatch) {
+                        $filtered += $vm
                     }
-                    $row['PowerState'] = $vm.PowerState
-                    $row['IP'] = $vm.IP
-                    $row['CPU'] = $vm.CPU
-                    $row['MemoryGB'] = $vm.MemoryGB
-                    $row['Template'] = if ($vm.Template) { 'Yes' } else { 'No' }
-                    $row['Datastore'] = $vm.Datastore
-                    $table.Rows.Add($row)
                 }
+            }
 
-                $grid.DataSource = $table
-            } else {
-                # Offline: clear grid
-                $grid.DataSource = $null
-            }
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to load VMs: $_",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-            # On error, clear data to keep UI responsive
-            $grid.DataSource = $null
-            $global:VMwareConfig.OfflineMode = $true
-        } finally {
-            # Reset selection and buttons
-            if ($grid.DataSource -is [System.Data.DataTable]) {
-                $grid.ClearSelection()
-            }
-            $btns['PowerOn'].Enabled = $false
-            $btns['PowerOff'].Enabled = $false
-            $btns['Restart'].Enabled = $false
-            $btns['Remove'].Enabled = $false
+            Update-VMsWithData -UiRefs $UiRefs -Data $filtered
+        }
+        catch {
+            Write-Verbose "Filter error: $_"
         }
     }
 
+    # --- SEARCH button click -----------------------------------------------------
+    $null = $UiRefs.SearchButton.Add_Click($filterAction)
 
-
-    # Text filter logic
-    $txtFilter.Add_TextChanged({
-        try {
-            if (-not $grid.DataSource) { return }
-            $filterText = $txtFilter.Text.Replace("'", "''")
-            if ([string]::IsNullOrWhiteSpace($filterText)) {
-                $grid.DataSource.DefaultView.RowFilter = ''
-            } else {
-                $criteria = "Name LIKE '%$filterText%' OR `Folder LIKE '%$filterText%' OR `PowerState LIKE '%$filterText%' OR IP LIKE '%$filterText%' OR `Datastore LIKE '%$filterText%'"
-                $grid.DataSource.DefaultView.RowFilter = $criteria
-            }
-        } catch {
-            Write-Warning "Filter error: $_"
+    # --- Enter key inside the search box ----------------------------------------
+    $null = $UiRefs.SearchBox.Add_KeyDown({
+        param($sender,$args)
+        if ($args.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
+            $UiRefs.SearchButton.PerformClick()
+            $args.Handled        = $true
+            $args.SuppressKeyPress= $true
         }
     })
-
-
-    # Selection change updates button state
-    $grid.Add_SelectionChanged({
-        $has = $false
-        if ($grid.SelectedRows.Count -gt 0) { $has = $true }
-        $btns['PowerOn'].Enabled = $has
-        $btns['PowerOff'].Enabled = $has
-        $btns['Restart'].Enabled = $has
-        $btns['Remove'].Enabled = $has
-    })
-
-
-    # Button click handlers
-    $btns['Refresh'].Add_Click({ Refresh-VMList })
-
-
-    # Power On VM with error handling
-    $btns['PowerOn'].Add_Click({
-        try {
-            $vmName = $grid.SelectedRows[0].Cells['Name'].Value
-            $vmObj = [VMwareVM]::new($vmName, $null, $null, $null, $null)
-            $vmObj.PowerOn()
-            Refresh-VMList
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to power on VM: $_",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
-    })
-
-
-    # Power Off VM with error handling
-    $btns['PowerOff'].Add_Click({
-        try {
-            $vmName = $grid.SelectedRows[0].Cells['Name'].Value
-            $vmObj = [VMwareVM]::new($vmName, $null, $null, $null, $null)
-            $vmObj.PowerOff()
-            Refresh-VMList
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to power off VM: $_",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
-    })
-
-
-    # Restart VM with error handling
-    $btns['Restart'].Add_Click({
-        try {
-            $vmName = $grid.SelectedRows[0].Cells['Name'].Value
-            $vmObj = [VMwareVM]::new($vmName, $null, $null, $null, $null)
-            $vmObj.PowerOff()
-            Start-Sleep -Seconds 2
-            $vmObj.PowerOn()
-            Refresh-VMList
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to restart VM: $_",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
-    })
-
-    # Remove VM with confirmation
-    $btns['Remove'].Add_Click({
-        $vmName = $grid.SelectedRows[0].Cells['Name'].Value
-        $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "Are you sure you want to permanently delete '$vmName'?",
-            'Confirm Delete',
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-        if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
-            try {
-                $vmObj = [VMwareVM]::new($vmName, $null, $null, $null, $null)
-                $vmObj.Remove()
-                Refresh-VMList
-            } catch {
-                [System.Windows.Forms.MessageBox]::Show(
-                    "Failed to remove VM: $_",
-                    'Error',
-                    [System.Windows.Forms.MessageBoxButtons]::OK,
-                    [System.Windows.Forms.MessageBoxIcon]::Error
-                )
-            }
-        }
-    })
-    
-    # Load initial data
-    Refresh-VMList
 }
