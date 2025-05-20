@@ -474,12 +474,23 @@ function New-ClassManagerLayout {
         $btnCreateFolders.BackColor = $script:Theme.Primary
         $btnCreateFolders.ForeColor = $script:Theme.White
 
+        # create import button
+        $btnImport = New-Object System.Windows.Forms.Button
+        $btnImport.Text = 'IMPORT'
+        $btnImport.Size = New-Object System.Drawing.Size(150,40)
+        $btnImport.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $btnImport.BackColor = $script:Theme.Primary
+        $btnImport.ForeColor = $script:Theme.White
+
+        # create flow layout panel that will hold our newly declared buttons
         $flowButtons = New-Object System.Windows.Forms.FlowLayoutPanel
         $flowButtons.Dock = 'Fill'
         $flowButtons.Padding = New-Object System.Windows.Forms.Padding(5)
+        $flowButtons.Controls.Add($btnImport)
         $flowButtons.Controls.Add($btnCreateFolders)
         $basicLayout.Controls.Add($flowButtons, 0, 2)
         $refs.Tabs['Basic']['CreateFoldersButton'] = $btnCreateFolders
+        $refs.Tabs['Basic']['ImportButton'] = $btnImport
 
 
         # 3. Advanced Tab ─────────────────────────────────────────────────────
@@ -642,7 +653,6 @@ function New-ClassManagerLayout {
         $statusPanel.Controls.Add($statusLabel)
         $refs['StatusLabel'] = $statusLabel
 
-
         # ── Event hooks ──────────────────────────────────────────────────────
         Register-ClassManagerEvents -UiRefs $refs -ContentPanel $ContentPanel
 
@@ -725,10 +735,9 @@ function Register-ClassManagerEvents {
     #>
     [CmdletBinding()]
     param(
-        [hashtable] $UiRefs,
+        $UiRefs,
         [System.Windows.Forms.Panel] $ContentPanel
     )
-
 
 
     # REFRESH button
@@ -797,6 +806,83 @@ function Register-ClassManagerEvents {
                 'Error',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        }
+    })
+
+
+
+    # IMPORT Button (scope issue?)
+    # declare local variable and store text box using keyword script
+    $script:textBox = $UiRefs.Tabs['Basic']['StudentsTextBox']
+
+    # Import Button Add Click Functionality Header
+    $UiRefs.Tabs['Basic']['ImportButton'].Add_Click({
+
+        # ----- create the file dialog to select a file -----
+
+        # create an open file dialog box object from Windows Forms  
+        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        # set the filter to only accept TXT files
+        $openFileDialog.Filter = "Text files (*.txt)|*.txt"
+        #set the title
+        $openFileDialog.Title = "Select a TXT File"
+
+        # open the file dialog and wait for user input
+        # check if the user's actions resulted in "OK" being returned (user would've selected a file and pressed open)
+        if ($openFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            # save the file path in a local variable
+            $filePath = $openFileDialog.FileName
+            # print statement for now
+            Write-Host "You selected: $filePath"
+            
+            # check if the file path doesn't have an extension equal to the .txt extension
+            if ([System.IO.Path]::GetExtension($filePath) -ne ".txt") {
+                # display a popup to the user of the error
+                [System.Windows.Forms.MessageBox]::Show(
+                "Please select a valid .txt file.", # message
+                "Invalid File Type", # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Warning # icon
+                )
+                # exit early to avoid proceeding with the rest of the code
+                return
+            }
+
+            # now read the content of the file into a variable (one student per line)
+            $studentNames = Get-Content $filePath
+
+            # Check if StudentsTextBox is valid before trying to update it
+            if ($null -eq $script:textBox) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Error: StudentsTextBox is not initialized!", # message
+                    "Initialization Error",   # title
+                    [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                    [System.Windows.Forms.MessageBoxIcon]::Error # icon
+                )
+                return
+            }
+
+
+            # populate the text box with the newly acquired student names (one per line)
+            $script:textBox.Text = ($studentNames -join "`r`n")
+
+            # display a popup to the user notify the student that the names were imported correctly
+            [System.Windows.Forms.MessageBox]::Show(
+                "Student names imported successfully.", # message
+                "Import Success",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Information # icon
+            )
+
+
+        # if this point was reached then the user either closed the dialog or pressed cancel meaning the result wasn't "OK"
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No file was selected.", # message
+                "No File Selected",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Information # icon
             )
         }
     })
