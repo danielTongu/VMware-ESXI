@@ -123,12 +123,15 @@ class CourseManager {
 
     static [void] CreateCourseVMs([PSCustomObject]$courseInfo) {
         try {
+            # connect to the server
             $conn = $script:Connection
             if (-not $conn) { throw "Not connected to VMware server" }
 
+            # Get the VM host name
             $vmHost = Get-VMHost -Server $conn -ErrorAction Stop | Select-Object -First 1
             if (-not $vmHost) { throw "No available VM host found" }
 
+             # Loop through for the number of students in the class
             foreach ($student in $courseInfo.students) {
 
                 # Create folder name (e.g., "CS361_Student1")
@@ -166,6 +169,8 @@ class CourseManager {
                     
                     # Configure network adapters
                     $adapterNumber = 1
+
+                    # create the servers
                     foreach ($adapter in $server.adapters) {
                         $networkAdapter = "Network Adapter $adapterNumber"
                         
@@ -665,7 +670,7 @@ function Update-ClassManagerWithData {
     #>
     [CmdletBinding()]
     param(
-        [hashtable] $UiRefs,
+        $UiRefs,
         [hashtable] $Data
     )
 
