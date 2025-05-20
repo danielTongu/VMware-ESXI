@@ -725,7 +725,7 @@ function Register-ClassManagerEvents {
     #>
     [CmdletBinding()]
     param(
-        [hashtable] $UiRefs,
+        $UiRefs,
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
