@@ -15,13 +15,13 @@ Add-Type -AssemblyName System.Drawing
 
 # ---------------------------------------------------------------------------
 function Get-LogsData {
-<#
-.SYNOPSIS
-    Retrieve the 100 most-recent vCenter events.
+    <#
+    .SYNOPSIS
+        Retrieve the 100 most-recent vCenter events.
 
-.OUTPUTS
-    @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
-#>
+    .OUTPUTS
+        @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
+    #>
     [CmdletBinding()] param()
 
     $conn = $script:Connection
@@ -37,13 +37,13 @@ function Get-LogsData {
 
 # ---------------------------------------------------------------------------
 function New-LogsLayout {
-<#
-.SYNOPSIS
-    Build the EVENT LOGS UI and return all control references.
+    <#
+    .SYNOPSIS
+        Build the EVENT LOGS UI and return all control references.
 
-.OUTPUTS
-    Hashtable  (no stray output).
-#>
+    .OUTPUTS
+        Hashtable  (no stray output).
+    #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
@@ -138,10 +138,10 @@ function New-LogsLayout {
 
 # ---------------------------------------------------------------------------
 function Update-LogsWithData {
-<#
-.SYNOPSIS
-    Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
-#>
+    <#
+    .SYNOPSIS
+        Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
+    #>
     [CmdletBinding()]
     param([hashtable]$UiRefs,[hashtable]$Data)
 
@@ -185,10 +185,10 @@ function Update-LogsWithData {
 
 # ---------------------------------------------------------------------------
 function Show-LogsView {
-<#
-.SYNOPSIS
-    Entry point: draw or refresh the Logs view.
-#>
+    <#
+    .SYNOPSIS
+        Entry point: draw or refresh the Logs view.
+    #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
