@@ -4,18 +4,20 @@ Add-Type -AssemblyName System.Drawing
 
 $script:ActiveButton = $null
 
-<#
-.SYNOPSIS
-    Displays the main application shell with auto-sized sidebar and content area.
-.DESCRIPTION
-    Builds a SplitContainer with a navigation sidebar and a content panel.
-    Navigation buttons load individual view scripts, and the status bar
-    reflects the current connection in $script:Connection.
-.NOTES
-    Version: 1.0 (revised)
-    Date: 2025-05-14
-#>
+
 function Show-MainView {
+    <#
+    .SYNOPSIS
+        Displays the main application shell with auto-sized sidebar and content area.
+    .DESCRIPTION
+        Builds a SplitContainer with a navigation sidebar and a content panel.
+        Navigation buttons load individual view scripts, and the status bar
+        reflects the current connection in $script:Connection.
+    .NOTES
+        Version: 1.0 (revised)
+        Date: 2025-05-14
+    #>
+
     [CmdletBinding()]
     param()
 
@@ -98,9 +100,9 @@ function Show-MainView {
     # Load nav buttons
     $scriptDir = $PSScriptRoot
     $btnDashboard = New-NavButton -Text 'Dashboard'          -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
-    $btnClasses   = New-NavButton -Text 'Class Management'   -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
-    $btnVMs       = New-NavButton -Text 'Virtual Machines'   -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
-    $btnNetworks  = New-NavButton -Text 'Network Management' -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
+    $btnClasses   = New-NavButton -Text 'Class Manager'   -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
+    $btnVMs       = New-NavButton -Text 'VMs List'   -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
+    $btnNetworks  = New-NavButton -Text 'Network' -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
     $btnOrphans   = New-NavButton -Text 'Orphaned Files'     -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
     $btnLogs      = New-NavButton -Text 'Logs'               -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
 
@@ -133,7 +135,6 @@ function Show-MainView {
             $contentPanel.Controls.Clear()
             Update-StatusBar -StatusPanel $script:StatusPanel
         } else {
-            # Login
             . "$scriptDir\LoginView.ps1"
             if (Show-LoginView) {
                 $this.Text = '   Logout'
@@ -186,13 +187,15 @@ function Show-MainView {
     $main.ShowDialog() | Out-Null
 }
 
-<#
-.SYNOPSIS
-    Updates the status bar with current connection info or offline status.
-.PARAMETER StatusPanel
-    The StatusBarPanel to update.
-#>
+
 function Update-StatusBar {
+    <#
+    .SYNOPSIS
+        Updates the status bar with current connection info or offline status.
+    .PARAMETER StatusPanel
+        The StatusBarPanel to update.
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][System.Windows.Forms.StatusBarPanel]$StatusPanel
@@ -217,15 +220,17 @@ function Update-StatusBar {
     }
 }
 
-<#
-.SYNOPSIS
-    Loads a view script into the content panel.
-.PARAMETER ScriptPath
-    Full path to the .ps1 view script.
-.PARAMETER TargetPanel
-    The panel where the view will render.
-#>
+
 function Load-ViewIntoPanel {
+    <#
+    .SYNOPSIS
+        Loads a view script into the content panel.
+    .PARAMETER ScriptPath
+        Full path to the .ps1 view script.
+    .PARAMETER TargetPanel
+        The panel where the view will render.
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$ScriptPath,
@@ -260,19 +265,21 @@ function Load-ViewIntoPanel {
     }
 }
 
-<#
-.SYNOPSIS
-    Creates a navigation button that loads a view when clicked.
-.PARAMETER Text
-    The button label.
-.PARAMETER ScriptPath
-    Path to associated view script.
-.PARAMETER TargetPanel
-    The panel to load the view into.
-.OUTPUTS
-    System.Windows.Forms.Button
-#>
+
 function New-NavButton {
+    <#
+    .SYNOPSIS
+        Creates a navigation button that loads a view when clicked.
+    .PARAMETER Text
+        The button label.
+    .PARAMETER ScriptPath
+        Path to associated view script.
+    .PARAMETER TargetPanel
+        The panel to load the view into.
+    .OUTPUTS
+        System.Windows.Forms.Button
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Text,
