@@ -1,243 +1,228 @@
-<#
-.SYNOPSIS
-    VMware Management — Login UI.
-.DESCRIPTION
-    Provides a WinForms-based login dialog for vCenter Server authentication.
-#>
+# =============================================================================
+# LogsView.ps1   –   CLEAN IMPLEMENTATION
+# =============================================================================
+#  Prerequisites (defined elsewhere in your application):
+#    $script:IsLoggedIn      – Boolean
+#    $script:Connection      – Active VIServer (same one used by Dashboard)
+#    $script:Theme           – Object with colours: Primary, PrimaryDark,
+#                              LightGray, White
+# -----------------------------------------------------------------------------
 
-
-# Load Required Assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName 'Microsoft.VisualBasic'
 
 
-function Show-LoginView {
-    <#
-    .SYNOPSIS
-        Renders and shows the VMware Management System login dialog.
-    .OUTPUTS
-        [bool]  True if login succeeded; False otherwise.
-    #>
 
+# ---------------------------------------------------------------------------
+function Get-LogsData {
+<#
+.SYNOPSIS
+    Retrieve the 100 most-recent vCenter events.
+
+.OUTPUTS
+    @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
+#>
+    [CmdletBinding()] param()
+
+    $conn = $script:Connection
+    if (-not $conn)             { return $null }
+
+    try   { $events = Get-VIEvent -Server $conn -MaxSamples 100 -ErrorAction Stop }
+    catch { Write-Verbose "LogsView: $($_.Exception.Message)"; return $null }
+
+    return @{ Events=$events; LastUpdated=Get-Date }
+}
+
+
+
+# ---------------------------------------------------------------------------
+function New-LogsLayout {
+<#
+.SYNOPSIS
+    Build the EVENT LOGS UI and return all control references.
+
+.OUTPUTS
+    Hashtable  (no stray output).
+#>
     [CmdletBinding()]
-    param()
+    param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
-    # Initialize result
-    $script:LoginResult = $false
+    [void]$ContentPanel.SuspendLayout()
+    $ContentPanel.Controls.Clear()
+    $ContentPanel.BackColor = $script:Theme.LightGray
 
-    # Create and configure the form
-    $form = New-Object System.Windows.Forms.Form -Property @{
-        Text            = 'VMware Management System'
-        StartPosition   = 'CenterScreen'
-        ClientSize      = [System.Drawing.Size]::new(400,500)
-        FormBorderStyle = 'FixedDialog'
-        MaximizeBox     = $false
-        MinimizeBox     = $false
-        BackColor       = $script:Theme.White
-        Font            = [System.Drawing.Font]::new('Segoe UI',10)
-        AutoScaleMode   = 'Font'
+    # ── root ────────────────────────────────────────────────────────────────
+    $root             = [System.Windows.Forms.TableLayoutPanel]::new()
+    $root.Dock        = 'Fill'; $root.ColumnCount=1; $root.RowCount=4
+    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
+    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    [void]$ContentPanel.Controls.Add($root)
+
+    # ── header ──────────────────────────────────────────────────────────────
+    $hdr               = [System.Windows.Forms.Panel]::new()
+    $hdr.Height        = 60; $hdr.BackColor=$script:Theme.Primary; $hdr.Dock='Fill'
+    [void]$root.Controls.Add($hdr,0,0)
+
+    $title             = [System.Windows.Forms.Label]::new()
+    $title.Text        = 'EVENT LOGS'
+    $title.Font        = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
+    $title.ForeColor   = $script:Theme.White; $title.AutoSize=$true
+    $title.Location    = [System.Drawing.Point]::new(20,15)
+    [void]$hdr.Controls.Add($title)
+
+    # ── filter row ──────────────────────────────────────────────────────────
+    $flt               = [System.Windows.Forms.Panel]::new()
+    $flt.Height        = 50; $flt.BackColor=$script:Theme.LightGray; $flt.Dock='Fill'
+    [void]$root.Controls.Add($flt,0,1)
+
+    $txtFind           = [System.Windows.Forms.TextBox]::new()
+    $txtFind.Width     = 300; $txtFind.Height=30
+    $txtFind.Location  = [System.Drawing.Point]::new(20,10)
+    $txtFind.Font      = [System.Drawing.Font]::new('Segoe UI',10)
+    $txtFind.BackColor = $script:Theme.White; $txtFind.ForeColor=$script:Theme.PrimaryDark
+    [void]$flt.Controls.Add($txtFind)
+
+    $btnSearch         = [System.Windows.Forms.Button]::new()
+    $btnSearch.Text    = 'SEARCH'; $btnSearch.Width=100; $btnSearch.Height=30
+    $btnSearch.Font    = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnSearch.BackColor=$script:Theme.Primary; $btnSearch.ForeColor=$script:Theme.White
+    $btnSearch.Location=[System.Drawing.Point]::new(330,10)
+    [void]$flt.Controls.Add($btnSearch)
+
+    # ── log box ─────────────────────────────────────────────────────────────
+    $scroll            = [System.Windows.Forms.Panel]::new()
+    $scroll.Dock       = 'Fill'; $scroll.BackColor=$script:Theme.White
+    $scroll.Padding    = [System.Windows.Forms.Padding]::new(10)
+    $scroll.AutoScroll = $true
+    [void]$root.Controls.Add($scroll,0,2)
+
+    $txtLogs           = [System.Windows.Forms.TextBox]::new()
+    $txtLogs.Dock      = 'Fill'; $txtLogs.Multiline=$true; $txtLogs.ReadOnly=$true
+    $txtLogs.ScrollBars= 'Vertical'
+    $txtLogs.BackColor = $script:Theme.White; $txtLogs.ForeColor=$script:Theme.PrimaryDark
+    $txtLogs.Font      = [System.Drawing.Font]::new('Segoe UI',10)
+    [void]$scroll.Controls.Add($txtLogs)
+
+    # ── buttons row ─────────────────────────────────────────────────────────
+    $btnRefresh        = [System.Windows.Forms.Button]::new()
+    $btnRefresh.Text   = 'REFRESH'; $btnRefresh.Width=120; $btnRefresh.Height=35
+    $btnRefresh.Font   = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnRefresh.BackColor=$script:Theme.Primary; $btnRefresh.ForeColor=$script:Theme.White
+
+    $btnClear          = [System.Windows.Forms.Button]::new()
+    $btnClear.Text     = 'CLEAR';  $btnClear.Width=120; $btnClear.Height=35
+    $btnClear.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnClear.BackColor=$script:Theme.LightGray; $btnClear.ForeColor=$script:Theme.PrimaryDark
+
+    $ctrls             = [System.Windows.Forms.FlowLayoutPanel]::new()
+    $ctrls.Dock        = 'Fill'; $ctrls.Height=50; $ctrls.Padding=[System.Windows.Forms.Padding]::new(10)
+    [void]$ctrls.Controls.AddRange(@($btnRefresh,$btnClear))
+    [void]$root.Controls.Add($ctrls,0,3)
+
+    [void]$ContentPanel.ResumeLayout($true)
+
+    return @{
+        LogTextBox    = $txtLogs
+        SearchBox     = $txtFind
+        SearchButton  = $btnSearch
+        RefreshButton = $btnRefresh
+        ClearButton   = $btnClear
+        OriginalLines = @()                    # cache for filter restore
+        ContentPanel  = $ContentPanel          # needed for Refresh handler
+    }
+}
+
+
+
+# ---------------------------------------------------------------------------
+function Update-LogsWithData {
+<#
+.SYNOPSIS
+    Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
+#>
+    [CmdletBinding()]
+    param([hashtable]$UiRefs, [hashtable]$Data)
+
+    # Store the original lines in the script scope
+    $script:OriginalLogLines = foreach ($ev in $Data.Events) {
+        $ts = $ev.CreatedTime.ToString('G')
+        $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
+        "[$ts] ($usr) $($ev.FullFormattedMessage)"
     }
 
-    # Logo (optional)
-    $logo = New-Object System.Windows.Forms.PictureBox
-    $logo.SizeMode = 'Zoom'
-    $logo.Size     = [System.Drawing.Size]::new(130,130)
-    $logo.Location = [System.Drawing.Point]::new(135,10)
-    try { $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png") } catch {}
-    $form.Controls.Add($logo)
+    $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
 
-    # Header label
-    $lblHeader = New-Object System.Windows.Forms.Label
-    $lblHeader.Text      = 'Sign In'
-    $lblHeader.Font      = [System.Drawing.Font]::new('Segoe UI',20,[System.Drawing.FontStyle]::Bold)
-    $lblHeader.ForeColor = $script:Theme.Primary
-    $lblHeader.AutoSize  = $true
-    $lblHeader.Location  = [System.Drawing.Point]::new(150,150)
-    
-    $form.Controls.Add($lblHeader)
-
-    # Server selection
-    $lblServer = New-Object System.Windows.Forms.Label -Property @{ Text='vCenter Server'; Location=[System.Drawing.Point]::new(30,200) }
-    $cmbServer = New-Object System.Windows.Forms.ComboBox
-    $cmbServer.Items.AddRange(@($script:Server,'vcenter2.cs.cwu.edu','Other'))
-    $cmbServer.SelectedItem  = $script:Server
-    $cmbServer.DropDownStyle = 'DropDownList'
-    $cmbServer.Location      = [System.Drawing.Point]::new(30,224)
-    $cmbServer.Size          = [System.Drawing.Size]::new(340,35)
-    $cmbServer.Anchor        = 'Top,Left,Right'
-
-    $form.Controls.AddRange(@($lblServer,$cmbServer))
-
-    # Username field
-    $lblUser = New-Object System.Windows.Forms.Label -Property @{ 
-        Text = 'Username'
-        Location = [System.Drawing.Point]::new(30,270) 
-    }
-
-    $txtUser = New-Object System.Windows.Forms.TextBox -Property @{
-        Text     = $script:username
-        Location = [System.Drawing.Point]::new(30,294)
-        Size     = [System.Drawing.Size]::new(340,35)
-        Anchor   = 'Top,Left,Right'
-    }
-
-    $form.Controls.AddRange(@($lblUser,$txtUser))
-
-    # Password field
-    $lblPass = New-Object System.Windows.Forms.Label -Property @{ 
-        Text = 'Password' 
-        Location=[System.Drawing.Point]::new(30,330) 
-    }
-
-    $txtPass = New-Object System.Windows.Forms.TextBox -Property @{
-        Text                    = $script:password
-        UseSystemPasswordChar   = $true
-        MaxLength               = 100
-        Location                = [System.Drawing.Point]::new(30,354)
-        Size                    = [System.Drawing.Size]::new(340,35)
-        Anchor                  = 'Top,Left,Right'
-    }
-
-    $form.Controls.AddRange(@($lblPass,$txtPass))
-
-    # Status label
-    $lblStatus = New-Object System.Windows.Forms.Label -Property @{
-        Location  = [System.Drawing.Point]::new(30,400)
-        Size      = [System.Drawing.Size]::new(340,30)
-        ForeColor = $script:Theme.Error
-        TextAlign = 'MiddleCenter'
-    }
-    $form.Controls.Add($lblStatus)
-
-    # Helper: create styled button
-    function New-StyledButton {
-        [CmdletBinding()]
-        param(
-            [string]                $Text,
-            [System.Drawing.Point]  $Location,
-            [System.Drawing.Color]  $BackColor,
-            [System.Drawing.Color]  $ForeColor,
-            [int]                   $Width = 150,
-            [int]                   $Height = 40
-        )
-
-        $btn = New-Object System.Windows.Forms.Button
-        $btn.Text      = $Text
-        $btn.Location  = $Location
-        $btn.Size      = [System.Drawing.Size]::new($Width,$Height)
-        $btn.Font      = [System.Drawing.Font]::new('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
-        $btn.FlatStyle = 'Flat'
-        $btn.FlatAppearance.BorderSize = 0
-        $btn.BackColor = $BackColor
-        $btn.ForeColor = $ForeColor
-        $btn.FlatAppearance.MouseOverBackColor = $BackColor
-        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(
-            [int]($BackColor.R * 0.7), [int]($BackColor.G * 0.7), [int]($BackColor.B * 0.7)
-        )
-
-        return $btn
-    }
-
-    # Create buttons
-    $btnLogin  = New-StyledButton -Text 'LOGIN'  -Location ([System.Drawing.Point]::new(30,440))  -BackColor $script:Theme.Primary     -ForeColor $script:Theme.White
-    $btnCancel = New-StyledButton -Text 'CANCEL' -Location ([System.Drawing.Point]::new(220,440)) -BackColor $script:Theme.PrimaryDark -ForeColor $script:Theme.White
-    $form.Controls.AddRange(@($btnLogin,$btnCancel))
-    $form.AcceptButton = $btnLogin
-    $form.CancelButton = $btnCancel
-
-    # Button event handlers
-    $btnLogin.Add_Click({
-        $server = if ($cmbServer.Text -eq 'Other') {
-            [Microsoft.VisualBasic.Interaction]::InputBox('Enter vCenter Server Address:','Custom Server',$cmbServer.Items[0])
-        } else { $cmbServer.Text }
-        
-        Handle-Login -Form $form -LoginButton $btnLogin -CancelButton $btnCancel -StatusLabel $lblStatus -UserBox $txtUser -PassBox $txtPass -Server $server
+    # ---------- SEARCH -------------------------------------------------------
+    $UiRefs.SearchButton.Add_Click({
+        try {
+            $term = $script:LogsUiRefs.SearchBox.Text.Trim()
+            if ($term) {
+                $filteredLines = $script:OriginalLogLines | Where-Object { $_ -match [regex]::Escape($term) }
+                $script:LogsUiRefs.LogTextBox.Text = $filteredLines -join "`r`n"
+            }
+            else {
+                $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+            }
+        }
+        catch { 
+            # Error handling
+            [System.Windows.Forms.MessageBox]::Show(
+                "Search error: $_",
+                "Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        }
     })
-    $btnCancel.Add_Click({ Handle-Cancel -Form $form })
 
-    # Show the dialog
-    try {
-        $form.ShowDialog() | Out-Null
-    } finally {
-        $logo.Dispose()
-        $form.Dispose()
+    # ---------- CLEAR --------------------------------------------------------
+    $UiRefs.ClearButton.Add_Click({
+        $script:LogsUiRefs.SearchBox.Clear()
+        $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+    })
+
+   # ---------- REFRESH (rebuilds entire view) ------------------------------
+    $UiRefs.RefreshButton.Add_Click({
+    # Dot-source the script to reload the function definitions
+    . $PSScriptRoot\LogsView.ps1
+    
+    # Use the stored content panel reference
+    if ($script:LogsContentPanel) {
+        Show-LogsView -ContentPanel $script:LogsContentPanel
+    } else {
+        # Error handling in case the reference is lost
+        [System.Windows.Forms.MessageBox]::Show(
+            "Content panel reference was lost. Please navigate back to this view.",
+            "Refresh Error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
     }
-
-    return $script:LoginResult
+})
 }
 
 
 
-
-function Handle-Login {
-    <#
-    .SYNOPSIS
-        Authenticates and stores the vCenter connection on success.
-    #>
-
+# ---------------------------------------------------------------------------
+function global:Show-LogsView {
+<#
+.SYNOPSIS
+    Entry point: draw or refresh the Logs view.
+#>
     [CmdletBinding()]
-    param(
-        [System.Windows.Forms.Form]    $Form,
-        [System.Windows.Forms.Button]  $LoginButton,
-        [System.Windows.Forms.Button]  $CancelButton,
-        [System.Windows.Forms.Label]   $StatusLabel,
-        [System.Windows.Forms.TextBox] $UserBox,
-        [System.Windows.Forms.TextBox] $PassBox,
-        [string]                       $Server
-    )
+    param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
-    # Input validation
-    if ([string]::IsNullOrWhiteSpace($UserBox.Text) -or [string]::IsNullOrWhiteSpace($PassBox.Text)) {
-        $StatusLabel.Text = "Username and password are required"
-        return
+    # Store references in script scope
+    $script:LogsContentPanel = $ContentPanel
+    $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
+    $data = Get-LogsData
+
+    if ($data) {
+        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
     }
-
-    # Disable UI
-    $LoginButton.Enabled = $false
-    $CancelButton.Enabled = $false
-    $Form.Cursor         = [System.Windows.Forms.Cursors]::WaitCursor
-    $StatusLabel.Text    = 'Authenticating...'
-    $Form.Refresh()
-
-    try {
-        # Build credentials and connect
-        $securePwd          = ConvertTo-SecureString $PassBox.Text -AsPlainText -Force
-        $psCred             = New-Object System.Management.Automation.PSCredential($UserBox.Text,$securePwd)
-        $LoginButton.Text   = 'CONNECTING...'
-        $LoginButton.Refresh()
-
-        $script:Server     = $Server
-        $script:Connection = Connect-VIServer -Server $Server -Credential $psCred -ErrorAction Stop
-
-        $script:LoginResult = $true
-        $Form.Close()
+    else {
+        $script:LogsUiRefs.LogTextBox.Text = 'No log data available or not connected.'
     }
-    catch {
-        $StatusLabel.Text = "Login failed: $($_.Exception.Message)"
-    }
-    finally {
-        # Restore UI
-        $LoginButton.Text    = 'LOGIN'
-        $LoginButton.Enabled = $true
-        $CancelButton.Enabled= $true
-        $Form.Cursor         = [System.Windows.Forms.Cursors]::Default
-    }
-}
-
-
-
-
-function Handle-Cancel {
-    <#
-        .SYNOPSIS
-            Cancels login and closes the form.
-    #>
-
-    [CmdletBinding()] param(
-        [System.Windows.Forms.Form] $Form
-    )
-    $script:LoginResult = $false
-    $script:Connection  = $null
-    $Form.Close()
 }
