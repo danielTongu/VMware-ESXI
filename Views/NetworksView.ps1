@@ -297,6 +297,9 @@ function New-NetworksActions {
         [System.Windows.Forms.Panel] $ParentPanel
     )
 
+    # Added refrence for the Parent panel
+    $script:NetworkViewPanel = $ParentPanel
+
     $flow                     = New-Object System.Windows.Forms.FlowLayoutPanel
     $flow.Dock                = 'Fill'
     $flow.Padding             = 10
@@ -315,7 +318,7 @@ function New-NetworksActions {
     $btnRefresh.Add_Click({
         try {
             . "$PSScriptRoot\NetworksView.ps1"
-            Show-NetworksView -ContentPanel $ParentPanel
+            Show-NetworksView -ContentPanel $script:NetworkViewPanel
         }
         catch {
             [System.Windows.Forms.MessageBox]::Show(
