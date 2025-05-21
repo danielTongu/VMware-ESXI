@@ -1,946 +1,664 @@
-# ─────────────────────────  Assemblies  ──────────────────────────────────────
+# ------------------------ Load WinForms and Drawing Assemblies ------------------------
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
-
-# ─────────────────────────  VMware Helper Classes  ───────────────────────────
-class VMwareNetwork {
-    static [array] ListPortGroups() {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { return @() }
-            
-            $portGroups = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | 
-                Select-Object Name, VirtualSwitch, VLanId
-            return $portGroups
-        }
-        catch {
-            Write-Verbose "Failed to list port groups: $_"
-            return @()
-        }
-    }
-}
-
-
-
-class CourseManager {
-    static [array] ListClasses() {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { return @() }
-            
-            # Get all folders that match the pattern "CS###" (course folders)
-            $folders = Get-Folder -Server $conn -Type VM -ErrorAction SilentlyContinue | 
-                Where-Object { $_.Name -match '^CS\d{3}$' } | 
-                Select-Object -ExpandProperty Name
-            return $folders
-        }
-        catch {
-            Write-Verbose "Failed to list classes: $_"
-            return @()
-        }
-    }
-
-    static [array] GetClassStudents([string]$className) {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { return @() }
-            
-            # Get all student folders under the class folder
-            $students = Get-Folder -Server $conn -Name $className -Location (Get-Folder -Name 'vm') -ErrorAction SilentlyContinue | 
-                Get-Folder -ErrorAction SilentlyContinue | 
-                Select-Object -ExpandProperty Name
-            
-            # Extract student IDs (format: ClassName_StudentID)
-            return $students -replace "^${className}_", ""
-        }
-        catch {
-            Write-Verbose "Failed to get class students: $_"
-            return @()
-        }
-    }
-
-    static [array] GetStudentVMs([string]$className, [string]$studentId) {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { return @() }
-            
-            $folderName = "${className}_${studentId}"
-            $vms = Get-VM -Server $conn -Location $folderName -ErrorAction SilentlyContinue | 
-                Select-Object -ExpandProperty Name
-            return $vms
-        }
-        catch {
-            Write-Verbose "Failed to get student VMs: $_"
-            return @()
-        }
-    }
-
-    static [PSCustomObject] GetCourseConfig([string]$className) {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { return $null }
-            
-            # Get first VM in class to determine config
-            $sampleVM = Get-VM -Server $conn -Location "${className}_*" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if (-not $sampleVM) { return $null }
-            
-            # Get VM details
-            $template = $sampleVM.ExtensionData.Config.Template
-            $datastore = $sampleVM.DatastoreIdList | ForEach-Object { 
-                Get-Datastore -Server $conn -Id $_ | Select-Object -ExpandProperty Name 
-            } | Select-Object -First 1
-            
-            # Get network adapters
-            $adapters = $sampleVM | Get-NetworkAdapter | 
-                Select-Object -ExpandProperty NetworkName | 
-                Where-Object { $_ -ne $null }
-            
-            # Get all VMs in class (assuming same config for all)
-            $servers = Get-VM -Server $conn -Location "${className}_*" -ErrorAction SilentlyContinue | 
-                ForEach-Object {
-                    [PSCustomObject]@{
-                        serverName = $_.Name
-                        template = $template
-                        adapters = $adapters
-                        customization = $null
-                    }
-                }
-            
-            return [PSCustomObject]@{
-                classFolder = $className
-                dataStore = $datastore
-                servers = $servers
-                students = [CourseManager]::GetClassStudents($className)
-            }
-        }
-        catch {
-            Write-Verbose "Failed to get course config: $_"
-            return $null
-        }
-    }
-
-    static [void] CreateCourseVMs([PSCustomObject]$courseInfo) {
-        try {
-            # connect to the server
-            $conn = $script:Connection
-            if (-not $conn) { throw "Not connected to VMware server" }
-
-            # Get the VM host name
-            $vmHost = Get-VMHost -Server $conn -ErrorAction Stop | Select-Object -First 1
-            if (-not $vmHost) { throw "No available VM host found" }
-
-             # Loop through for the number of students in the class
-            foreach ($student in $courseInfo.students) {
-
-                # Create folder name (e.g., "CS361_Student1")
-                $folderName = "$($courseInfo.classFolder)_$student"
-
-                # Create or get student folder
-                $studentFolder = Get-Folder -Server $conn -Name $folderName -ErrorAction SilentlyContinue
-                if (-not $studentFolder) {
-                    $studentFolder = New-Folder -Server $conn -Name $folderName -Location (Get-Folder -Name $courseInfo.classFolder) -ErrorAction Stop
-                    
-                    # Set permissions if needed
-                    $account = Get-VIAccount -Server $conn -Name $folderName -Domain "CWU" -ErrorAction SilentlyContinue
-                    if ($account) {
-                        $role = Get-VIRole -Server $conn -Name "StudentUser" -ErrorAction SilentlyContinue
-                        if ($role) {
-                            New-VIPermission -Server $conn -Entity $studentFolder -Principal $account -Role $role -ErrorAction SilentlyContinue | Out-Null
-                        }
-                    }
-                }
-                
-                # Create VMs for this student
-                foreach ($server in $courseInfo.servers) {
-                    $vmName = $server.serverName
-                    
-                    # Create VM from template
-                    if ($server.customization) {
-                        New-VM -Server $conn -Name $vmName -Datastore $courseInfo.dataStore -VMHost $vmHost `
-                            -Template $server.template -Location $studentFolder `
-                            -OSCustomizationSpec $server.customization -ErrorAction Stop | Out-Null
-                    }
-                    else {
-                        New-VM -Server $conn -Name $vmName -Datastore $courseInfo.dataStore -VMHost $vmHost `
-                            -Template $server.template -Location $studentFolder -ErrorAction Stop | Out-Null
-                    }
-                    
-                    # Configure network adapters
-                    $adapterNumber = 1
-
-                    # create the servers
-                    foreach ($adapter in $server.adapters) {
-                        $networkAdapter = "Network Adapter $adapterNumber"
-                        
-                        Get-VM -Server $conn -Name $vmName -Location $studentFolder | 
-                            Get-NetworkAdapter -Name $networkAdapter | 
-                            Set-NetworkAdapter -PortGroup $adapter -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                        $adapterNumber++
-                    }
-                    
-                    # Start VM
-                    Get-VM -Server $conn -Name $vmName -Location $studentFolder | 
-                        Start-VM -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                }
-            }
-        }
-        catch {
-            Write-Error "Failed to create course VMs: $_"
-            throw
-        }
-    }
-
-    static [void] RemoveCourseVMs([string]$className, [array]$studentList) {
-        try {
-            $conn = $script:Connection
-            if (-not $conn) { throw "Not connected to VMware server" }
-            
-            foreach ($student in $studentList) {
-                $folderName = "${className}_${student}"
-                
-                # Stop and remove all VMs in folder
-                $vms = Get-VM -Server $conn -Location $folderName -ErrorAction SilentlyContinue
-                foreach ($vm in $vms) {
-                    if ($vm.PowerState -eq "PoweredOn") {
-                        Stop-VM -Server $conn -VM $vm -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                    }
-                    Remove-VM -Server $conn -VM $vm -DeletePermanently -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                }
-                
-                # Remove folder
-                Get-Folder -Server $conn -Name $folderName -ErrorAction SilentlyContinue | 
-                    Remove-Folder -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-            }
-        }
-        catch {
-            Write-Verbose "Failed to remove course VMs: $_"
-            throw $_
-        }
-    }
-}
-
-
-
-
-
-# ─────────────────────────  Public entry point  ──────────────────────────────
 function Show-ClassesView {
     <#
     .SYNOPSIS
-        Renders the Course Manager view in the supplied WinForms panel.
+        Initializes and renders the Classes management UI, loads class/template/datastore/network data,
+        and wires up all UI event handlers for class operations.
     .PARAMETER ContentPanel
-        The host panel into which the view is drawn.
+        Panel to host the UI.
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [System.Windows.Forms.Panel] $ContentPanel
+        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    # Keep panel reference for refresh
     $script:ClassesContentPanel = $ContentPanel
+    $script:ClassesUiRefs = New-ClassManagerLayout -ContentPanel $ContentPanel
+    $conn = $script:Connection
 
-    try {
-        # 1 ─ Build the empty UI
-        $uiRefs = New-ClassManagerLayout -ContentPanel $ContentPanel
+    if ($conn) {
+        try {
+            # Update timestamp
+            $script:ClassesUiRefs.StatusLabel.Text = "Getting data..."
 
-        # 2 ─ Gather data (may be $null when disconnected)
-        $data = Get-ClassManagerData
+            $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
+            $classes    = Get-Folder -Server $conn -Type VM -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
 
-        # 3 ─ Populate or warn
-        if ($data) {
-            Update-ClassManagerWithData -UiRefs $uiRefs -Data $data
-            $ContentPanel.Refresh()
+            $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
+            Update-ClassManagerWithData -UiRefs $script:ClassesUiRefs -Data $data
         }
-        else {
-            $uiRefs['StatusLabel'].Text = 'No connection to VMware server'
-            $uiRefs['StatusLabel'].ForeColor = $script:Theme.Error
+        catch {
+            [System.Windows.Forms.MessageBox]::Show("Initialization failed: $($_.Exception.Message)", 'Error','OK','Error')
         }
     }
-    catch {
-        Write-Verbose "Class manager initialization failed: $_"
-    }
+
+    $ContentPanel.Refresh()
+    Wire-UIEvents -UiRefs $script:ClassesUiRefs -ContentPanel $ContentPanel
 }
 
 
-
-
-
-# ─────────────────────────  Data collection  ─────────────────────────────────
-function Get-ClassManagerData {
-    <#
-    .SYNOPSIS
-        Retrieves templates, datastores, networks and course list.
-    .OUTPUTS
-        [hashtable] - Keys: Templates, Datastores, Networks, Classes
-    #>
-    [CmdletBinding()] param()
-
-    try {
-        $conn = $script:Connection
-        if (-not $conn) { return $null }
-
-        $data = @{
-            Templates   = @()
-            Datastores  = @()
-            Networks    = @()
-            Classes     = @()
-            LastUpdated = Get-Date
-        }
-
-        # Each section isolated - one failure doesn't break everything
-        try { $data.Templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name }
-        catch { $data.Templates = @() }
-
-        try { $data.Datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name }
-        catch { $data.Datastores = @() }
-
-        try { $data.Networks   = [VMwareNetwork]::ListPortGroups() | Select-Object -ExpandProperty Name }
-        catch { $data.Networks = @() }
-
-        try { $data.Classes    = [CourseManager]::ListClasses() }
-        catch { $data.Classes = @() }
-
-        return $data
-    }
-    catch {
-        Write-Verbose "Data collection failed: $_"
-        return $null
-    }
-}
-
-
-
-
-
-# ─────────────────────────  Layout builders  ─────────────────────────────────
 function New-ClassManagerLayout {
     <#
     .SYNOPSIS
-        Builds the Course Manager UI (header, tab-control, status bar).
+        Constructs the UI layout with header, tabs (Overview, Basic, Advanced), and footer.
+    .PARAMETER ContentPanel
+        Panel to host the UI.
     .OUTPUTS
-        [hashtable] - references to frequently accessed controls.
+        Hashtable of references to key UI controls (labels, buttons, tab controls, etc.)
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [System.Windows.Forms.Panel] $ContentPanel
+        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    try {
-        $ContentPanel.SuspendLayout()
-        $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $script:Theme.LightGray
+    $ContentPanel.Controls.Clear()
+    $ContentPanel.BackColor = $script:Theme.LightGray
 
+    # Root layout
+    $root = New-Object System.Windows.Forms.TableLayoutPanel
+    $root.Dock = 'Fill'
+    $root.ColumnCount = 1; $root.RowCount = 3
+    $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $ContentPanel.Controls.Add($root)
 
-        # ── Root table ───────────────────────────────────────────────────────
-        $root = New-Object System.Windows.Forms.TableLayoutPanel
-        $root.Dock = 'Fill'
-        $root.ColumnCount = 1
-        $root.RowCount = 3
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $ContentPanel.Controls.Add($root)
+    # Header
+    $header = New-Object System.Windows.Forms.Panel
+    $header.Dock = 'Fill'
+    $header.Height = 80
+    $header.BackColor = $script:Theme.Primary
 
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = 'CLASS MANAGEMENT'
+    $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = $script:Theme.White
+    $lblTitle.Location = New-Object System.Drawing.Point(20, 15)
+    $lblTitle.AutoSize = $true
+    $header.Controls.Add($lblTitle)
 
-        # ── Header ───────────────────────────────────────────────────────────
-        $header = New-Object System.Windows.Forms.Panel
-        $header.Dock = 'Fill'
-        $header.Height = 80
-        $header.BackColor = $script:Theme.Primary
-        $root.Controls.Add($header, 0, 0)
+    $lblLast = New-Object System.Windows.Forms.Label
+    $lblLast.Name = 'LastRefreshLabel'
+    $lblLast.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $lblLast.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $lblLast.ForeColor = $script:Theme.White
+    $lblLast.Location = New-Object System.Drawing.Point(20, 45)
+    $lblLast.AutoSize = $true
+    $header.Controls.Add($lblLast)
 
-        $title = New-Object System.Windows.Forms.Label
-        $title.Text = 'COURSE MANAGER'
-        $title.Font = New-Object System.Drawing.Font('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
-        $title.ForeColor = $script:Theme.White
-        $title.AutoSize = $true
-        $title.Location = New-Object System.Drawing.Point(20,20)
-        $header.Controls.Add($title)
+    $root.Controls.Add($header, 0, 0)
 
+    # Main TabControl
+    $mainPanel = New-Object System.Windows.Forms.Panel
+    $mainPanel.Dock = 'Fill'
+    $mainPanel.BackColor = $script:Theme.LightGray
+    $root.Controls.Add($mainPanel, 0, 1)
 
-        # ── TabControl ────────────────────────────────────────────────────────
-        $tabs = New-Object System.Windows.Forms.TabControl
-        $tabs.Dock = 'Fill'
-        $tabs.SizeMode = 'Fixed'
-        $tabs.ItemSize = New-Object System.Drawing.Size(150,40)
-        $tabs.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $root.Controls.Add($tabs, 0, 1)
+    $tabs = New-Object System.Windows.Forms.TabControl
+    $tabs.Dock = 'Fill'
+    $tabs.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+    $tabs.Padding = New-Object System.Drawing.Point(20, 10)
+    $mainPanel.Controls.Add($tabs)
 
-        $refs = @{ TabControl = $tabs; Tabs = @{} }
+    # Overview Tab
+    $overview = New-Object System.Windows.Forms.TabPage 'Overview'
+    $overview.BackColor = $script:Theme.White
 
+    $tree = New-Object System.Windows.Forms.TreeView
+    $tree.Name = 'OverviewTree'
+    $tree.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $tree.Dock = 'Fill'
 
-        # 1. Overview Tab ─────────────────────────────────────────────────────
-        $tabOverview = New-Object System.Windows.Forms.TabPage 'Overview'
-        $tabOverview.BackColor = $script:Theme.White
-        $tabs.TabPages.Add($tabOverview)
-        $refs.Tabs['Overview'] = @{}
+    $btnOvRefresh = New-Object System.Windows.Forms.Button
+    $btnOvRefresh.Name = 'OverviewRefreshButton'
+    $btnOvRefresh.Text = 'REFRESH'
+    $btnOvRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+    $btnOvRefresh.Size = New-Object System.Drawing.Size(120, 35)
+    $btnOvRefresh.BackColor = $script:Theme.Primary
+    $btnOvRefresh.ForeColor = $script:Theme.White
+    $btnOvRefresh.FlatStyle = 'Flat'
 
-        $ovLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $ovLayout.Dock = 'Fill'
-        $ovLayout.RowCount = 2
-        $ovLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-        $ovLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $tabOverview.Controls.Add($ovLayout)
+    $ovPanel = New-Object System.Windows.Forms.TableLayoutPanel
+    $ovPanel.Dock = 'Fill'
+    $ovPanel.ColumnCount = 1
+    $ovPanel.RowCount = 2
+    $ovPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent', 100))
+    $ovPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent', 100))
+    $ovPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
 
-        # Tree view
-        $treePanel = New-Object System.Windows.Forms.Panel
-        $treePanel.Dock = 'Fill'
-        $treePanel.Padding = New-Object System.Windows.Forms.Padding(10)
-        $treePanel.BackColor = $script:Theme.White
-        $ovLayout.Controls.Add($treePanel, 0, 0)
+    $ovPanel.Controls.Add($tree, 0, 0)
+    $ovPanel.Controls.Add($btnOvRefresh, 0, 1)
 
-        $tree = New-Object System.Windows.Forms.TreeView
-        $tree.Dock = 'Fill'
-        $tree.BackColor = $script:Theme.White
-        $tree.ForeColor = $script:Theme.PrimaryDark
-        $treePanel.Controls.Add($tree)
-        $refs.Tabs['Overview']['ClassTree'] = $tree
+    $overview.Controls.Add($ovPanel)
+    $tabs.TabPages.Add($overview)
 
-        # Refresh button
-        $btnRefresh = New-Object System.Windows.Forms.Button
-        $btnRefresh.Text = 'REFRESH'
-        $btnRefresh.Size = New-Object System.Drawing.Size(120,40)
-        $btnRefresh.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnRefresh.BackColor = $script:Theme.Primary
-        $btnRefresh.ForeColor = $script:Theme.White
+    # Basic Tab
+    $basic = New-Object System.Windows.Forms.TabPage 'Basic'
+    $basic.BackColor = $script:Theme.White
 
-        $flowButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $flowButtons.Dock = 'Fill'
-        $flowButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $flowButtons.Controls.Add($btnRefresh)
-        $ovLayout.Controls.Add($flowButtons, 0, 1)
-        $refs.Tabs['Overview']['RefreshButton'] = $btnRefresh
+    $lblClass = New-Object System.Windows.Forms.Label
+    $lblClass.Text = 'Class Name:'
+    $lblClass.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $lblClass.AutoSize = $true
 
+    $txtClass = New-Object System.Windows.Forms.TextBox
+    $txtClass.Name = 'BasicClassName'
+    $txtClass.Dock = 'Fill'
+    $txtClass.Font = New-Object System.Drawing.Font('Segoe UI', 9)
 
-        # 2. Basic Setup Tab ──────────────────────────────────────────────────
-        $tabBasic = New-Object System.Windows.Forms.TabPage 'Basic Setup'
-        $tabBasic.BackColor = $script:Theme.White
-        $tabs.TabPages.Add($tabBasic)
-        $refs.Tabs['Basic'] = @{}
+    $lblStu = New-Object System.Windows.Forms.Label
+    $lblStu.Text = 'Students (one per line):'
+    $lblStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $lblStu.AutoSize = $true
 
-        $basicLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $basicLayout.Dock = 'Fill'
-        $basicLayout.RowCount = 3
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-        $basicLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $tabBasic.Controls.Add($basicLayout)
+    $txtStu = New-Object System.Windows.Forms.TextBox
+    $txtStu.Name = 'BasicStudents'
+    $txtStu.Dock = 'Fill'
+    $txtStu.Multiline = $true
+    $txtStu.ScrollBars = 'Vertical'
+    $txtStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
 
-        # Input grid
-        $inputGrid = New-Object System.Windows.Forms.TableLayoutPanel
-        $inputGrid.Dock = 'Fill'
-        $inputGrid.ColumnCount = 2
-        $inputGrid.RowCount = 2
-        $inputGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'AutoSize'))
-        $inputGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
-        $basicLayout.Controls.Add($inputGrid, 0, 1)
+    $btnCreate = New-Object System.Windows.Forms.Button
+    $btnCreate.Name = 'CreateFoldersButton'
+    $btnCreate.Text = 'Create Folders'
+    $btnCreate.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnCreate.Size = New-Object System.Drawing.Size(150, 35)
+    $btnCreate.BackColor = $script:Theme.Primary
+    $btnCreate.ForeColor = $script:Theme.White
+    $btnCreate.FlatStyle = 'Flat'
 
-        # Class name
-        $lblClassName = New-Object System.Windows.Forms.Label
-        $lblClassName.Text = 'Class Name:'
-        $lblClassName.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblClassName.Dock = 'Fill'
-        $lblClassName.TextAlign = 'MiddleRight'
-        $lblClassName.AutoSize = $true
-        $inputGrid.Controls.Add($lblClassName, 0, 0)
+    $bl = New-Object System.Windows.Forms.TableLayoutPanel
+    $bl.Dock = 'Fill'
+    $bl.ColumnCount = 2
+    $bl.RowCount = 3
+    $bl.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    $bl.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', 100)))
+    $bl.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize')))
+    $bl.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('Percent', 100)))
+    $bl.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize')))
 
-        $txtClassName = New-Object System.Windows.Forms.TextBox
-        $txtClassName.Dock = 'Fill'
-        $txtClassName.BackColor = $script:Theme.White
-        $inputGrid.Controls.Add($txtClassName, 1, 0)
-        $refs.Tabs['Basic']['ClassNameTextBox'] = $txtClassName
+    $bl.Controls.Add($lblClass, 0, 0)
+    $bl.Controls.Add($txtClass, 1, 0)
+    $bl.Controls.Add($lblStu, 0, 1)
+    $bl.Controls.Add($txtStu, 1, 1)
+    $bl.Controls.Add($btnCreate, 1, 2)
 
-        # Student list
-        $lblStudents = New-Object System.Windows.Forms.Label
-        $lblStudents.Text = 'Students (ID per line):'
-        $lblStudents.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblStudents.Dock = 'Fill'
-        $lblStudents.TextAlign = 'TopRight'
-        $lblStudents.AutoSize = $true
-        $inputGrid.Controls.Add($lblStudents, 0, 1)
+    $basic.Controls.Add($bl)
+    $tabs.TabPages.Add($basic)
 
-        $txtStudents = New-Object System.Windows.Forms.TextBox
-        $txtStudents.Multiline = $true
-        $txtStudents.ScrollBars = 'Vertical'
-        $txtStudents.Dock = 'Fill'
-        $txtStudents.BackColor = $script:Theme.White
-        $inputGrid.Controls.Add($txtStudents, 1, 1)
-        $refs.Tabs['Basic']['StudentsTextBox'] = $txtStudents
+    # Advanced Tab
+    $advanced = New-Object System.Windows.Forms.TabPage 'Advanced'; 
+    $advanced.BackColor = $script:Theme.White; 
+    $advanced.AutoScroll = $true
+    $tabs.TabPages.Add($advanced)
 
-        # Create folders button
-        $btnCreateFolders = New-Object System.Windows.Forms.Button
-        $btnCreateFolders.Text = 'CREATE FOLDERS'
-        $btnCreateFolders.Size = New-Object System.Drawing.Size(150,40)
-        $btnCreateFolders.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnCreateFolders.BackColor = $script:Theme.Primary
-        $btnCreateFolders.ForeColor = $script:Theme.White
+    $advLayout = New-Object System.Windows.Forms.TableLayoutPanel
+    $advLayout.Dock = 'Fill'
+    $advLayout.AutoSize = $true
+    $advLayout.ColumnCount = 2
+    $advLayout.RowCount = 3
+    $advLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent',50)))
+    $advLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent',50)))
+    $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize')))
+    $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('Percent',100)))
+    $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize')))
+    $advanced.Controls.Add($advLayout)
 
-        $flowButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $flowButtons.Dock = 'Fill'
-        $flowButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $flowButtons.Controls.Add($btnCreateFolders)
-        $basicLayout.Controls.Add($flowButtons, 0, 2)
-        $refs.Tabs['Basic']['CreateFoldersButton'] = $btnCreateFolders
+    # Advanced Tab - Class Configuration Group (Row 0, Col 0) ------
+    $groupConfig = New-Object System.Windows.Forms.GroupBox
+    $groupConfig.Text    = "Class Configuration"
+    $groupConfig.Font    = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+    $groupConfig.Dock    = 'Fill'
+    $groupConfig.Height = 150
+    $groupConfig.Padding = New-Object System.Windows.Forms.Padding(10)
+    $advLayout.Controls.Add($groupConfig,0,0)
 
+    $layoutConfig = New-Object System.Windows.Forms.TableLayoutPanel
+    $layoutConfig.Dock        = 'Fill'
+    $layoutConfig.ColumnCount = 2
+    $layoutConfig.RowCount    = 3
+    $layoutConfig.ColumnStyles.Add( (New-Object System.Windows.Forms.ColumnStyle('AutoSize')) )
+    $layoutConfig.ColumnStyles.Add( (New-Object System.Windows.Forms.ColumnStyle('Percent', 100)) )
+    $layoutConfig.RowStyles.Add( (New-Object System.Windows.Forms.RowStyle('AutoSize')) )
+    $layoutConfig.RowStyles.Add( (New-Object System.Windows.Forms.RowStyle('AutoSize')) )
+    $layoutConfig.RowStyles.Add( (New-Object System.Windows.Forms.RowStyle('AutoSize')) )
+    $groupConfig.Controls.Add($layoutConfig)
 
-        # 3. Advanced Tab ─────────────────────────────────────────────────────
-        $tabAdvanced = New-Object System.Windows.Forms.TabPage 'Advanced'
-        $tabAdvanced.BackColor = $script:Theme.White
-        $tabs.TabPages.Add($tabAdvanced)
-        $refs.Tabs['Advanced'] = @{}
+    $lblClassAdv = New-Object System.Windows.Forms.Label
+    $lblClassAdv.Text = 'Class:'
+    $lblClassAdv.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($lblClassAdv,0,0)
 
-        $advLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $advLayout.Dock = 'Fill'
-        $advLayout.RowCount = 3
-        $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-        $advLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $tabAdvanced.Controls.Add($advLayout)
+    $cmbClass = New-Object System.Windows.Forms.ComboBox
+    $cmbClass.Name = 'AdvClass'
+    $cmbClass.DropDownStyle = 'DropDownList'
+    $cmbClass.Dock = 'Fill'
+    $cmbClass.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($cmbClass,1,0)
 
+    $lblTpl = New-Object System.Windows.Forms.Label
+    $lblTpl.Text = 'Template:'
+    $lblTpl.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($lblTpl,0,1)
 
-        # Input grid
-        $inputGrid = New-Object System.Windows.Forms.TableLayoutPanel
-        $inputGrid.Dock = 'Fill'
-        $inputGrid.ColumnCount = 2
-        $inputGrid.RowCount = 5
-        $inputGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'AutoSize'))
-        $inputGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
-        $advLayout.Controls.Add($inputGrid, 0, 1)
+    $cmbTpl = New-Object System.Windows.Forms.ComboBox
+    $cmbTpl.Name = 'AdvTemplate'
+    $cmbTpl.DropDownStyle = 'DropDownList'
+    $cmbTpl.Dock = 'Fill'
+    $cmbTpl.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($cmbTpl,1,1)
 
+    $lblDs = New-Object System.Windows.Forms.Label
+    $lblDs.Text = 'Datastore:'
+    $lblDs.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($lblDs,0,2)
 
+    $cmbDs = New-Object System.Windows.Forms.ComboBox
+    $cmbDs.Name = 'AdvDatastore'
+    $cmbDs.DropDownStyle = 'DropDownList'
+    $cmbDs.Dock = 'Fill'
+    $cmbDs.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $layoutConfig.Controls.Add($cmbDs,1,2)
+    
+    # Advanced Tab Class Network Group (Row 0, Col 1) ------
+    $groupNet = New-Object System.Windows.Forms.GroupBox
+    $groupNet.Text    = "Check networks to enable"
+    $groupNet.Font    = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+    $groupNet.Dock    = 'Fill'
+    $groupNet.Padding = New-Object System.Windows.Forms.Padding(10)
+    $advLayout.Controls.Add($groupNet,1,0)
 
-        # Class combo
-        $lblClass = New-Object System.Windows.Forms.Label
-        $lblClass.Text = 'Class:'
-        $lblClass.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblClass.Dock = 'Fill'
-        $lblClass.TextAlign = 'MiddleRight'
-        $lblClass.AutoSize = $true
-        $inputGrid.Controls.Add($lblClass, 0, 0)
+    $panelNet = New-Object System.Windows.Forms.Panel
+    $panelNet.Dock       = 'Fill'
+    $panelNet.AutoScroll = $true
+    $groupNet.Controls.Add($panelNet)
 
-        $cmbClass = New-Object System.Windows.Forms.ComboBox
-        $cmbClass.Dock = 'Fill'
-        $cmbClass.DropDownStyle = 'DropDownList'
-        $inputGrid.Controls.Add($cmbClass, 1, 0)
-        $refs.Tabs['Advanced']['ClassComboBox'] = $cmbClass
+    $clbNet = New-Object System.Windows.Forms.CheckedListBox
+    $clbNet.Name = 'AdvNetwork'
+    $clbNet.CheckOnClick = $true
+    $clbNet.Dock = 'Fill'
+    $clbNet.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $panelNet.Controls.Add($clbNet)
 
+    # Advanced Tab - Class  Server Definitions Group (Row 2, Col 0–1) ------
+    $groupServers = New-Object System.Windows.Forms.GroupBox
+    $groupServers.Text    = "Server Definitions (VMs to deploy per student)"
+    $groupServers.Font    = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+    $groupServers.Dock    = 'Fill'
+    $groupServers.AutoSize  = $true
+    $groupServers.MinimumSize = New-Object System.Drawing.Size(0,150)
+    $groupServers.Padding = New-Object System.Windows.Forms.Padding(10)
+    $advLayout.SetColumnSpan($groupServers,2)
+    $advLayout.Controls.Add($groupServers,2,0)
 
-        # Template combo
-        $lblTemplate = New-Object System.Windows.Forms.Label
-        $lblTemplate.Text = 'Template:'
-        $lblTemplate.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblTemplate.Dock = 'Fill'
-        $lblTemplate.TextAlign = 'MiddleRight'
-        $lblTemplate.AutoSize = $true
-        $inputGrid.Controls.Add($lblTemplate, 0, 1)
+    $gridScrollPanel = New-Object System.Windows.Forms.Panel
+    $gridScrollPanel.Dock       = 'Fill'
+    $gridScrollPanel.AutoScroll = $true
+    $groupServers.Controls.Add($gridScrollPanel)
 
-        $cmbTemplate = New-Object System.Windows.Forms.ComboBox
-        $cmbTemplate.Dock = 'Fill'
-        $cmbTemplate.DropDownStyle = 'DropDownList'
-        $inputGrid.Controls.Add($cmbTemplate, 1, 1)
-        $refs.Tabs['Advanced']['TemplateComboBox'] = $cmbTemplate
+    $dgv = New-Object System.Windows.Forms.DataGridView
+    $dgv.Name = 'ServersGrid'
+    $dgv.Dock = 'Fill'
+    $dgv.AutoSizeColumnsMode = 'Fill'
+    $dgv.RowHeadersVisible = $false
+    $dgv.AllowUserToAddRows = $true
+    $dgv.AllowUserToDeleteRows = $true
+    $gridScrollPanel.Controls.Add($dgv)
 
+    $col1 = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+    $col1.Name = 'ServerName'
+    $col1.HeaderText = 'Server Name'
+    $dgv.Columns.Add($col1)
 
-        # Datastore combo
-        $lblDatastore = New-Object System.Windows.Forms.Label
-        $lblDatastore.Text = 'Datastore:'
-        $lblDatastore.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblDatastore.Dock = 'Fill'
-        $lblDatastore.TextAlign = 'MiddleRight'
-        $lblDatastore.AutoSize = $true
-        $inputGrid.Controls.Add($lblDatastore, 0, 2)
+    $col2 = New-Object System.Windows.Forms.DataGridViewComboBoxColumn
+    $col2.Name = 'Template'
+    $col2.HeaderText = 'Template'
+    $dgv.Columns.Add($col2)
 
-        $cmbDatastore = New-Object System.Windows.Forms.ComboBox
-        $cmbDatastore.Dock = 'Fill'
-        $cmbDatastore.DropDownStyle = 'DropDownList'
-        $inputGrid.Controls.Add($cmbDatastore, 1, 2)
-        $refs.Tabs['Advanced']['DatastoreComboBox'] = $cmbDatastore
+    $col3 = New-Object System.Windows.Forms.DataGridViewComboBoxColumn
+    $col3.Name = 'Network'
+    $col3.HeaderText = 'Network'
+    $dgv.Columns.Add($col3)
 
+    # Advanced Tab - Class Buttons (Row 2, Col 0-1) ------
+    $btnPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $btnPanel.FlowDirection = 'LeftToRight'
+    $btnPanel.AutoSize = $true
+    $btnPanel.Controls.AddRange(@($btnAdvRefresh,$btnCreateVM,$btnDelete))
+    $advLayout.SetColumnSpan($btnPanel,2)
+    $advLayout.Controls.Add($btnPanel,3,0)
 
-        # Networks checklist
-        $lblNetworks = New-Object System.Windows.Forms.Label
-        $lblNetworks.Text = 'Networks:'
-        $lblNetworks.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblNetworks.Dock = 'Fill'
-        $lblNetworks.TextAlign = 'TopRight'
-        $lblNetworks.AutoSize = $true
-        $inputGrid.Controls.Add($lblNetworks, 0, 3)
+    $btnAdvRefresh = New-Object System.Windows.Forms.Button
+    $btnAdvRefresh.Name = 'AdvRefresh'
+    $btnAdvRefresh.Text = 'REFRESH'
+    $btnAdvRefresh.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnAdvRefresh.Size = New-Object System.Drawing.Size(120,35)
+    $btnAdvRefresh.BackColor = $script:Theme.Primary
+    $btnAdvRefresh.ForeColor = $script:Theme.White
+    $btnAdvRefresh.FlatStyle = 'Flat'
+    $btnPanel.Controls.Add($btnAdvRefresh)
 
-        $clbNetworks = New-Object System.Windows.Forms.CheckedListBox
-        $clbNetworks.CheckOnClick = $true
-        $clbNetworks.Dock = 'Fill'
-        $inputGrid.Controls.Add($clbNetworks, 1, 3)
-        $refs.Tabs['Advanced']['NetworkListBox'] = $clbNetworks
+    $btnCreateVM = New-Object System.Windows.Forms.Button
+    $btnCreateVM.Name = 'CreateVMsButton'
+    $btnCreateVM.Text = 'CREATE VMS'
+    $btnCreateVM.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnCreateVM.Size = New-Object System.Drawing.Size(150,35)
+    $btnCreateVM.BackColor = $script:Theme.Primary
+    $btnCreateVM.ForeColor = $script:Theme.White
+    $btnCreateVM.FlatStyle = 'Flat'
+    $btnPanel.Controls.Add($btnCreateVM)
 
+    $btnDelete = New-Object System.Windows.Forms.Button
+    $btnDelete.Name = 'DeleteClassButton'
+    $btnDelete.Text = 'DELETE CLASS'
+    $btnDelete.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnDelete.Size = New-Object System.Drawing.Size(150,35)
+    $btnDelete.BackColor = $script:Theme.Error
+    $btnDelete.ForeColor = $script:Theme.White
+    $btnDelete.FlatStyle = 'Flat' 
+    $btnPanel.Controls.Add($btnDelete)
 
-        # Servers grid
-        $lblServers = New-Object System.Windows.Forms.Label
-        $lblServers.Text = 'Servers:'
-        $lblServers.Font = New-Object System.Drawing.Font('Segoe UI',10)
-        $lblServers.Dock = 'Fill'
-        $lblServers.TextAlign = 'TopRight'
-        $lblServers.AutoSize = $true
-        $inputGrid.Controls.Add($lblServers, 0, 4)
+    # Footer
+    $footer = New-Object System.Windows.Forms.Panel
+    $footer.Dock = 'Fill'
+    $footer.Height = 30
+    $footer.BackColor = $script:Theme.LightGray
+    $root.Controls.Add($footer,0,2)
 
-        $gridServers = New-Object System.Windows.Forms.DataGridView
-        $gridServers.Dock = 'Fill'
-        $gridServers.RowHeadersVisible = $false
-        $gridServers.AllowUserToAddRows = $true
-        $gridServers.AllowUserToDeleteRows = $true
-        $gridServers.AutoSizeColumnsMode = 'Fill'
+    $lblStatus = New-Object System.Windows.Forms.Label
+    $lblStatus.Name = 'StatusLabel'
+    $lblStatus.Text = 'No Connection'
+    $lblStatus.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $lblStatus.ForeColor = $script:Theme.PrimaryDark
+    $lblStatus.AutoSize = $true
+    $lblStatus.Location = New-Object System.Drawing.Point(10,5)
+    $footer.Controls.Add($lblStatus)
 
-
-        # Add columns
-        foreach ($hdr in @('Server Name','Template','Adapters')) {
-            $col = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-            $col.HeaderText = $hdr
-            $col.SortMode = 'NotSortable'
-            $gridServers.Columns.Add($col) | Out-Null
+    # Return references
+    return @{
+        Header = @{
+            LastRefreshLabel = $lblLast
         }
-        $inputGrid.Controls.Add($gridServers, 1, 4)
-        $refs.Tabs['Advanced']['ServersGrid'] = $gridServers
-
-
-        # Buttons
-        $btnCreateVMs = New-Object System.Windows.Forms.Button
-        $btnCreateVMs.Text = 'CREATE VMs'
-        $btnCreateVMs.Size = New-Object System.Drawing.Size(150,40)
-        $btnCreateVMs.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnCreateVMs.BackColor = $script:Theme.Primary
-        $btnCreateVMs.ForeColor = $script:Theme.White
-
-        $btnDeleteClass = New-Object System.Windows.Forms.Button
-        $btnDeleteClass.Text = 'DELETE CLASS'
-        $btnDeleteClass.Size = New-Object System.Drawing.Size(150,40)
-        $btnDeleteClass.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnDeleteClass.BackColor = $script:Theme.Error
-        $btnDeleteClass.ForeColor = $script:Theme.White
-
-        $flowButtons = New-Object System.Windows.Forms.FlowLayoutPanel
-        $flowButtons.Dock = 'Fill'
-        $flowButtons.Padding = New-Object System.Windows.Forms.Padding(5)
-        $flowButtons.Controls.AddRange(@($btnCreateVMs, $btnDeleteClass))
-        $advLayout.Controls.Add($flowButtons, 0, 2)
-
-        $refs.Tabs['Advanced']['CreateVMsButton'] = $btnCreateVMs
-        $refs.Tabs['Advanced']['DeleteClassButton'] = $btnDeleteClass
-
-
-        # ── Status bar ───────────────────────────────────────────────────────
-        $statusPanel = New-Object System.Windows.Forms.Panel
-        $statusPanel.Dock = 'Fill'
-        $statusPanel.Height = 30
-        $statusPanel.BackColor = $script:Theme.LightGray
-        $root.Controls.Add($statusPanel, 0, 2)
-
-        $statusLabel = New-Object System.Windows.Forms.Label
-        $statusLabel.Name = 'StatusLabel'
-        $statusLabel.Text = 'DISCONNECTED'
-        $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI',9)
-        $statusLabel.ForeColor = $script:Theme.PrimaryDark
-        $statusLabel.Dock = 'Fill'
-        $statusLabel.TextAlign = 'MiddleLeft'
-        $statusPanel.Controls.Add($statusLabel)
-        $refs['StatusLabel'] = $statusLabel
-
-
-        # ── Event hooks ──────────────────────────────────────────────────────
-        Register-ClassManagerEvents -UiRefs $refs -ContentPanel $ContentPanel
-
-        return $refs
+        Tabs = @{
+            Overview = @{
+                RefreshButton = $btnOvRefresh
+                TreeView      = $tree
+            }
+            Basic = @{
+                ClassNameTextBox    = $txtClass
+                StudentsTextBox     = $txtStu
+                CreateFoldersButton = $btnCreate
+            }
+            Advanced = @{
+                RefreshButton     = $btnAdvRefresh
+                ClassComboBox    = $cmbClass
+                TemplateComboBox = $cmbTpl
+                DatastoreComboBox= $cmbDs
+                NetworkListBox   = $clbNet
+                ServersGrid      = $dgv
+                CreateVMsButton  = $btnCreateVM
+                DeleteClassButton= $btnDelete
+            }
+        }
+        StatusLabel = $lblStatus
     }
-    finally {
-        $ContentPanel.ResumeLayout($true)
-    }
+    
+    finally { $ContentPanel.ResumeLayout($true) }
 }
 
 
-
-
-
-# ─────────────────────────  Data-to-UI binder  ───────────────────────────────
 function Update-ClassManagerWithData {
     <#
     .SYNOPSIS
-        Pushes all collected data sets into the corresponding UI controls.
+        Updates the UI controls with the latest data (classes, templates, datastores, networks).
+    .PARAMETER UiRefs
+        Hashtable of UI control references.
+    .PARAMETER Data
+        Hashtable containing data to bind to the UI.
     #>
+    
     [CmdletBinding()]
     param(
         $UiRefs,
-        [hashtable] $Data
+        [hashtable]$Data
     )
+    try {
+        $conn = $script:Connection
+        # Update timestamp
+        $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss'))"
 
-
-    # Populate combos/lists
-    $UiRefs.Tabs['Advanced']['TemplateComboBox'].Items.Clear()
-    $UiRefs.Tabs['Advanced']['TemplateComboBox'].Items.AddRange($Data.Templates)
-
-    $UiRefs.Tabs['Advanced']['DatastoreComboBox'].Items.Clear()
-    $UiRefs.Tabs['Advanced']['DatastoreComboBox'].Items.AddRange($Data.Datastores)
-
-    $clb = $UiRefs.Tabs['Advanced']['NetworkListBox']
-    $clb.Items.Clear()
-    $clb.Items.AddRange($Data.Networks)
-
-    $cmb = $UiRefs.Tabs['Advanced']['ClassComboBox']
-    $cmb.Items.Clear()
-    $cmb.Items.AddRange($Data.Classes)
-
-
-    # Build overview tree
-    $tree = $UiRefs.Tabs['Overview']['ClassTree']
-    $tree.Nodes.Clear()
-
-    foreach ($cls in $Data.Classes) {
-        $clsNode = New-Object System.Windows.Forms.TreeNode($cls)
-
-        $students = [CourseManager]::GetClassStudents($cls) -as [string[]]
-        foreach ($stu in $students) {
-            $stuNode = New-Object System.Windows.Forms.TreeNode($stu)
-
-            $vms = [CourseManager]::GetStudentVMs($cls, $stu) -as [string[]]
-            foreach ($vm in $vms) {
-                $stuNode.Nodes.Add($vm) | Out-Null
+        # Populate Overview tree
+        $tree = $UiRefs.Tabs.Overview.TreeView
+        $tree.Nodes.Clear()
+        foreach ($cls in $Data.Classes) {
+            $nCls = $tree.Nodes.Add($cls)
+            if ($conn) {
+                $students = Get-Folder -Server $conn -Name $cls -ErrorAction SilentlyContinue |
+                            Get-Folder -ErrorAction SilentlyContinue |
+                            Select-Object -ExpandProperty Name
+            } else { $students = @() }
+            foreach ($stu in $students) {
+                $nStu = $nCls.Nodes.Add($stu)
+                if ($conn) {
+                    $folder = Get-Folder -Server $conn -Name $cls -ErrorAction SilentlyContinue |
+                              Get-Folder -ErrorAction SilentlyContinue |
+                              Where-Object { $_.Name -eq $stu }
+                    $vms = if ($folder) { Get-VM -Server $conn -Location $folder -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name } else { @() }
+                } else { $vms = @() }
+                foreach ($vm in $vms) { $nStu.Nodes.Add($vm) }
             }
+        }
+        # Clear Basic inputs
+        $UiRefs.Tabs.Basic.ClassNameTextBox.Text = ''
+        $UiRefs.Tabs.Basic.StudentsTextBox.Text = ''
 
-            $clsNode.Nodes.Add($stuNode) | Out-Null
+        # Populate Advanced Tab controls
+        $combo = $UiRefs.Tabs.Advanced.ClassComboBox
+        $combo.Items.Clear()
+        $Data.Classes | ForEach-Object { $combo.Items.Add($_) }
+        if ($combo.Items.Count -gt 0) { $combo.SelectedIndex = 0 }
+
+        $combo = $UiRefs.Tabs.Advanced.TemplateComboBox
+        $combo.Items.Clear()
+        $Data.Templates | ForEach-Object { $combo.Items.Add($_) }
+        if ($combo.Items.Count -gt 0) { $combo.SelectedIndex = 0 }
+
+        $combo = $UiRefs.Tabs.Advanced.DatastoreComboBox
+        $combo.Items.Clear()
+        $Data.Datastores | ForEach-Object { $combo.Items.Add($_) }
+        if ($combo.Items.Count -gt 0) { $combo.SelectedIndex = 0 }
+
+        $clb = $UiRefs.Tabs.Advanced.NetworkListBox
+        $clb.Items.Clear()
+        $Data.Networks | ForEach-Object { $clb.Items.Add($_.Name) }
+        if ($clb.Items.Count -gt 0) { $clb.SetItemChecked(0, $true) }
+
+        $dgv = $UiRefs.Tabs.Advanced.ServersGrid
+        $dgv.Rows.Clear()
+        $dgv.Columns['Template'].DataSource = $Data.Templates
+        $dgv.Columns['Network'].DataSource = $clb.CheckedItems
+
+        # Optional default entries
+        @('DC', 'FS', 'WEB') | ForEach-Object {
+            $r = $dgv.Rows.Add()
+            $dgv.Rows[$r].Cells['ServerName'].Value = $_
         }
 
-        $tree.Nodes.Add($clsNode) | Out-Null
-    }
+        # Auto-update networks in grid
+        $clb.Add_ItemCheck({ $dgv.Columns['Network'].DataSource = $clb.CheckedItems })
 
-    # Update status
-    $UiRefs['StatusLabel'].Text = "Data loaded at $($Data.LastUpdated.ToString('HH:mm:ss'))"
-    $UiRefs['StatusLabel'].ForeColor = $script:Theme.Success
+        # Update status
+        $UiRefs.StatusLabel.Text = "Data loaded ($($Data.Classes.Count) classes, $($Data.Networks.Count) networks)"}
+    catch {
+        $UiRefs.StatusLabel.Text = "Error loading data: $($_.Exception.Message)"
+        Write-Error "Failed to update UI: $_"
+    }
 }
 
 
-
-
-
-# ─────────────────────────  Event hooks  ─────────────────────────────────────
-function Register-ClassManagerEvents {
+function Wire-UIEvents {
     <#
     .SYNOPSIS
-        Connects buttons & combo events to their handlers.
+        Wires up all UI event handlers for the Classes management view.
+    .PARAMETER UiRefs
+        Hashtable of UI control references.
+    .PARAMETER ContentPanel
+        Panel hosting the UI.
     #>
+
     [CmdletBinding()]
     param(
-        [hashtable] $UiRefs,
-        [System.Windows.Forms.Panel] $ContentPanel
+        [Parameter(Mandatory)] $UiRefs,
+        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
     )
+    $conn = $script:Connection
 
-
-
-    # REFRESH button
-    $UiRefs.Tabs['Overview']['RefreshButton'].Add_Click({
-        Show-ClassesView -ContentPanel $ContentPanel
+    # Overview Refresh
+    $UiRefs.Tabs.Overview.RefreshButton.Add_Click({
+        if ($conn) {  Show-ClassesView -ContentPanel $ContentPanel} 
     })
 
-
-
-    # CREATE FOLDERS button
-    $UiRefs.Tabs['Basic']['CreateFoldersButton'].Add_Click({
-        $className = $UiRefs.Tabs['Basic']['ClassNameTextBox'].Text.Trim()
-        if ([string]::IsNullOrWhiteSpace($className)) {
-            [System.Windows.Forms.MessageBox]::Show(
-                'Please enter a class name first.',
-                'Input Required',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
-            return
+    # Basic Create Folders
+    $UiRefs.Tabs.Basic.CreateFoldersButton.Add_Click({
+        if (-not $conn) { return }
+        $className = $UiRefs.Tabs.Basic.ClassNameTextBox.Text.Trim()
+        
+        if ([string]::IsNullOrWhiteSpace($className)) { 
+            [System.Windows.Forms.MessageBox]::Show('Enter a class name first.','Input Required','OK','Information')
+            return 
         }
-
         try {
-            $studentsText = $UiRefs.Tabs['Basic']['StudentsTextBox'].Text
-            $students = $studentsText -split "`r`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            $students = $UiRefs.Tabs.Basic.StudentsTextBox.Text -split "`r`n" | Where-Object { $_ }
+            $script:CurrentClassStudents = $students
+            $classFolder = Get-Folder -Server $conn -Name $className -ErrorAction SilentlyContinue
             
-            # Create folders for each student
-            $conn = $script:Connection
-            if (-not $conn) { throw "Not connected to VMware server" }
-            
-            $parentFolder = Get-Folder -Server $conn -Name $className -ErrorAction SilentlyContinue
-            if (-not $parentFolder) {
-                $parentFolder = New-Folder -Server $conn -Name $className -Location (Get-Folder -Name 'vm') -ErrorAction Stop
+            if (-not $classFolder) { 
+                $classFolder = New-Folder -Server $conn -Name $className -Location (Get-Folder -Name 'vm') 
             }
+
+            $existing = Get-Folder -Server $conn -Name $className | Get-Folder
             
-            foreach ($student in $students) {
-                $folderName = "${className}_${student}"
-                $studentFolder = Get-Folder -Server $conn -Name $folderName -ErrorAction SilentlyContinue
-                if (-not $studentFolder) {
-                    $studentFolder = New-Folder -Server $conn -Name $folderName -Location $parentFolder -ErrorAction Stop
-                    
-                    # Set permissions (if needed)
-                    $account = Get-VIAccount -Server $conn -Name $folderName -Domain "CWU" -ErrorAction SilentlyContinue
-                    if ($account) {
-                        $role = Get-VIRole -Server $conn -Name "StudentUser" -ErrorAction SilentlyContinue
-                        if ($role) {
-                            New-VIPermission -Server $conn -Entity $studentFolder -Principal $account -Role $role -ErrorAction SilentlyContinue | Out-Null
-                        }
-                    }
+            foreach ($student in $students) { 
+                if (-not ($existing | Where-Object { $_.Name -eq $student })) { 
+                    New-Folder -Server $conn -Name $student -Location $classFolder | Out-Null 
                 }
             }
             
-            [System.Windows.Forms.MessageBox]::Show(
-                "Folders created for $className",
-                'Success',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
+            [System.Windows.Forms.MessageBox]::Show("Folders created for $className",'Success','OK','Information')
             
-            # Refresh view
             Show-ClassesView -ContentPanel $ContentPanel
-        }
-        catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to create folders: $($_.Exception.Message)",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
+        } catch { 
+            [System.Windows.Forms.MessageBox]::Show("Failed: $($_.Exception.Message)",'Error','OK','Error') 
         }
     })
 
-
-
-
-    # CLASS selection changed
-    $UiRefs.Tabs['Advanced']['ClassComboBox'].Add_SelectedIndexChanged({
-        $className = $UiRefs.Tabs['Advanced']['ClassComboBox'].SelectedItem
-        if (-not $className) { return }
-
-        try {
-            $cfg = [CourseManager]::GetCourseConfig($className)
-            if (-not $cfg) { throw "No configuration found for class $className" }
-            
-            # Update template and datastore
-            $UiRefs.Tabs['Advanced']['TemplateComboBox'].SelectedItem = $cfg.servers[0].template
-            $UiRefs.Tabs['Advanced']['DatastoreComboBox'].SelectedItem = $cfg.dataStore
-            
-            # Update networks
-            $clb = $UiRefs.Tabs['Advanced']['NetworkListBox']
-            for ($i = 0; $i -lt $clb.Items.Count; $i++) {
-                $item = $clb.Items[$i]
-                $clb.SetItemChecked($i, ($cfg.servers[0].adapters -contains $item))
-            }
-            
-            # Update servers grid
-            $grid = $UiRefs.Tabs['Advanced']['ServersGrid']
-            $grid.Rows.Clear()
-            
-            foreach ($server in $cfg.servers) {
-                $row = $grid.Rows.Add()
-                $grid.Rows[$row].Cells[0].Value = $server.serverName
-                $grid.Rows[$row].Cells[1].Value = $server.template
-                $grid.Rows[$row].Cells[2].Value = ($server.adapters -join ',')
-            }
-        }
-        catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to load course configuration: $($_.Exception.Message)",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
+    # Advanced Refresh
+    $UiRefs.Tabs.Advanced.RefreshButton.Add_Click({ 
+        if ($conn) { Show-ClassesView -ContentPanel $ContentPanel } 
     })
 
+    # Advanced Create VMs
+    $UiRefs.Tabs.Advanced.CreateVMsButton.Add_Click({
+        if (-not $conn) { return }
+        $cls = $UiRefs.Tabs.Advanced.ClassComboBox.SelectedItem
 
-
-
-    # CREATE VMs button
-    $UiRefs.Tabs['Advanced']['CreateVMsButton'].Add_Click({
-        $className = $UiRefs.Tabs['Advanced']['ClassComboBox'].SelectedItem
-        if (-not $className) {
-            [System.Windows.Forms.MessageBox]::Show('Please select a class first.', 'Input Required')
-            return
+        if (-not $cls) { 
+            [System.Windows.Forms.MessageBox]::Show('Select a class first.','Input Required','OK','Information')
+            return 
         }
 
-        # Build servers array from grid
+        if ($UiRefs.Tabs.Advanced.NetworkListBox.CheckedItems.Count -eq 0) { 
+            [System.Windows.Forms.MessageBox]::Show('Select at least one network.','Input Required','OK','Information')
+            return 
+        }
+
         $servers = @()
-        $grid = $UiRefs.Tabs['Advanced']['ServersGrid']
-        
-        foreach ($row in $grid.Rows) {
+        foreach ($row in $UiRefs.Tabs.Advanced.ServersGrid.Rows) {
             if (-not $row.IsNewRow) {
                 $servers += [PSCustomObject]@{
-                    serverName = $row.Cells[0].Value
-                    template = $row.Cells[1].Value
-                    adapters = ($row.Cells[2].Value -split '\s*,\s*')
-                    customization = $null
+                    Name     = $row.Cells['ServerName'].Value
+                    Template = $row.Cells['Template'].Value
+                    Network  = $row.Cells['Network'].Value
                 }
             }
         }
 
-        $courseInfo = [PSCustomObject]@{
-            classFolder = $className
-            dataStore = $UiRefs.Tabs['Advanced']['DatastoreComboBox'].SelectedItem
-            servers = $servers
-            students = [CourseManager]::GetClassStudents($className)
+        $students = if ($script:CurrentClassStudents) { 
+            $script:CurrentClassStudents 
+        } else { 
+            Get-Folder -Server $conn -Name $cls | Get-Folder | Select-Object -ExpandProperty Name 
         }
 
+        $datastore = $UiRefs.Tabs.Advanced.DatastoreComboBox.SelectedItem
+
         try {
-            [CourseManager]::CreateCourseVMs($courseInfo)
-            [System.Windows.Forms.MessageBox]::Show('VM creation started.', 'Success')
-            
-            # Refresh view after operation completes
-            Start-Job -ScriptBlock {
-                Start-Sleep -Seconds 5
-                [System.Windows.Forms.Application]::DoEvents()
-                Show-ClassesView -ContentPanel $script:ClassesContentPanel
-            } | Out-Null
-        }
-        catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to create VMs: $($_.Exception.Message)",
-                'Error',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
+            $classFolder = Get-Folder -Server $conn -Name $cls -ErrorAction SilentlyContinue
+            if (-not $classFolder) { 
+                $classFolder = New-Folder -Server $conn -Name $cls -Location (Get-Folder -Name 'vm') 
+            }
+
+            foreach ($student in $students) {
+                $studentFolder = Get-Folder -Server $conn -Name $cls | Get-Folder | Where-Object Name -eq $student
+                if (-not $studentFolder) { 
+                    $studentFolder = New-Folder -Server $conn -Name $student -Location $classFolder 
+                }
+                foreach ($s in $servers) {
+                    New-VM -Server $conn `
+                        -Name ("{0}_{1}" -f $s.Name, $student) `
+                        -Template $s.Template `
+                        -Datastore $datastore `
+                        -NetworkName $s.Network `
+                        -Location $studentFolder `
+                        -ErrorAction Stop | Out-Null
+                }
+            }
+
+            [System.Windows.Forms.MessageBox]::Show('VM creation started.','Success','OK','Information')
+            Start-Job -ScriptBlock { Start-Sleep -Seconds 2; Show-ClassesView -ContentPanel $script:ClassesContentPanel } | Out-Null
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Failed: $($_.Exception.Message)",'Error','OK','Error')
         }
     })
 
+    # Advanced Delete Class
+    $UiRefs.Tabs.Advanced.DeleteClassButton.Add_Click({
+        if (-not $conn) { return }
 
-
-    # DELETE CLASS button
-    $UiRefs.Tabs['Advanced']['DeleteClassButton'].Add_Click({
-        $className = $UiRefs.Tabs['Advanced']['ClassComboBox'].SelectedItem
-        if (-not $className) {
-            [System.Windows.Forms.MessageBox]::Show('Please select a class first.', 'Input Required')
+        $cls = $UiRefs.Tabs.Advanced.ClassComboBox.SelectedItem
+        if (-not $cls) {
+            [System.Windows.Forms.MessageBox]::Show('Select a class first.','Input Required','OK','Information')
             return
         }
 
         $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "Delete ALL VMs for class '$className'?",
-            'Confirm Deletion',
+            "Delete ALL VMs and folders for '$cls'?",
+            'Confirm',
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         )
 
-        if ($confirm -eq 'Yes') {
-            try {
-                [CourseManager]::RemoveCourseVMs($className, [CourseManager]::GetClassStudents($className))
-                [System.Windows.Forms.MessageBox]::Show('Class deletion started.', 'Success')
-                
-                # Refresh view after operation completes
-                Start-Job -ScriptBlock {
-                    Start-Sleep -Seconds 5
-                    [System.Windows.Forms.Application]::DoEvents()
-                    Show-ClassesView -ContentPanel $script:ClassesContentPanel
-                } | Out-Null
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+        try {
+            $students = Get-Folder -Server $conn -Name $cls | Get-Folder | Select-Object -ExpandProperty Name
+            foreach ($student in $students) {
+                $folder = Get-Folder -Server $conn -Name $cls | Get-Folder | Where-Object Name -eq $student
+                Get-VM -Server $conn -Location $folder | ForEach-Object {
+                    Remove-VM -Server $conn -VM $_ -DeletePermanently -Confirm:$false
+                }
+                Remove-Folder -Server $conn -Folder $folder -Confirm:$false
             }
-            catch {
-                [System.Windows.Forms.MessageBox]::Show(
-                    "Failed to delete class: $($_.Exception.Message)",
-                    'Error',
-                    [System.Windows.Forms.MessageBoxButtons]::OK,
-                    [System.Windows.Forms.MessageBoxIcon]::Error
-                )
-            }
+            [System.Windows.Forms.MessageBox]::Show('Deletion started.','Success','OK','Information')
+            Start-Job -ScriptBlock { Start-Sleep -Seconds 2; Show-ClassesView -ContentPanel $script:ClassesContentPanel } | Out-Null
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Failed: $($_.Exception.Message)",'Error','OK','Error')
         }
     })
 }
