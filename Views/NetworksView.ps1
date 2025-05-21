@@ -213,7 +213,7 @@ function New-NetworksHeader {
 
     $lblRefresh         = New-Object System.Windows.Forms.Label
     $lblRefresh.Name    = 'LastRefreshLabel'
-    $lblRefresh.Text    = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $lblRefresh.Text    = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
     $lblRefresh.Font    = New-Object System.Drawing.Font('Segoe UI',9)
     $lblRefresh.ForeColor = $script:Theme.White
     $lblRefresh.Location  = New-Object System.Drawing.Point(20,60)
@@ -351,7 +351,7 @@ function Update-NetworksWithData {
     }
 
     # ── Last-refresh -------------------------------------------------------------
-    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # ── Hosts --------------------------------------------------------------------
     $grid = $UiRefs['HostsTable']
