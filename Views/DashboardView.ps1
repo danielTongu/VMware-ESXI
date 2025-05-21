@@ -268,7 +268,7 @@ function New-DashboardHeader {
 
     $lblRefresh         = New-Object System.Windows.Forms.Label
     $lblRefresh.Name    = 'LastRefreshLabel'
-    $lblRefresh.Text    = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $lblRefresh.Text    = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
     $lblRefresh.Font    = New-Object System.Drawing.Font('Segoe UI',9)
     $lblRefresh.ForeColor = $script:Theme.White
     $lblRefresh.Location  = New-Object System.Drawing.Point(20,60)
@@ -427,7 +427,9 @@ function New-DashboardActions {
         [ref] $Refs,
         [System.Windows.Forms.Panel] $ParentPanel
     )
-
+    # Added refrence for the ParentPanel
+    $script:DashboardContentPanel = $ParentPanel
+    
     $flow                     = New-Object System.Windows.Forms.FlowLayoutPanel
     $flow.Dock                = 'Fill'
     $flow.Padding             = 10
@@ -446,7 +448,7 @@ function New-DashboardActions {
     $btnRefresh.Add_Click({
         try {
             . "$PSScriptRoot\DashboardView.ps1"
-            Show-DashboardView -ContentPanel $ParentPanel
+            Show-DashboardView -ContentPanel $script:DashboardContentPanel
         }
         catch {
             [System.Windows.Forms.MessageBox]::Show(
@@ -503,7 +505,7 @@ function Update-DashboardWithData {
     }
 
     # ── Last-refresh -------------------------------------------------------------
-    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # ── Alerts & events ----------------------------------------------------------
     $grid = $UiRefs['AlertsTable']
