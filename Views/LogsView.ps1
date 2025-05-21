@@ -15,13 +15,13 @@ Add-Type -AssemblyName System.Drawing
 
 # ---------------------------------------------------------------------------
 function Get-LogsData {
-    <#
-    .SYNOPSIS
-        Retrieve the 100 most-recent vCenter events.
+<#
+.SYNOPSIS
+    Retrieve the 100 most-recent vCenter events.
 
-    .OUTPUTS
-        @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
-    #>
+.OUTPUTS
+    @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
+#>
     [CmdletBinding()] param()
 
     $conn = $script:Connection
@@ -37,13 +37,13 @@ function Get-LogsData {
 
 # ---------------------------------------------------------------------------
 function New-LogsLayout {
-    <#
-    .SYNOPSIS
-        Build the EVENT LOGS UI and return all control references.
+<#
+.SYNOPSIS
+    Build the EVENT LOGS UI and return all control references.
 
-    .OUTPUTS
-        Hashtable  (no stray output).
-    #>
+.OUTPUTS
+    Hashtable  (no stray output).
+#>
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
@@ -138,63 +138,91 @@ function New-LogsLayout {
 
 # ---------------------------------------------------------------------------
 function Update-LogsWithData {
-    <#
-    .SYNOPSIS
-        Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
-    #>
+<#
+.SYNOPSIS
+    Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
+#>
     [CmdletBinding()]
-    param([hashtable]$UiRefs,[hashtable]$Data)
+    param([hashtable]$UiRefs, [hashtable]$Data)
 
-    # ---------- full log text ------------------------------------------------
-    $UiRefs.OriginalLines = foreach ($ev in $Data.Events) {
-        $ts  = $ev.CreatedTime.ToString('G')
-        $usr = if ($ev.UserName){$ev.UserName}else{'N/A'}
+    # Store the original lines in the script scope
+    $script:OriginalLogLines = foreach ($ev in $Data.Events) {
+        $ts = $ev.CreatedTime.ToString('G')
+        $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
         "[$ts] ($usr) $($ev.FullFormattedMessage)"
     }
-    $UiRefs.LogTextBox.Text = $UiRefs.OriginalLines -join "`r`n"
+
+    $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
 
     # ---------- SEARCH -------------------------------------------------------
-    $search = {
-        $term   = $UiRefs.SearchBox.Text.Trim()
-        $UiRefs.LogTextBox.Text = if ($term) {
-            ($UiRefs.OriginalLines | Where-Object { $_ -match [regex]::Escape($term) }) -join "`r`n"
-        } else {
-            $UiRefs.OriginalLines -join "`r`n"
+    $UiRefs.SearchButton.Add_Click({
+        try {
+            $term = $script:LogsUiRefs.SearchBox.Text.Trim()
+            if ($term) {
+                $filteredLines = $script:OriginalLogLines | Where-Object { $_ -match [regex]::Escape($term) }
+                $script:LogsUiRefs.LogTextBox.Text = $filteredLines -join "`r`n"
+            }
+            else {
+                $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+            }
         }
-    }
-    [void]$UiRefs.SearchButton.Add_Click($search)
-    [void]$UiRefs.SearchBox.Add_KeyDown({
-        if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
-            $UiRefs.SearchButton.PerformClick(); $_.SuppressKeyPress=$true
+        catch { 
+            # Error handling
+            [System.Windows.Forms.MessageBox]::Show(
+                "Search error: $_",
+                "Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
         }
     })
 
     # ---------- CLEAR --------------------------------------------------------
-    [void]$UiRefs.ClearButton.Add_Click({
-        $UiRefs.SearchBox.Clear()
-        $UiRefs.LogTextBox.Text = $UiRefs.OriginalLines -join "`r`n"
+    $UiRefs.ClearButton.Add_Click({
+        $script:LogsUiRefs.SearchBox.Clear()
+        $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
     })
 
-    # ---------- REFRESH (rebuilds entire view) ------------------------------
-    [void]$UiRefs.RefreshButton.Add_Click({
-        Show-LogsView -ContentPanel $UiRefs.ContentPanel
-    })
+   # ---------- REFRESH (rebuilds entire view) ------------------------------
+    $UiRefs.RefreshButton.Add_Click({
+    # Dot-source the script to reload the function definitions
+    . $PSScriptRoot\LogsView.ps1
+    
+    # Use the stored content panel reference
+    if ($script:LogsContentPanel) {
+        Show-LogsView -ContentPanel $script:LogsContentPanel
+    } else {
+        # Error handling in case the reference is lost
+        [System.Windows.Forms.MessageBox]::Show(
+            "Content panel reference was lost. Please navigate back to this view.",
+            "Refresh Error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+    }
+})
 }
 
 
 
 # ---------------------------------------------------------------------------
-function Show-LogsView {
-    <#
-    .SYNOPSIS
-        Entry point: draw or refresh the Logs view.
-    #>
+function global:Show-LogsView {
+<#
+.SYNOPSIS
+    Entry point: draw or refresh the Logs view.
+#>
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
-    $ui   = New-LogsLayout -ContentPanel $ContentPanel
+    # Store references in script scope
+    $script:LogsContentPanel = $ContentPanel
+    $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
     $data = Get-LogsData
 
-    if ($data) { Update-LogsWithData -UiRefs $ui -Data $data }
-    else       { $ui.LogTextBox.Text = 'No log data available or not connected.' }
+    if ($data) {
+        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
+    }
+    else {
+        $script:LogsUiRefs.LogTextBox.Text = 'No log data available or not connected.'
+    }
 }
