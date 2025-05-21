@@ -3,16 +3,16 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
-
-<#
-    .SYNOPSIS
-        Displays the Orphans view in the UI.
-    .DESCRIPTION
-        Initializes the Orphans view layout and populates it with data.
-    .PARAMETER ContentPanel
-        The Windows.Forms.Panel where this view is rendered.
-#>
 function Show-OrphansView {
+    <#
+        .SYNOPSIS
+            Displays the Orphans view in the UI.
+        .DESCRIPTION
+            Initializes the Orphans view layout and populates it with data.
+        .PARAMETER ContentPanel
+            The Windows.Forms.Panel where this view is rendered.
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -45,17 +45,17 @@ function Show-OrphansView {
 
 
 
-<#
-    .SYNOPSIS
-        Creates the layout for the Orphan Cleaner view.
-    .DESCRIPTION
-        Builds the UI skeleton with header, filters, data grid, and controls.
-    .PARAMETER ContentPanel
-        The Windows.Forms.Panel to populate.
-    .OUTPUTS
-        Hashtable of UI element references.
-#>
 function New-OrphanCleanerLayout {
+    <#
+        .SYNOPSIS
+            Creates the layout for the Orphan Cleaner view.
+        .DESCRIPTION
+            Builds the UI skeleton with header, filters, data grid, and controls.
+        .PARAMETER ContentPanel
+            The Windows.Forms.Panel to populate.
+        .OUTPUTS
+            Hashtable of UI element references.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -223,15 +223,16 @@ function New-OrphanCleanerLayout {
 
 
 
-<#
-    .SYNOPSIS
-        Retrieves available datastores from vSphere.
-    .DESCRIPTION
-        Returns the list of datastore names and timestamp, or $null if disconnected.
-    .OUTPUTS
-        Hashtable with Datastores and LastUpdated.
-#>
+
 function Get-OrphanCleanerData {
+    <#
+        .SYNOPSIS
+            Retrieves available datastores from vSphere.
+        .DESCRIPTION
+            Returns the list of datastore names and timestamp, or $null if disconnected.
+        .OUTPUTS
+            Hashtable with Datastores and LastUpdated.
+    #>
     [CmdletBinding()]
     param()
 
@@ -250,17 +251,19 @@ function Get-OrphanCleanerData {
 
 
 
-<#
-    .SYNOPSIS
-        Updates the Orphan Cleaner view with retrieved data.
-    .DESCRIPTION
-        Populates dropdown, grid columns, and wires event handlers for refresh, delete, and search.
-    .PARAMETER UiRefs
-        Hashtable of UI element references.
-    .PARAMETER Data
-        Hashtable containing datastores and timestamp.
-#>
+
 function Update-OrphanCleanerWithData {
+    <#
+        .SYNOPSIS
+            Updates the Orphan Cleaner view with retrieved data.
+        .DESCRIPTION
+            Populates dropdown, grid columns, and wires event handlers for refresh, delete, and search.
+        .PARAMETER UiRefs
+            Hashtable of UI element references.
+        .PARAMETER Data
+            Hashtable containing datastores and timestamp.
+    #>
+
     [CmdletBinding()]
     param(
         [hashtable]$UiRefs,

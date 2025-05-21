@@ -7,10 +7,10 @@ Add-Type -AssemblyName 'System.Drawing'
 
 
 function Show-VMsView {
-<#
-.SYNOPSIS
-    Renders the “Virtual Machines” view into the supplied WinForms panel.
-#>
+    <#
+    .SYNOPSIS
+        Renders the “Virtual Machines” view into the supplied WinForms panel.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -51,10 +51,10 @@ function Show-VMsView {
 
 
 function New-VMsLayout {
-<#
-.SYNOPSIS
-    Builds the WinForms layout and returns references to key controls.
-#>
+    <#
+    .SYNOPSIS
+        Builds the WinForms layout and returns references to key controls.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -70,11 +70,9 @@ function New-VMsLayout {
         $root              = New-Object System.Windows.Forms.TableLayoutPanel
         $root.Dock         = 'Fill'
         $root.ColumnCount  = 1
-        $root.RowCount     = 5
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $root.RowCount     = 3
         $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
         $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
-        $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
         $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
         $ContentPanel.Controls.Add($root)
 
@@ -93,12 +91,23 @@ function New-VMsLayout {
         $titleLabel.AutoSize        = $true
         $header.Controls.Add($titleLabel)
 
-        # ----- Filter bar --------------------------------------------------------
+        # ----- Main Layout --------------------------------------------------------
+        $mainLayout              = New-Object System.Windows.Forms.TableLayoutPanel
+        $mainLayout.Dock         = 'Fill'
+        $mainLayout.ColumnCount  = 1
+        $mainLayout.RowCount     = 3
+        $mainLayout.BackColor = $script:Theme.White
+        $mainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $mainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
+        $mainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+        $root.Controls.Add($mainLayout,0,1)
+
+        # ----- Main Layout - Filter bar --------------------------------------------------------
         $filterPanel                = New-Object System.Windows.Forms.Panel
         $filterPanel.Dock           = 'Fill'
         $filterPanel.Height         = 50
-        $filterPanel.BackColor      = $script:Theme.LightGray
-        $root.Controls.Add($filterPanel, 0, 1)
+        $filterPanel.BackColor      = $script:Theme.White
+        $mainLayout.Controls.Add($filterPanel, 0, 0)
 
         $searchBox                  = New-Object System.Windows.Forms.TextBox
         $searchBox.Name             = 'txtFilter'
@@ -120,15 +129,15 @@ function New-VMsLayout {
         $searchBtn.ForeColor        = $script:Theme.White
         $filterPanel.Controls.Add($searchBtn)
 
-        # ----- Grid container ----------------------------------------------------
+        # ----- Main Layout - Grid --------------------------------------------------------------
         $gridContainer              = New-Object System.Windows.Forms.Panel
         $gridContainer.Dock         = 'Fill'
+        $gridContainer.Autosize     = $true
         $gridContainer.AutoScroll   = $true
         $gridContainer.Padding      = New-Object System.Windows.Forms.Padding(10)
         $gridContainer.BackColor    = $script:Theme.White
-        $root.Controls.Add($gridContainer, 0, 2)
+        $mainLayout.Controls.Add($gridContainer, 0, 1)
 
-        # ----- DataGridView ------------------------------------------------------
         $grid                       = New-Object System.Windows.Forms.DataGridView
         $grid.Name                  = 'gvVMs'
         $grid.Dock                  = 'Fill'
@@ -140,11 +149,9 @@ function New-VMsLayout {
         $grid.AutoGenerateColumns   = $false
         $grid.BackgroundColor       = $script:Theme.White
         $grid.BorderStyle           = 'FixedSingle'
-        $grid.ColumnHeadersDefaultCellStyle.Font =
-            New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+        $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
         $gridContainer.Controls.Add($grid)
 
-        # ----- Numbering column (#) ---------------------------------------------
         $numCol                     = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
         $numCol.Name                = 'No'
         $numCol.HeaderText          = '#'
@@ -153,7 +160,6 @@ function New-VMsLayout {
         $numCol.SortMode            = 'NotSortable'
         $grid.Columns.Add($numCol) | Out-Null
 
-        # ----- Explicit VM columns ----------------------------------------------
         $columns = @(
             @{ Name='Name'      ; Header='VM Name'     },
             @{ Name='PowerState'; Header='Status'      },
@@ -171,14 +177,13 @@ function New-VMsLayout {
             $grid.Columns.Add($gridCol) | Out-Null
         }
 
-        # ----- Action buttons ----------------------------------------------------
+        # ----- Main Layout - Action buttons ----------------------------------------------------
         $actions                    = New-Object System.Windows.Forms.FlowLayoutPanel
         $actions.Dock               = 'Fill'
         $actions.Height             = 50
         $actions.FlowDirection      = 'LeftToRight'
-        $actions.BackColor          = $script:Theme.LightGray
         $actions.Padding            = New-Object System.Windows.Forms.Padding(10,5,10,5)
-        $root.Controls.Add($actions, 0, 3)
+        $mainLayout.Controls.Add($actions, 0, 2)
 
         $actionDefs = @(
             @{ Key='Refresh' ; Text='REFRESH'  },
@@ -204,14 +209,15 @@ function New-VMsLayout {
         # ----- Footer status label ----------------------------------------------
         $statusLabel                = New-Object System.Windows.Forms.Label
         $statusLabel.Name           = 'StatusLabel'
-        $statusLabel.Text           = 'DISCONNECTED'
-        $statusLabel.AutoSize       = $true
+        $statusLabel.Text           = 'No Connection'
         $statusLabel.Font           = New-Object System.Drawing.Font('Segoe UI',9)
         $statusLabel.ForeColor      = $script:Theme.PrimaryDarker
-        $root.Controls.Add($statusLabel, 0, 4)
+        $root.Controls.Add($statusLabel, 0, 2)
+
+
 
         # ----- Return handles ----------------------------------------------------
-        return [PSCustomObject]@{
+        return @{
             Grid         = $grid
             SearchBox    = $searchBox
             SearchButton = $searchBtn
@@ -229,13 +235,13 @@ function New-VMsLayout {
 
 
 function Get-VMsData {
-<#
-.SYNOPSIS
-    Returns VM information from the active vSphere connection.
+    <#
+    .SYNOPSIS
+        Returns VM information from the active vSphere connection.
 
-.OUTPUTS
-    Array of PSObjects or $null when disconnected.
-#>
+    .OUTPUTS
+        Array of PSObjects or $null when disconnected.
+    #>
     [CmdletBinding()] param()
 
     if (-not $script:Connection) { return $null }
@@ -267,13 +273,13 @@ function Get-VMsData {
 
 
 function Update-VMsWithData {
-<#
-.SYNOPSIS
-    Populates the grid in un-bound mode using the supplied VM list.
-#>
+    <#
+    .SYNOPSIS
+        Populates the grid in un-bound mode using the supplied VM list.
+    #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [psobject]   $UiRefs,
+        [Parameter(Mandatory)]  $UiRefs,
         [Parameter(Mandatory)] [psobject[]] $Data
     )
 
@@ -319,57 +325,91 @@ function Update-VMsWithData {
 
 
 
-function Register-VMsFilter {
-<#
-.SYNOPSIS
-    Hooks up SEARCH button and Enter key so the user can filter the grid.
-#>
+function Wire-UIEvents {
+    <#
+    .SYNOPSIS
+        Hooks up SEARCH button and Enter key so the user can filter the grid.
+    .DESCRIPTION
+        Performs an in-place filter of the DataGridView by toggling each row’s Visible property.
+        Matches against VM Name, IP address or PowerState, and updates the status label.
+    .PARAMETER UiRefs
+        A PSCustomObject containing references to:
+          - Grid         : the DataGridView
+          - SearchBox    : the TextBox
+          - SearchButton : the Button
+          - StatusLabel  : the Label to display status messages
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [psobject] $UiRefs
     )
 
-    # --- Local helper: performs the actual filter -------------------------------
-    $filterAction = {
+    # Capture for closure
+    $local = $UiRefs
+
+    # Shared handler for both Click and KeyDown
+    $filterHandler = {
+        param($sender, $args)
+
         try {
-            $needle = $UiRefs.SearchBox.Text.Trim()
-
-            # No filter text → show all
-            if ([string]::IsNullOrWhiteSpace($needle)) {
-                $filtered = $UiRefs.OriginalData
+            # If invoked via KeyDown, bail out on non-Enter
+            if ($args -is [System.Windows.Forms.KeyEventArgs]) {
+                if ($args.KeyCode -ne [System.Windows.Forms.Keys]::Enter) {
+                    return
+                }
+                $args.Handled          = $true
+                $args.SuppressKeyPress = $true
             }
-            else {
-                $filtered = @()
 
-                foreach ($vm in $UiRefs.OriginalData) {
-                    $nameMatch  = $vm.Name       -like "*$needle*"
-                    $ipMatch    = $vm.IP         -like "*$needle*"
-                    $stateMatch = $vm.PowerState -like "*$needle*"
+            # Trim and check for filter text
+            $needle    = $local.SearchBox.Text.Trim()
+            $hasFilter = -not [string]::IsNullOrWhiteSpace($needle)
 
-                    if ($nameMatch -or $ipMatch -or $stateMatch) {
-                        $filtered += $vm
-                    }
+            # Loop rows and toggle visibility
+            foreach ($row in $local.Grid.Rows) {
+                $name  = $row.Cells['Name'].Value
+                $ip    = $row.Cells['IP'].Value
+                $state = $row.Cells['PowerState'].Value
+
+                if (-not $hasFilter) {
+                    $row.Visible = $true
+                }
+                else {
+                    $match = ($name  -like "*$needle*") -or
+                             ($ip    -like "*$needle*") -or
+                             ($state -like "*$needle*")
+                    $row.Visible = $match
                 }
             }
 
-            Update-VMsWithData -UiRefs $UiRefs -Data $filtered
+            # Count visible vs. total rows
+            $total       = $local.Grid.Rows.Count
+            $visible     = ($local.Grid.Rows | Where-Object Visible).Count
+
+            if (-not $hasFilter) {
+                $local.StatusLabel.Text      = "Filter cleared: showing all $total VMs"
+                $local.StatusLabel.ForeColor = $script:Theme.Success
+            }
+            else {
+                $local.StatusLabel.Text      = "Filter applied: showing $visible of $total VMs"
+                # If nothing matched, use warning color
+                $local.StatusLabel.ForeColor = if ($visible -gt 0) {
+                    $script:Theme.Success
+                }
+                else {
+                    $script:Theme.Warning
+                }
+            }
         }
         catch {
             Write-Verbose "Filter error: $_"
+            $local.StatusLabel.Text      = "Error applying filter"
+            $local.StatusLabel.ForeColor = $script:Theme.Error
         }
     }
 
-    # --- SEARCH button click -----------------------------------------------------
-    $null = $UiRefs.SearchButton.Add_Click($filterAction)
-
-    # --- Enter key inside the search box ----------------------------------------
-    $null = $UiRefs.SearchBox.Add_KeyDown({
-        param($sender,$args)
-        if ($args.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
-            $UiRefs.SearchButton.PerformClick()
-            $args.Handled        = $true
-            $args.SuppressKeyPress= $true
-        }
-    })
+    # Wire up both events to the same handler:
+    $null = $local.SearchButton.Add_Click($filterHandler)
+    $null = $local.SearchBox.Add_KeyDown($filterHandler)
 }
