@@ -2,24 +2,16 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$script:ActiveButton = $null
-
-
 function Show-MainView {
     <#
     .SYNOPSIS
         Displays the main application shell with auto-sized sidebar and content area.
-    .DESCRIPTION
-        Builds a SplitContainer with a navigation sidebar and a content panel.
-        Navigation buttons load individual view scripts, and the status bar
-        reflects the current connection in $script:Connection.
-    .NOTES
-        Version: 1.0 (revised)
-        Date: 2025-05-14
     #>
 
     [CmdletBinding()]
     param()
+
+    $script:ActiveButton = $null
 
     # Main window
     $main = New-Object System.Windows.Forms.Form
@@ -99,12 +91,12 @@ function Show-MainView {
 
     # Load nav buttons
     $scriptDir = $PSScriptRoot
-    $btnDashboard = New-NavButton -Text 'Dashboard'          -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
-    $btnClasses   = New-NavButton -Text 'Class Manager'   -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
-    $btnVMs       = New-NavButton -Text 'VMs List'   -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
-    $btnNetworks  = New-NavButton -Text 'Network' -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
-    $btnOrphans   = New-NavButton -Text 'Orphaned Files'     -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
-    $btnLogs      = New-NavButton -Text 'Logs'               -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
+    $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
+    $btnClasses   = New-NavButton -Text 'Class Manager'     -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
+    $btnVMs       = New-NavButton -Text 'Virtual Machines'  -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
+    $btnNetworks  = New-NavButton -Text 'Network        '   -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
+    $btnOrphans   = New-NavButton -Text 'Orphaned Files'    -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
+    $btnLogs      = New-NavButton -Text 'Logs'              -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
 
     $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
 
@@ -127,44 +119,32 @@ function Show-MainView {
     # Auth button click handler
     $script:AuthButton.Add_Click({
         if ($script:Connection) {
-            # Logout
             try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
             $script:Connection = $null
             $this.Text = '   Login'
             $this.FlatAppearance.BorderColor = $script:Theme.Success
             $contentPanel.Controls.Clear()
-            Update-StatusBar -StatusPanel $script:StatusPanel
         } else {
             . "$scriptDir\LoginView.ps1"
+
             if (Show-LoginView) {
                 $this.Text = '   Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
-                if ($script:ActiveButton) { $script:ActiveButton.PerformClick() } else { $btnDashboard.PerformClick() }
-                Update-StatusBar -StatusPanel $script:StatusPanel
+
+                if ($script:ActiveButton) { 
+                    $script:ActiveButton.PerformClick() 
+                } else { 
+                    $btnDashboard.PerformClick() 
+                }
             } else {
                 $main.Close()
             }
         }
     })
 
-    # Status bar at bottom
-    $statusBar = New-Object System.Windows.Forms.StatusBar
-    $statusBar.Dock       = 'Bottom'
-    $statusBar.SizingGrip = $false
-    $statusBar.BackColor  = $script:Theme.PrimaryDarker
-    $statusBar.ForeColor  = $script:Theme.White
-    $statusBar.Font       = New-Object System.Drawing.Font('Segoe UI',9)
-
-    $script:StatusPanel = New-Object System.Windows.Forms.StatusBarPanel
-    $script:StatusPanel.AutoSize    = [System.Windows.Forms.StatusBarPanelAutoSize]::Spring
-    $script:StatusPanel.BorderStyle = [System.Windows.Forms.StatusBarPanelBorderStyle]::None
-    $statusBar.Panels.Add($script:StatusPanel)
-    $main.Controls.Add($statusBar)
-
-    # On load: show Dashboard & update status
+    # On load: show Dashboard
     $main.Add_Load({
         $btnDashboard.PerformClick()
-        Update-StatusBar -StatusPanel $script:StatusPanel
     })
 
     # Confirm on close
@@ -188,39 +168,6 @@ function Show-MainView {
 }
 
 
-function Update-StatusBar {
-    <#
-    .SYNOPSIS
-        Updates the status bar with current connection info or offline status.
-    .PARAMETER StatusPanel
-        The StatusBarPanel to update.
-    #>
-
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][System.Windows.Forms.StatusBarPanel]$StatusPanel
-    )
-
-    try {
-        if ($script:Connection) {
-            # Attempt to retrieve host name/version
-            try {
-                $hostObj = Get-VMHost -Server $script:Connection -ErrorAction Stop
-                $stamp   = Get-Date -Format 'G'
-                $StatusPanel.Text = "Connected to $($hostObj.Name) | v$($hostObj.Version) | User $($script:Connection.User) | $stamp"
-            } catch {
-                $StatusPanel.Text = "Connected | $(Get-Date -Format 'G')"
-            }
-        } else {
-            $StatusPanel.Text = "Offline | $(Get-Date -Format 'G')"
-        }
-    } catch {
-        Write-Host "Update-StatusBar error: $($_.Exception.Message)" -ForegroundColor Red
-        $StatusPanel.Text = "Status error | $(Get-Date -Format 'G')"
-    }
-}
-
-
 function Load-ViewIntoPanel {
     <#
     .SYNOPSIS
@@ -238,31 +185,19 @@ function Load-ViewIntoPanel {
     )
 
     $TargetPanel.Controls.Clear()
-    try {
-        if (-not (Test-Path $ScriptPath)) { throw "Script not found: $ScriptPath" }
-        . $ScriptPath
-        $viewFuncs = @('Show-DashboardView','Show-VMsView','Show-ClassesView','Show-NetworksView','Show-OrphansView','Show-LogsView')
-        
-        foreach ($f in $viewFuncs) {
-            if (Get-Command $f -ErrorAction SilentlyContinue) {
-                & $f -ContentPanel $TargetPanel
-                return
-            }
+    
+    if (-not (Test-Path $ScriptPath)) { throw "Script not found: $ScriptPath" }
+    . $ScriptPath
+    $viewFuncs = @('Show-DashboardView','Show-VMsView','Show-ClassesView','Show-NetworksView','Show-OrphansView','Show-LogsView')
+    
+    foreach ($f in $viewFuncs) {
+        if (Get-Command $f -ErrorAction SilentlyContinue) {
+            & $f -ContentPanel $TargetPanel
+            return
         }
-        throw "No view function found in $ScriptPath"
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Unable to load view: $($_.Exception.Message)",
-            "View Error",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-        $lbl = New-Object System.Windows.Forms.Label
-        $lbl.Text      = "Error loading view."
-        $lbl.ForeColor = $script:Theme.Error
-        $lbl.Location  = New-Object System.Drawing.Point(20,20)
-        $TargetPanel.Controls.Add($lbl)
     }
+
+    throw "No view function found in $ScriptPath"
 }
 
 
@@ -319,7 +254,6 @@ function New-NavButton {
 
         $info = $this.Tag
         Load-ViewIntoPanel -ScriptPath $info.Script -TargetPanel $info.Panel
-        Update-StatusBar -StatusPanel $script:StatusPanel
     })
 
     return $btn
