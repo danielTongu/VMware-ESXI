@@ -11,6 +11,9 @@ function Show-MainView {
     [CmdletBinding()]
     param()
 
+
+    #----------------------------- Build the UI ------------------------------------
+
     $script:ActiveButton = $null
 
     # Main window
@@ -31,45 +34,53 @@ function Show-MainView {
 
     # -- Sidebar (Panel1) --
     $sidebar = New-Object System.Windows.Forms.Panel
-    $sidebar.Dock      = 'Fill'
-    $sidebar.BackColor = $script:Theme.PrimaryDarker
+    $sidebar.Dock       = 'Fill'
+    $sidebar.Autosize   = $true
+    $sidebar.AutoScroll = $true
+    $sidebar.BackColor  = $script:Theme.PrimaryDarker
     $splitContainer.Panel1.Controls.Add($sidebar)
 
     # TableLayout: header + nav
     $sidebarLayout = New-Object System.Windows.Forms.TableLayoutPanel
     $sidebarLayout.Dock        = 'Fill'
-    $sidebarLayout.RowCount    = 2
+    $sidebarLayout.Autosize    = $true
+    $sidebarLayout.RowCount    = 4
     $sidebarLayout.ColumnCount = 1
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute',150))
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize')) 
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
     $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
     $sidebar.Controls.Add($sidebarLayout)
-
-    # Header panel
-    $sidebarHeader = New-Object System.Windows.Forms.Panel
-    $sidebarHeader.Dock      = 'Fill'
-    $sidebarHeader.BackColor = $script:Theme.PrimaryDark
-    $sidebarLayout.Controls.Add($sidebarHeader,0,0)
 
     # Title label
     $title = New-Object System.Windows.Forms.Label
     $title.Text      = 'VMware ESXi'
-    $title.Font      = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawing.FontStyle]::Bold)
+    $title.Font      = New-Object System.Drawing.Font('Segoe UI',16,[System.Drawing.FontStyle]::Bold)
     $title.ForeColor = $script:Theme.White
     $title.AutoSize  = $true
-    $title.Location  = New-Object System.Drawing.Point(10,10)
-    $sidebarHeader.Controls.Add($title)
+    $title.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($title,0,0)
 
     # Logo
     $logo = New-Object System.Windows.Forms.PictureBox
     $logo.Size      = New-Object System.Drawing.Size(100,100)
-    $logo.Location  = New-Object System.Drawing.Point(10,40)
     $logo.SizeMode  = 'Zoom'
     try {
         $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
     } catch {
         $logo.BackColor = $script:Theme.LightGray
     }
-    $sidebarHeader.Controls.Add($logo)
+    $logo.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($logo,0,1)
+
+    # Username label
+    $usernameLabel = New-Object System.Windows.Forms.Label
+    $usernameLabel.Text      = if ($script:username) { "User: $($script:username)" } else { "Not logged in" }
+    $usernameLabel.Font      = New-Object System.Drawing.Font('Segoe UI',8)
+    $usernameLabel.ForeColor = $script:Theme.White
+    $usernameLabel.AutoSize  = $true
+    $usernameLabel.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($usernameLabel,0,2)
 
     # Navigation panel
     $navPanel = New-Object System.Windows.Forms.FlowLayoutPanel
@@ -77,8 +88,10 @@ function Show-MainView {
     $navPanel.FlowDirection = 'TopDown'
     $navPanel.WrapContents  = $false
     $navPanel.AutoScroll    = $true
-    $navPanel.Padding       = New-Object System.Windows.Forms.Padding(10,20,10,20)
-    $sidebarLayout.Controls.Add($navPanel,0,1)
+    $navPanel.Autosize    = $true
+    $navPanel.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $navPanel.BackColor  = $script:Theme.PrimaryDark
+    $sidebarLayout.Controls.Add($navPanel,0,3)
 
     # set spliiter distance after finishing adding everything for panel1
     $splitContainer.SplitterDistance= 225
@@ -86,23 +99,13 @@ function Show-MainView {
     # -- Content panel (Panel2) --
     $contentPanel = New-Object System.Windows.Forms.Panel
     $contentPanel.Dock      = 'Fill'
+    $contentPanel.Autosize    = $true
     $contentPanel.BackColor = $script:Theme.LightGray
     $splitContainer.Panel2.Controls.Add($contentPanel)
 
-    # Load nav buttons
-    $scriptDir = $PSScriptRoot
-    $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
-    $btnClasses   = New-NavButton -Text 'Class Manager'     -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
-    $btnVMs       = New-NavButton -Text 'Virtual Machines'  -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
-    $btnNetworks  = New-NavButton -Text 'Network        '   -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
-    $btnOrphans   = New-NavButton -Text 'Orphaned Files'    -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
-    $btnLogs      = New-NavButton -Text 'Logs'              -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
-
-    $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
-
     # Authentication button
     $script:AuthButton = New-Object System.Windows.Forms.Button
-    $script:AuthButton.Text      = $(if ($script:Connection) { ' Logout' } else {  'Login' })
+    $script:AuthButton.Text      = $(if ($script:Connection) { ' Logout' } else {  ' Login' })
     $script:AuthButton.Font      = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
     $script:AuthButton.ForeColor = $script:Theme.White
     $script:AuthButton.BackColor = $script:Theme.PrimaryDarker
@@ -116,13 +119,30 @@ function Show-MainView {
 
     $navPanel.Controls.Add($script:AuthButton)
 
+     # Load nav buttons
+    $scriptDir = $PSScriptRoot
+    $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
+    $btnClasses   = New-NavButton -Text 'Class Manager'     -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
+    $btnVMs       = New-NavButton -Text 'Virtual Machines'  -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
+    $btnNetworks  = New-NavButton -Text 'Network        '   -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
+    $btnOrphans   = New-NavButton -Text 'Orphaned Files'    -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
+    $btnLogs      = New-NavButton -Text 'Logs'              -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
+
+    $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
+
+
+    #----------------------------- Wire UI events -----------------------------------
+
+
     # Auth button click handler
     $script:AuthButton.Add_Click({
         if ($script:Connection) {
             try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
             $script:Connection = $null
+            $script:username = $null
             $this.Text = '   Login'
             $this.FlatAppearance.BorderColor = $script:Theme.Success
+            $usernameLabel.Text = "Not logged in"
             $contentPanel.Controls.Clear()
         } else {
             . "$scriptDir\LoginView.ps1"
@@ -130,6 +150,7 @@ function Show-MainView {
             if (Show-LoginView) {
                 $this.Text = '   Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
+                $usernameLabel.Text = "User: $($script:username)"
 
                 if ($script:ActiveButton) { 
                     $script:ActiveButton.PerformClick() 
@@ -162,6 +183,8 @@ function Show-MainView {
             }
         }
     })
+
+    #------------------------ Display the UI ---------------------------
 
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $main.ShowDialog() | Out-Null
@@ -223,7 +246,7 @@ function New-NavButton {
     )
 
     $btn = New-Object System.Windows.Forms.Button
-    $btn.Text      = "   $Text"
+    $btn.Text      = " $Text"
     $btn.Font      = New-Object System.Drawing.Font('Segoe UI',10)
     $btn.ForeColor = $script:Theme.White
     $btn.BackColor = $script:Theme.PrimaryDarker
