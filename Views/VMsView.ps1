@@ -89,7 +89,6 @@ function New-VMsLayout {
     $searchBox.Dock = 'Fill'
     $searchBox.Name = 'txtFilter'
     $searchBox.Width = 300
-    $searchBox.FlatStyle = 'Flat'
     $searchBox.Margin = New-Object System.Windows.Forms.Padding(5)
     $searchBox.Font = New-Object System.Drawing.Font('Segoe UI', 12)
     $searchBox.BackColor = $script:Theme.White
