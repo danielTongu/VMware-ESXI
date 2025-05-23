@@ -18,14 +18,14 @@ function Show-VMsView {
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    # 1 ─ Build UI and retrieve control references
     $script:uiRefs = New-VMsLayout -ContentPanel $ContentPanel
 
-    # 2 ─ Initialize UI with data
-    Update-VMData -UiRefs $script:uiRefs
+    $data = Get-VMsData
 
-    # 3 ─ Wire up event handlers
-    Wire-UIEvents -UiRefs $script:uiRefs
+    if ($data) {
+        Update-VMData -UiRefs $script:uiRefs -Data $data
+        Wire-UIEvents -UiRefs $script:uiRefs
+    }
 }
 
 
@@ -80,16 +80,18 @@ function New-VMsLayout {
     # ----- Main Layout - Filter bar -------------------------------------------
     $filterPanel = New-Object System.Windows.Forms.FlowLayoutPanel
     $filterPanel.Dock = 'Fill'
-    $filterPanel.Height = 50
+    $filterPanel.Autosize = $true
     $filterPanel.FlowDirection = 'LeftToRight'
     $filterPanel.Padding = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
     $mainLayout.Controls.Add($filterPanel, 0, 0)
 
     $searchBox = New-Object System.Windows.Forms.TextBox
+    $searchBox.Dock = 'Fill'
     $searchBox.Name = 'txtFilter'
     $searchBox.Width = 300
-    $searchBox.Height = 30
-    $searchBox.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $searchBox.FlatStyle = 'Flat'
+    $searchBox.Margin = New-Object System.Windows.Forms.Padding(5)
+    $searchBox.Font = New-Object System.Drawing.Font('Segoe UI', 12)
     $searchBox.BackColor = $script:Theme.White
     $searchBox.ForeColor = $script:Theme.PrimaryDarker
     $filterPanel.Controls.Add($searchBox)
@@ -160,8 +162,8 @@ function New-VMsLayout {
 
     # Single VM actions
     $singleVMActions = @(
-        @{ Key = 'PowerOn'; Text = 'POWER ON' },
         @{ Key = 'PowerOff'; Text = 'POWER OFF' },
+        @{ Key = 'PowerOn'; Text = 'POWER ON' },
         @{ Key = 'Restart'; Text = 'RESTART' }
     )
 
@@ -170,8 +172,8 @@ function New-VMsLayout {
 
     # Multiple VM actions
     $multipleVMActions = @(
-        @{ Key = 'PowerAllOn'; Text = 'POWER ON' },
-        @{ Key = 'PowerAllOff'; Text = 'POWER OFF' }
+        @{ Key = 'PowerAllOff'; Text = 'POWER OFF' },
+        @{ Key = 'PowerAllOn'; Text = 'POWER ON' }
     )
 
     New-ButtonGroup -ParentPanel $actions -GroupTitle "All Virtual Machines" `
@@ -205,6 +207,48 @@ function New-VMsLayout {
 }
 
 
+function Get-VMsData {
+    <#
+    .SYNOPSIS
+        Returns VM information from the active vSphere connection.
+
+    .OUTPUTS
+        Array of PSObjects or $null when disconnected.
+    #>
+
+    [CmdletBinding()] param()
+
+    if (-not $script:Connection) {
+        Set-StatusMessage -UiRefs $UiRefs -Message "No vSphere connection available" -Type Error
+        Write-Verbose "No vSphere connection available"
+        return $null 
+    }
+
+    try {
+        $vms = Get-VM -Server $script:Connection -ErrorAction Stop | Select-Object `
+            Name,
+            PowerState,
+            @{ Name='IP'
+               Expression={
+                   if ($_.Guest.IPAddress -and $_.Guest.IPAddress.Count -gt 0) {
+                       $_.Guest.IPAddress[0]
+                   }
+                   else { '' }
+               }
+            },
+            @{ Name='CPU'      ; Expression={ $_.NumCpu } },
+            @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } }
+        
+        Write-Verbose "Retrieved data for $($vms.Count) VMs"
+        return $vms
+    }
+    catch {
+        Write-Verbose "Failed to acquire VM data: $_"
+        return $null
+    }
+}
+
+
 function Update-VMData {
     <#
     .SYNOPSIS
@@ -213,47 +257,45 @@ function Update-VMData {
 
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [psobject] $UiRefs
+        [Parameter(Mandatory)][psobject] $UiRefs,
+        $Data
     )
 
     Set-StatusMessage -UiRefs $UiRefs -Message "Refreshing VM data..." -Type Info  
-        
-    $data = Get-VMsData
-    if ($data) {
-        
-        # Clear previous rows
-        $UiRefs.Grid.Rows.Clear()
+    
+    # Clear previous rows
+    $UiRefs.Grid.Rows.Clear()
 
-        # Insert one row per VM
-        foreach ($vm in $data) {
-            $rowIndex = $UiRefs.Grid.Rows.Add()
-            $row = $UiRefs.Grid.Rows[$rowIndex]
+    # Prepare for data display
+    if (-not $Data) {
+        Set-StatusMessage -UiRefs $UiRefs -Message "No Data Found" -Type Error
+        return
+    }
 
-            $row.Cells['No'].Value = $rowIndex + 1
-            $row.Cells['Name'].Value = $vm.Name
-            $row.Cells['PowerState'].Value = $vm.PowerState
-            $row.Cells['IP'].Value = $vm.IP
-            $row.Cells['CPU'].Value = $vm.CPU
-            $row.Cells['MemoryGB'].Value = $vm.MemoryGB
+    # Insert one row per VM
+    foreach ($vm in $Data) {
+        $rowIndex = $UiRefs.Grid.Rows.Add()
+        $row = $UiRefs.Grid.Rows[$rowIndex]
 
-            if ($vm.PowerState -eq 'PoweredOn') {
-                $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Green
-            }
-            else {
-                $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Red
-            }
+        $row.Cells['No'].Value = $rowIndex + 1
+        $row.Cells['Name'].Value = $vm.Name
+        $row.Cells['PowerState'].Value = $vm.PowerState
+        $row.Cells['IP'].Value = $vm.IP
+        $row.Cells['CPU'].Value = $vm.CPU
+        $row.Cells['MemoryGB'].Value = $vm.MemoryGB
+
+        if ($vm.PowerState -eq 'PoweredOn') {
+            $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Green
         }
-
-        # Resize columns for readability
-        $UiRefs.Grid.AutoResizeColumns()
-
-        Set-StatusMessage -UiRefs $UiRefs -Message "$($data.Count) VMs found" -Type Success
+        else {
+            $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Red
+        }
     }
-    else {
-        Set-StatusMessage -UiRefs $UiRefs -Message "No connection to vSphere" -Type Error
-        $UiRefs.Grid.Rows.Clear()
-    }
+
+    # Resize columns for readability
+    $UiRefs.Grid.AutoResizeColumns()
+
+    Set-StatusMessage -UiRefs $UiRefs -Message "$($Data.Count) VMs found" -Type Success
 }
 
 
@@ -340,6 +382,7 @@ function New-FormButton {
     $button = New-Object System.Windows.Forms.Button
     $button.Name = $Name
     $button.Text = $Text
+    $button.FlatStyle     = 'Flat'
     
     if ($Size) {$button.Size = $Size} 
     else { $button.Size = New-Object System.Drawing.Size(120, 35)}
@@ -390,49 +433,6 @@ function New-ButtonGroup {
         $ButtonsHashTable[$def.Key] = $btn
     }
 }
-
-
-function Get-VMsData {
-    <#
-    .SYNOPSIS
-        Returns VM information from the active vSphere connection.
-
-    .OUTPUTS
-        Array of PSObjects or $null when disconnected.
-    #>
-
-    [CmdletBinding()] param()
-
-    if (-not $script:Connection) {
-        Set-StatusMessage -UiRefs $UiRefs -Message "No vSphere connection available" -Type Error
-        Write-Verbose "No vSphere connection available"
-        return $null 
-    }
-
-    try {
-        $vms = Get-VM -Server $script:Connection -ErrorAction Stop | Select-Object `
-            Name,
-            PowerState,
-            @{ Name='IP'
-               Expression={
-                   if ($_.Guest.IPAddress -and $_.Guest.IPAddress.Count -gt 0) {
-                       $_.Guest.IPAddress[0]
-                   }
-                   else { '' }
-               }
-            },
-            @{ Name='CPU'      ; Expression={ $_.NumCpu } },
-            @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } }
-        
-        Write-Verbose "Retrieved data for $($vms.Count) VMs"
-        return $vms
-    }
-    catch {
-        Write-Verbose "Failed to acquire VM data: $_"
-        return $null
-    }
-}
-
 
 function Apply-Filter {
     <#
@@ -561,7 +561,7 @@ function Invoke-PowerOperation {
         }
 
         # Refresh and show status
-        Update-VMData -UiRefs $UiRefs
+        Update-VMData -UiRefs $UiRefs -Data Get-VMsData
         Set-StatusMessage -UiRefs $UiRefs -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
     }
     catch {
