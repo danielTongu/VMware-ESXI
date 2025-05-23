@@ -44,10 +44,11 @@ function New-LogsLayout {
     $root = [System.Windows.Forms.TableLayoutPanel]::new()
     $root.Dock = 'Fill'
     $root.ColumnCount = 1
-    $root.RowCount = 4
+    $root.RowCount = 5
     $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
     $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
     $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent, 100))
+    $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
     $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
     $ContentPanel.Controls.Add($root)
 
@@ -115,6 +116,21 @@ function New-LogsLayout {
     $ctrls.Controls.AddRange(@($btnRefresh, $btnClear))
     $root.Controls.Add($ctrls, 0, 3)
 
+    # ── Footer status label  ──────────────────────────────────────────────────
+    $footer = New-Object System.Windows.Forms.Panel
+    $footer.Dock = 'Fill'
+    $footer.Autosize = $true
+    $footer.AutoScroll = $true
+    $root.Controls.Add($footer, 0, 5)
+
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.AutoSize = $true
+    $statusLabel.Name = 'StatusLabel'
+    $statusLabel.Text = 'Ready'
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $statusLabel.ForeColor = $script:Theme.PrimaryDarker
+    $footer.Controls.Add($statusLabel)
+
     return @{
         ContentPanel  = $ContentPanel          # needed for Refresh handler
         LogTextBox    = $txtLogs
@@ -123,6 +139,7 @@ function New-LogsLayout {
         RefreshButton = $btnRefresh
         ClearButton   = $btnClear
         OriginalLines = @()                    # cache for filter restore
+        StatusLabel   = $statusLabel
     }
 }
 
@@ -137,10 +154,12 @@ function Get-LogsData {
 
     [CmdletBinding()] param()
 
+    Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Getting events..." -Type Error
+
     $events = $null
 
     if (-not $script:Connection) { 
-        Set-StatusMessage -UiRefs $script:MainUiRefs -Message "No Connection" -Type 'Error'
+        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "No Connection" -Type 'Error'
     } else {
         try {
             $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
@@ -163,6 +182,8 @@ function Update-LogsWithData {
     [CmdletBinding()]
     param([psobject]$UiRefs, [hashtable]$Data)
 
+    Set-StatusMessage -UiRefs $UiRefs -Message "Populating logs..." -Type 'Success'
+
     # ---------- Store the original lines in the script scope ------
     $script:OriginalLogLines = foreach ($ev in $Data.Events) {
         $ts = $ev.CreatedTime.ToString('G')
@@ -172,27 +193,33 @@ function Update-LogsWithData {
 
     # ---------- Populate the textbox with the lines ----------------
     $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+    Set-StatusMessage -UiRefs $UiRefs -Message "" -Type 'Success'
 
 
     # ---------- Wire User Interface Events -------------------------
     $UiRefs.SearchButton.Add_Click({
+        . $PSScriptRoot\LogsView.ps1
         try {
             $term = $script:LogsUiRefs.SearchBox.Text.Trim()
             if ($term) {
+                Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Showing $($term)" -Type 'Success'
                 $filteredLines = $script:OriginalLogLines | Where-Object { $_ -match [regex]::Escape($term) }
                 $script:LogsUiRefs.LogTextBox.Text = $filteredLines -join "`r`n"
             }
             else {
                 $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+                Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "" -Type 'Success'
             }
         }
         catch { 
-            Set-StatusMessage -UiRefs $script:MainUiRefs -Message "Search error: $_" -Type 'Error'
+            Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Search error: $_" -Type 'Error'
         }
     })
 
     
     $UiRefs.ClearButton.Add_Click({
+        . $PSScriptRoot\LogsView.ps1
+        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Cleared field" -Type 'Success'
         $script:LogsUiRefs.SearchBox.Clear()
         $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
     })
@@ -226,6 +253,7 @@ function Set-StatusMessage {
     )
     
     $UiRefs.StatusLabel.Text = $Message
+
     $UiRefs.StatusLabel.ForeColor = switch ($Type) {
         'Success' { $script:Theme.Success }
         'Warning' { $script:Theme.Warning }
