@@ -140,7 +140,8 @@ function Show-MainView {
             try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
             $script:Connection = $null
             $script:username = $null
-            $this.Text = '   Login'
+            $script:password = $null
+            $this.Text = ' Login'
             $this.FlatAppearance.BorderColor = $script:Theme.Success
             $usernameLabel.Text = "Not logged in"
             $contentPanel.Controls.Clear()
@@ -148,7 +149,7 @@ function Show-MainView {
             . "$scriptDir\LoginView.ps1"
 
             if (Show-LoginView) {
-                $this.Text = '   Logout'
+                $this.Text = ' Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
                 $usernameLabel.Text = "User: $($script:username)"
 
