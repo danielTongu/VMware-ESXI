@@ -1,160 +1,180 @@
-# =============================================================================
-# LogsView.ps1   –   CLEAN IMPLEMENTATION
-# =============================================================================
-#  Prerequisites (defined elsewhere in your application):
-#    $script:IsLoggedIn      – Boolean
-#    $script:Connection      – Active VIServer (same one used by Dashboard)
-#    $script:Theme           – Object with colours: Primary, PrimaryDark,
-#                              LightGray, White
-# -----------------------------------------------------------------------------
-
+# ---------------------------------------------------------------------------
+# Load WinForms assemblies
+# ---------------------------------------------------------------------------
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
+function global:Show-LogsView {
+    <#
+    .SYNOPSIS
+        Entry point for displaying or refreshing the Logs view.
+    .DESCRIPTION
+        Initializes the Logs UI and populates it with the latest log data.
+    #>
 
-# ---------------------------------------------------------------------------
-function Get-LogsData {
-<#
-.SYNOPSIS
-    Retrieve the 100 most-recent vCenter events.
-
-.OUTPUTS
-    @{ Events = <array>; LastUpdated = <DateTime> }  —or—  $null
-#>
-    [CmdletBinding()] param()
-
-    $conn = $script:Connection
-    if (-not $conn)             { return $null }
-
-    try   { $events = Get-VIEvent -Server $conn -MaxSamples 100 -ErrorAction Stop }
-    catch { Write-Verbose "LogsView: $($_.Exception.Message)"; return $null }
-
-    return @{ Events=$events; LastUpdated=Get-Date }
-}
-
-
-
-# ---------------------------------------------------------------------------
-function New-LogsLayout {
-<#
-.SYNOPSIS
-    Build the EVENT LOGS UI and return all control references.
-
-.OUTPUTS
-    Hashtable  (no stray output).
-#>
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
-    [void]$ContentPanel.SuspendLayout()
+    # logsUiRefs return the content panel too
+    $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
+    $data = Get-LogsData
+
+    if ($data) {
+        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
+    }
+}
+
+
+function New-LogsLayout {
+    <#
+    .SYNOPSIS
+        Builds the EVENT LOGS UI and returns all control references.
+    .OUTPUTS
+        Hashtable containing references to all relevant UI controls.
+    #>
+
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
+
     $ContentPanel.Controls.Clear()
     $ContentPanel.BackColor = $script:Theme.LightGray
 
     # ── root ────────────────────────────────────────────────────────────────
-    $root             = [System.Windows.Forms.TableLayoutPanel]::new()
-    $root.Dock        = 'Fill'; $root.ColumnCount=1; $root.RowCount=4
-    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100))
-    [void]$root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
-    [void]$ContentPanel.Controls.Add($root)
+    $root = [System.Windows.Forms.TableLayoutPanel]::new()
+    $root.Dock = 'Fill'
+    $root.ColumnCount = 1
+    $root.RowCount = 4
+    $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent, 100))
+    $root.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    $ContentPanel.Controls.Add($root)
 
     # ── header ──────────────────────────────────────────────────────────────
-    $hdr               = [System.Windows.Forms.Panel]::new()
-    $hdr.Height        = 60; $hdr.BackColor=$script:Theme.Primary; $hdr.Dock='Fill'
-    [void]$root.Controls.Add($hdr,0,0)
+    $hdr = [System.Windows.Forms.Panel]::new()
+    $hdr.Height = 60
+    $hdr.BackColor = $script:Theme.Primary
+    $hdr.Dock = 'Fill'
+    $root.Controls.Add($hdr, 0, 0)
 
-    $title             = [System.Windows.Forms.Label]::new()
-    $title.Text        = 'EVENT LOGS'
-    $title.Font        = [System.Drawing.Font]::new('Segoe UI',18,[System.Drawing.FontStyle]::Bold)
-    $title.ForeColor   = $script:Theme.White; $title.AutoSize=$true
-    $title.Location    = [System.Drawing.Point]::new(20,15)
-    [void]$hdr.Controls.Add($title)
+    $title = [System.Windows.Forms.Label]::new()
+    $title.Text = 'EVENT LOGS'
+    $title.Font = [System.Drawing.Font]::new('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
+    $title.ForeColor = $script:Theme.White
+    $title.AutoSize = $true
+    $title.Location = [System.Drawing.Point]::new(20, 15)
+    $hdr.Controls.Add($title)
 
     # ── filter row ──────────────────────────────────────────────────────────
-    $flt               = [System.Windows.Forms.Panel]::new()
-    $flt.Height        = 50; $flt.BackColor=$script:Theme.LightGray; $flt.Dock='Fill'
-    [void]$root.Controls.Add($flt,0,1)
+    $flt = [System.Windows.Forms.Panel]::new()
+    $flt.Height = 50
+    $flt.BackColor = $script:Theme.LightGray
+    $flt.Dock = 'Fill'
+    $root.Controls.Add($flt, 0, 1)
 
-    $txtFind           = [System.Windows.Forms.TextBox]::new()
-    $txtFind.Width     = 300; $txtFind.Height=30
-    $txtFind.Location  = [System.Drawing.Point]::new(20,10)
-    $txtFind.Font      = [System.Drawing.Font]::new('Segoe UI',10)
-    $txtFind.BackColor = $script:Theme.White; $txtFind.ForeColor=$script:Theme.PrimaryDark
-    [void]$flt.Controls.Add($txtFind)
+    $txtFind = [System.Windows.Forms.TextBox]::new()
+    $txtFind.Width = 300
+    $txtFind.Height = 30
+    $txtFind.Location = [System.Drawing.Point]::new(20, 10)
+    $txtFind.Font = [System.Drawing.Font]::new('Segoe UI', 10)
+    $txtFind.BackColor = $script:Theme.White
+    $txtFind.ForeColor = $script:Theme.PrimaryDark
+    $flt.Controls.Add($txtFind)
 
-    $btnSearch         = [System.Windows.Forms.Button]::new()
-    $btnSearch.Text    = 'SEARCH'; $btnSearch.Width=100; $btnSearch.Height=30
-    $btnSearch.Font    = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $btnSearch.BackColor=$script:Theme.Primary; $btnSearch.ForeColor=$script:Theme.White
-    $btnSearch.Location=[System.Drawing.Point]::new(330,10)
-    [void]$flt.Controls.Add($btnSearch)
+    $btnSearch = New-FormButton -Name 'btnSearch' -Text 'SEARCH' -Size (New-Object System.Drawing.Size(100, 30))
+    $btnSearch.Location = [System.Drawing.Point]::new(330, 10)
+    $flt.Controls.Add($btnSearch)
 
     # ── log box ─────────────────────────────────────────────────────────────
-    $scroll            = [System.Windows.Forms.Panel]::new()
-    $scroll.Dock       = 'Fill'; $scroll.BackColor=$script:Theme.White
-    $scroll.Padding    = [System.Windows.Forms.Padding]::new(10)
+    $scroll = [System.Windows.Forms.Panel]::new()
+    $scroll.Dock = 'Fill'
+    $scroll.BackColor = $script:Theme.White
+    $scroll.Padding = [System.Windows.Forms.Padding]::new(10)
     $scroll.AutoScroll = $true
-    [void]$root.Controls.Add($scroll,0,2)
+    $root.Controls.Add($scroll, 0, 2)
 
-    $txtLogs           = [System.Windows.Forms.TextBox]::new()
-    $txtLogs.Dock      = 'Fill'; $txtLogs.Multiline=$true; $txtLogs.ReadOnly=$true
-    $txtLogs.ScrollBars= 'Vertical'
-    $txtLogs.BackColor = $script:Theme.White; $txtLogs.ForeColor=$script:Theme.PrimaryDark
-    $txtLogs.Font      = [System.Drawing.Font]::new('Segoe UI',10)
-    [void]$scroll.Controls.Add($txtLogs)
+    $txtLogs = [System.Windows.Forms.TextBox]::new()
+    $txtLogs.Dock = 'Fill'
+    $txtLogs.Multiline = $true
+    $txtLogs.ReadOnly = $true
+    $txtLogs.ScrollBars = 'Vertical'
+    $txtLogs.BackColor = $script:Theme.White
+    $txtLogs.ForeColor = $script:Theme.PrimaryDark
+    $txtLogs.Font = [System.Drawing.Font]::new('Segoe UI', 10)
+    $scroll.Controls.Add($txtLogs)
 
     # ── buttons row ─────────────────────────────────────────────────────────
-    $btnRefresh        = [System.Windows.Forms.Button]::new()
-    $btnRefresh.Text   = 'REFRESH'; $btnRefresh.Width=120; $btnRefresh.Height=35
-    $btnRefresh.Font   = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $btnRefresh.BackColor=$script:Theme.Primary; $btnRefresh.ForeColor=$script:Theme.White
+    $btnRefresh = New-FormButton -Name 'btnRefresh' -Text 'REFRESH'
+    $btnClear = New-FormButton -Name 'btnClear' -Text 'CLEAR'
 
-    $btnClear          = [System.Windows.Forms.Button]::new()
-    $btnClear.Text     = 'CLEAR';  $btnClear.Width=120; $btnClear.Height=35
-    $btnClear.Font     = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $btnClear.BackColor=$script:Theme.LightGray; $btnClear.ForeColor=$script:Theme.PrimaryDark
-
-    $ctrls             = [System.Windows.Forms.FlowLayoutPanel]::new()
-    $ctrls.Dock        = 'Fill'; $ctrls.Height=50; $ctrls.Padding=[System.Windows.Forms.Padding]::new(10)
-    [void]$ctrls.Controls.AddRange(@($btnRefresh,$btnClear))
-    [void]$root.Controls.Add($ctrls,0,3)
-
-    [void]$ContentPanel.ResumeLayout($true)
+    $ctrls = [System.Windows.Forms.FlowLayoutPanel]::new()
+    $ctrls.Dock = 'Fill'
+    $ctrls.Autosize = $true
+    $ctrls.Padding = [System.Windows.Forms.Padding]::new(10)
+    $ctrls.Controls.AddRange(@($btnRefresh, $btnClear))
+    $root.Controls.Add($ctrls, 0, 3)
 
     return @{
+        ContentPanel  = $ContentPanel          # needed for Refresh handler
         LogTextBox    = $txtLogs
         SearchBox     = $txtFind
         SearchButton  = $btnSearch
         RefreshButton = $btnRefresh
         ClearButton   = $btnClear
         OriginalLines = @()                    # cache for filter restore
-        ContentPanel  = $ContentPanel          # needed for Refresh handler
     }
 }
 
 
+function Get-LogsData {
+    <#
+    .SYNOPSIS
+        Retrieves the 100 most recent vCenter events.
+    .OUTPUTS
+        Hashtable: @{ Events = <array>; LastUpdated = <DateTime> } or $null if unavailable.
+    #>
 
-# ---------------------------------------------------------------------------
+    [CmdletBinding()] param()
+
+    $events = $null
+
+    if (-not $script:Connection) { 
+        Set-StatusMessage -UiRefs $script:MainUiRefs -Message "No Connection" -Type 'Error'
+    } else {
+        try {
+            $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
+        } catch {
+            Write-Verbose "LogsView: $($_.Exception.Message)"
+        }
+    }
+    
+    return @{ Events = $events; LastUpdated = Get-Date }
+}
+
 function Update-LogsWithData {
-<#
-.SYNOPSIS
-    Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
-#>
-    [CmdletBinding()]
-    param([hashtable]$UiRefs, [hashtable]$Data)
+    <#
+    .SYNOPSIS
+        Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
+    .DESCRIPTION
+        Updates the log display with new data and sets up event handlers for search, clear, and refresh actions.
+    #>
 
-    # Store the original lines in the script scope
+    [CmdletBinding()]
+    param([psobject]$UiRefs, [hashtable]$Data)
+
+    # ---------- Store the original lines in the script scope ------
     $script:OriginalLogLines = foreach ($ev in $Data.Events) {
         $ts = $ev.CreatedTime.ToString('G')
         $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
         "[$ts] ($usr) $($ev.FullFormattedMessage)"
     }
 
+    # ---------- Populate the textbox with the lines ----------------
     $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
 
-    # ---------- SEARCH -------------------------------------------------------
+
+    # ---------- Wire User Interface Events -------------------------
     $UiRefs.SearchButton.Add_Click({
         try {
             $term = $script:LogsUiRefs.SearchBox.Text.Trim()
@@ -167,62 +187,88 @@ function Update-LogsWithData {
             }
         }
         catch { 
-            # Error handling
-            [System.Windows.Forms.MessageBox]::Show(
-                "Search error: $_",
-                "Error",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
+            Set-StatusMessage -UiRefs $script:MainUiRefs -Message "Search error: $_" -Type 'Error'
         }
     })
 
-    # ---------- CLEAR --------------------------------------------------------
+    
     $UiRefs.ClearButton.Add_Click({
         $script:LogsUiRefs.SearchBox.Clear()
         $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
     })
 
-   # ---------- REFRESH (rebuilds entire view) ------------------------------
-    $UiRefs.RefreshButton.Add_Click({
-    # Dot-source the script to reload the function definitions
-    . $PSScriptRoot\LogsView.ps1
     
-    # Use the stored content panel reference
-    if ($script:LogsContentPanel) {
-        Show-LogsView -ContentPanel $script:LogsContentPanel
-    } else {
-        # Error handling in case the reference is lost
-        [System.Windows.Forms.MessageBox]::Show(
-            "Content panel reference was lost. Please navigate back to this view.",
-            "Refresh Error",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-    }
-})
+    $UiRefs.RefreshButton.Add_Click({
+        . $PSScriptRoot\LogsView.ps1 # Dot-source the script to reload the function definitions
+        Show-LogsView -ContentPanel $script:LogsUiRefs.ContentPanel
+    })
 }
 
 
 
-# ---------------------------------------------------------------------------
-function global:Show-LogsView {
-<#
-.SYNOPSIS
-    Entry point: draw or refresh the Logs view.
-#>
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
+# ------------------ Helper Functions ------------------------------------------
 
-    # Store references in script scope
-    $script:LogsContentPanel = $ContentPanel
-    $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
-    $data = Get-LogsData
 
-    if ($data) {
-        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
+function Set-StatusMessage {
+    <#
+    .SYNOPSIS
+        Sets the status message on the UI with color based on message type.
+    .DESCRIPTION
+        Updates the StatusLabel control in the UI references with the provided message and color.
+    #>
+
+    param(
+        [Parameter(Mandatory)]
+        [psobject] $UiRefs,
+        [string] $Message,
+        [ValidateSet('Success','Warning','Error','Info')]
+        [string] $Type = 'Info'
+    )
+    
+    $UiRefs.StatusLabel.Text = $Message
+    $UiRefs.StatusLabel.ForeColor = switch ($Type) {
+        'Success' { $script:Theme.Success }
+        'Warning' { $script:Theme.Warning }
+        'Error'   { $script:Theme.Error }
+        default   { $script:Theme.PrimaryDarker }
     }
-    else {
-        $script:LogsUiRefs.LogTextBox.Text = 'No log data available or not connected.'
-    }
+}
+
+
+function New-FormButton {
+    <#
+    .SYNOPSIS
+        Creates a consistently styled form button.
+    .DESCRIPTION
+        Returns a Windows Forms Button with standardized styling using the application theme.
+    .OUTPUTS
+        System.Windows.Forms.Button
+    #>
+
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][string] $Text,
+        [System.Drawing.Size] $Size,
+        [System.Windows.Forms.Padding] $Margin,
+        [System.Drawing.Font] $Font = $null
+    )
+
+    $button = New-Object System.Windows.Forms.Button
+    $button.Name = $Name
+    $button.Text = $Text
+    $button.FlatStyle = 'Flat'
+    
+    if ($Size) { $button.Size = $Size } 
+    else { $button.Size = New-Object System.Drawing.Size(120, 35) }
+    
+    if ($Margin) { $button.Margin = $Margin }
+    else { $button.Margin = New-Object System.Windows.Forms.Padding(5) }
+    
+    if ($Font) { $button.Font = $Font } 
+    else { $button.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold) }
+    
+    $button.BackColor = $script:Theme.Primary
+    $button.ForeColor = $script:Theme.White
+    
+    return $button
 }
