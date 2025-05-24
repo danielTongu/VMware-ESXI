@@ -63,11 +63,12 @@ function New-DashboardLayout {
     $root.Dock         = 'Fill'
     $root.ColumnCount  = 1
     $root.RowCount     = 4
-    $null = $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
-    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    
     $ContentPanel.Controls.Add($root)
 
     # ── Header ----------------------------------------------------------------
@@ -118,8 +119,8 @@ function New-DashboardLayout {
 
     # ── Footer ----------------------------------------------------------------
     $footer           = New-Object System.Windows.Forms.Panel
-    $footer.Dock      = 'Bottom'
-    $footer.Height    = 30
+    $footer.Dock      = 'Fill'
+    $footer.AutoSize    = $true
     $footer.BackColor = $script:Theme.LightGray
 
     $status           = New-Object System.Windows.Forms.Label
@@ -127,7 +128,7 @@ function New-DashboardLayout {
     $status.AutoSize  = $true
     $status.Font      = New-Object System.Drawing.Font('Segoe UI',9)
     $status.ForeColor = $script:Theme.Error
-    $status.Text      = '---'
+    $status.Text      = ''
     $footer.Controls.Add($status)
 
     $root.Controls.Add($footer, 0, 3)
@@ -183,7 +184,7 @@ function Get-DashboardData {
         $data.PortGroups = Get-VMwarePortGroups
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
-        $data.OrphanedFiles = Get-OrphanedVmFiles
+        $data.OrphanedFiles = $data['Get-Datastore'] | Get-Orphans 
 
         return @{
             HostInfo     = $data['Get-VMHost']
@@ -202,6 +203,165 @@ function Get-DashboardData {
         return @{
             Error = $_.Exception.Message
             Timestamp = [datetime]::Now
+        }
+    }
+}
+
+function Get-VMwarePortGroups {
+    <#
+    .SYNOPSIS
+        Retrieves all port groups with their associated vSwitches
+    .OUTPUTS
+        [PSCustomObject[]] - Port group information
+    #>
+    [CmdletBinding()]
+    param()
+
+    try {
+        $portGroups = @()
+        $hostSystems = Get-VMHost | Sort-Object Name
+
+        foreach ($vmHost in $hostSystems) {
+            $networkSystem = $vmHost.ExtensionData.ConfigManager.NetworkSystem
+            $hostPgInfo = $networkSystem.NetworkInfo.Portgroup
+            
+            foreach ($pg in $hostPgInfo) {
+                $portGroups += [PSCustomObject]@{
+                    Host        = $vmHost.Name
+                    PortGroup   = $pg.Spec.Name
+                    vSwitch     = $pg.Spec.VswitchName
+                    VLAN        = $pg.Spec.VlanId
+                    HostSystem  = $vmHost
+                    Key         = "$($vmHost.Name)|$($pg.Spec.Name)"
+                }
+            }
+        }
+
+        return $portGroups | Sort-Object Host, PortGroup
+    }
+    catch {
+        Write-Warning "Failed to retrieve port groups: $_"
+        Set-StatusMessage -UiRefs $script:uiRefs -Message "Warning: Some port group data unavailable" -Type 'Warning'
+        return @()
+    }
+}
+
+
+function Get-Orphans {
+    <#
+    .SYNOPSIS
+        Enhanced orphan detection using vSphere API
+    .DESCRIPTION
+        Combines the efficiency of direct API calls with modern PowerShell practices
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore[]]$Datastore
+    )
+
+    Begin {
+        # Initialize search specification (like Get-VmwOrphan)
+        $flags = [VMware.Vim.FileQueryFlags]@{
+            FileOwner = $true
+            FileSize = $true
+            FileType = $true
+            Modification = $true
+        }
+
+        $searchSpec = [VMware.Vim.HostDatastoreBrowserSearchSpec]@{
+            details = $flags
+            sortFoldersFirst = $true
+        }
+
+        # Initialize file queries
+        $searchSpec.Query = @(
+            [VMware.Vim.FloppyImageFileQuery]::new(),
+            [VMware.Vim.FolderFileQuery]::new(),
+            [VMware.Vim.IsoImageFileQuery]::new(),
+            [VMware.Vim.VmConfigFileQuery]::new(),
+            [VMware.Vim.TemplateConfigFileQuery]::new(),
+            [VMware.Vim.VmDiskFileQuery]::new(),
+            [VMware.Vim.VmLogFileQuery]::new(),
+            [VMware.Vim.VmNvramFileQuery]::new(),
+            [VMware.Vim.VmSnapshotFileQuery]::new()
+        )
+    }
+
+    Process {
+        foreach ($ds in $Datastore) {
+            try {
+                Write-Verbose "Scanning datastore $($ds.Name)..."
+                $startTime = Get-Date
+
+                # Get all files from datastore
+                $dsBrowser = Get-View -Id $ds.ExtensionData.browser
+                $rootPath = "[$($ds.Name)]"
+                $searchResult = $dsBrowser.SearchDatastoreSubFolders($rootPath, $searchSpec)
+
+                # Create file table
+                $fileTable = @{}
+                foreach ($folder in $searchResult) {
+                    foreach ($file in $folder.File) {
+                        $key = "$($folder.FolderPath)$(if($folder.FolderPath[-1] -eq ']'){' '})$($file.Path)"
+                        $fileTable[$key] = $file
+                    }
+                }
+
+                # Remove registered VM files
+                Get-VM -Datastore $ds | ForEach-Object {
+                    $_.ExtensionData.LayoutEx.File | ForEach-Object {
+                        if ($fileTable.ContainsKey($_.Name)) {
+                            $fileTable.Remove($_.Name)
+                        }
+                    }
+                }
+
+                # Remove registered template files
+                Get-Template | Where-Object { $_.DatastoreIdList -contains $ds.Id } | ForEach-Object {
+                    $_.ExtensionData.LayoutEx.File | ForEach-Object {
+                        if ($fileTable.ContainsKey($_.Name)) {
+                            $fileTable.Remove($_.Name)
+                        }
+                    }
+                }
+
+                # Filter out system files
+                $systemFiles = $fileTable.Keys | Where-Object { $_ -match '\] \.|vmkdump' }
+                $systemFiles | ForEach-Object { $fileTable.Remove($_) }
+
+                # Prepare output
+                $orphans = foreach ($entry in $fileTable.GetEnumerator()) {
+                    [PSCustomObject]@{
+                        Name         = $entry.Value.Path
+                        FullPath     = $entry.Key
+                        Size         = $entry.Value.FileSize
+                        Modified     = $entry.Value.Modification
+                        Owner        = $entry.Value.Owner
+                        Type         = $entry.Value.GetType().Name.Replace('FileInfo','')
+                        Datastore    = $ds.Name
+                    }
+                }
+
+                $duration = (Get-Date) - $startTime
+                Write-Verbose "Scan completed in $($duration.TotalSeconds.ToString('0.00')) seconds. Found $($orphans.Count) orphans."
+
+                [PSCustomObject]@{
+                    Datastore   = $ds.Name
+                    OrphanCount = $orphans.Count
+                    Orphans     = $orphans
+                    ScanTime    = $duration.TotalSeconds
+                }
+            }
+            catch {
+                Write-Warning "Error scanning $($ds.Name): $_"
+                [PSCustomObject]@{
+                    Datastore   = $ds.Name
+                    OrphanCount = -1
+                    Orphans     = @()
+                    Error       = $_.Exception.Message
+                }
+            }
         }
     }
 }
@@ -227,7 +387,7 @@ function Update-DashboardWithData {
         Adapters      = $Data.Adapters.Count
         Templates     = $Data.Templates.Count
         PortGroups    = $Data.PortGroups.Count
-        OrphanedFiles = $Data.OrphanedFiles.Count
+        OrphanedFiles = ($Data.OrphanedFiles | Measure-Object -Property OrphanCount -Sum).Sum
     }
 
     foreach ($key in $cardValues.Keys) {
@@ -287,129 +447,6 @@ function Update-DashboardWithData {
 
 
 # --------------------------- Helpers --------------------------------------
-
-function Get-VMwarePortGroups {
-    <#
-    .SYNOPSIS
-        Retrieves all port groups with their associated vSwitches
-    .OUTPUTS
-        [PSCustomObject[]] - Port group information
-    #>
-    [CmdletBinding()]
-    param()
-
-    try {
-        $portGroups = @()
-        $hostSystems = Get-VMHost | Sort-Object Name
-
-        foreach ($vmHost in $hostSystems) {
-            $networkSystem = $vmHost.ExtensionData.ConfigManager.NetworkSystem
-            $hostPgInfo = $networkSystem.NetworkInfo.Portgroup
-            
-            foreach ($pg in $hostPgInfo) {
-                $portGroups += [PSCustomObject]@{
-                    Host        = $vmHost.Name
-                    PortGroup   = $pg.Spec.Name
-                    vSwitch     = $pg.Spec.VswitchName
-                    VLAN        = $pg.Spec.VlanId
-                    HostSystem  = $vmHost
-                    Key         = "$($vmHost.Name)|$($pg.Spec.Name)"
-                }
-            }
-        }
-
-        return $portGroups | Sort-Object Host, PortGroup
-    }
-    catch {
-        Write-Warning "Failed to retrieve port groups: $_"
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Warning: Some port group data unavailable" -Type 'Warning'
-        return @()
-    }
-}
-
-function Get-OrphanedVmFiles {
-    <#
-    .SYNOPSIS
-        Discovers orphaned files across all datastores
-    .OUTPUTS
-        [PSCustomObject]@{
-            TotalCount    = [int]
-            TotalSizeGB   = [decimal]
-            ByDatastore  = [array]
-            Timestamp     = [datetime]
-        }
-    #>
-    [CmdletBinding()]
-    param()
-
-    try {
-        $results = [PSCustomObject]@{
-            TotalCount  = 0
-            TotalSizeGB = 0
-            ByDatastore = @()
-            Timestamp   = [datetime]::UtcNow
-        }
-
-        # Get all registered files from VMs and templates
-        $registeredFiles = @(
-            (Get-VM).ExtensionData.LayoutEx.File.Name
-            (Get-Template).ExtensionData.LayoutEx.File.Name
-        ) | Select-Object -Unique
-
-        foreach ($ds in Get-Datastore -ErrorAction SilentlyContinue) {
-            try {
-                $orphans = @(Get-DatastoreFile -Datastore $ds -File "*" -Recurse -ErrorAction Stop |
-                    Where-Object {
-                        $_.FullPath -notin $registeredFiles -and
-                        $_.FullPath -notmatch '\] \.|vmkdump|\.hlog$|\.psf$'
-                    })
-
-                if ($orphans.Count -gt 0) {
-                    $sizeGB = [math]::Round(($orphans | Measure-Object -Property Length -Sum).Sum / 1GB, 2)
-                    
-                    $results.TotalCount += $orphans.Count
-                    $results.TotalSizeGB += $sizeGB
-
-                    $results.ByDatastore += [PSCustomObject]@{
-                        Datastore = $ds.Name
-                        Count     = $orphans.Count
-                        SizeGB    = $sizeGB
-                        Sample    = $orphans | Select-Object -First 3 | ForEach-Object {
-                            [PSCustomObject]@{
-                                Name = $_.Name
-                                Path = $_.FullPath
-                                Size = "$([math]::Round($_.Length / 1MB, 2)) MB"
-                            }
-                        }
-                    }
-                }
-            }
-            catch {
-                Write-Warning "Failed to scan $($ds.Name): $_"
-                $results.ByDatastore += [PSCustomObject]@{
-                    Datastore = $ds.Name
-                    Count     = -1  # Error indicator
-                    SizeGB    = 0
-                    Sample    = @()
-                    Error     = $_.Exception.Message
-                }
-            }
-        }
-
-        return $results
-    }
-    catch {
-        Write-Warning "Orphan file detection failed: $_"
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Warning: Orphan file scan incomplete" -Type 'Warning'
-        return [PSCustomObject]@{
-            TotalCount  = -1
-            TotalSizeGB = 0
-            ByDatastore = @()
-            Timestamp   = [datetime]::UtcNow
-            Error       = $_.Exception.Message
-        }
-    }
-}
 
 
 function New-DashboardHeader {
@@ -594,7 +631,6 @@ function New-DashboardActions {
     $flow.Dock                = 'Fill'
     $flow.Padding             = 10
     $flow.AutoSize            = $true
-    $flow.BackColor           = $script:Theme.LightGray
 
     $btnRefresh               = New-Object System.Windows.Forms.Button
     $btnRefresh.Text          = 'REFRESH'
