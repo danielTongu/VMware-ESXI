@@ -82,6 +82,7 @@ function New-VMsLayout {
     $filterPanel.Dock = 'Fill'
     $filterPanel.Autosize = $true
     $filterPanel.FlowDirection = 'LeftToRight'
+    $filterPanel.BackColor = $script:Theme.LightGray
     $filterPanel.Padding = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
     $mainLayout.Controls.Add($filterPanel, 0, 0)
 
@@ -113,7 +114,7 @@ function New-VMsLayout {
     $grid = New-Object System.Windows.Forms.DataGridView
     $grid.Name = 'gvVMs'
     $grid.Dock = 'Fill'
-    $grid.AutoSizeColumnsMode = 'Fill'
+    
     $grid.ReadOnly = $true
     $grid.AllowUserToAddRows = $false
     $grid.SelectionMode = 'FullRowSelect'
@@ -202,6 +203,101 @@ function New-VMsLayout {
         RefreshButton = $refreshBtn
         StatusLabel   = $statusLabel
         Buttons       = $btns
+    }
+}
+
+function Set-StatusMessage {
+    <#
+    .SYNOPSIS
+        Sets the status message with appropriate color coding.
+    #>
+
+    param(
+        [Parameter(Mandatory)]
+        [psobject] $UiRefs,
+        [string]$Message,
+        [ValidateSet('Success','Warning','Error','Info')]
+        [string]$Type = 'Info'
+    )
+    
+    $UiRefs.StatusLabel.Text = $Message
+    $UiRefs.StatusLabel.ForeColor = switch ($Type) {
+        'Success' { $script:Theme.Success }
+        'Warning' { $script:Theme.Warning }
+        'Error'   { $script:Theme.Error }
+        default   { $script:Theme.PrimaryDarker }
+    }
+}
+
+
+function New-FormButton {
+    <#
+    .SYNOPSIS
+        Creates a consistently styled form button.
+    .DESCRIPTION
+        Creates a button with standardized styling based on the application theme.
+    #>
+
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][string] $Text,
+        [System.Drawing.Size] $Size,
+        [System.Windows.Forms.Padding] $Margin,
+        [System.Drawing.Font] $Font = $null
+    )
+
+    $button = New-Object System.Windows.Forms.Button
+    $button.Name = $Name
+    $button.Text = $Text
+    $button.FlatStyle     = 'Flat'
+    
+    if ($Size) {$button.Size = $Size} 
+    else { $button.Size = New-Object System.Drawing.Size(120, 35)}
+    
+    if ($Margin) {$button.Margin = $Margin}
+    else { $button.Margin = New-Object System.Windows.Forms.Padding(5)}
+    
+    if ($Font) {$button.Font = $Font} 
+    else { $button.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)}
+    
+    $button.BackColor = $script:Theme.Primary
+    $button.ForeColor = $script:Theme.White
+    
+    return $button
+}
+
+
+function New-ButtonGroup {
+    <#
+    .SYNOPSIS
+        Creates a grouped set of buttons in a FlowLayoutPanel.
+    #>
+
+    param(
+        [Parameter(Mandatory)][System.Windows.Forms.FlowLayoutPanel] $ParentPanel,
+        [Parameter(Mandatory)][string] $GroupTitle,
+        [Parameter(Mandatory)][array] $ButtonDefinitions,
+        [Parameter(Mandatory)][hashtable] $ButtonsHashTable
+    )
+
+    $group = New-Object System.Windows.Forms.GroupBox
+    $group.Text = $GroupTitle
+    $group.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $group.Dock = 'Fill'
+    $group.Autosize = $true
+    $group.Padding = New-Object System.Windows.Forms.Padding(10)
+    $ParentPanel.Controls.Add($group)
+
+    $panel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $panel.Dock = 'Fill'
+    $panel.FlowDirection = 'LeftToRight'
+    $panel.Autosize = $true
+    $group.Controls.Add($panel)
+
+    foreach ($def in $ButtonDefinitions) {
+        $btn = New-FormButton -Name "btn$($def.Key)" -Text $def.Text
+        $panel.Controls.Add($btn)
+        $ButtonsHashTable[$def.Key] = $btn
     }
 }
 
@@ -297,141 +393,6 @@ function Update-VMData {
     Set-StatusMessage -UiRefs $UiRefs -Message "$($Data.Count) VMs found" -Type Success
 }
 
-
-function Wire-UIEvents {
-    <#
-    .SYNOPSIS
-        Hooks up all UI events with properly captured UiRefs.
-    #>
-
-    param(
-        [Parameter(Mandatory)]
-        [psobject] $UiRefs
-    )
-
-    # Search button click event
-    $UiRefs.SearchButton.Add_Click({
-        param($sender, $e)
-        . $PSScriptRoot\VMsView.ps1
-        Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
-    })
-
-    # Search box key down event (Enter key)
-    $UiRefs.SearchBox.Add_KeyDown({
-        param($sender, $e)
-        if ($e.KeyCode -eq 'Enter') {
-            . $PSScriptRoot\VMsView.ps1
-            Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
-        }
-    })
-
-    # Refresh button click event
-    $UiRefs.RefreshButton.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Show-VMsView -ContentPanel $UiRefs.ContentPanel
-    })
-
-    # Power operation buttons
-    $UiRefs.Buttons.PowerOn.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'On'
-    })
-
-    $UiRefs.Buttons.PowerOff.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Off'
-    })
-
-    $UiRefs.Buttons.PowerAllOn.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOn'
-    })
-
-    $UiRefs.Buttons.PowerAllOff.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOff'
-    })
-
-    $UiRefs.Buttons.Restart.Add_Click({
-        . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Restart'
-    })
-}
-
-
-#------------------------- Helper functions ---------------------------------
-
-
-function New-FormButton {
-    <#
-    .SYNOPSIS
-        Creates a consistently styled form button.
-    .DESCRIPTION
-        Creates a button with standardized styling based on the application theme.
-    #>
-
-    param(
-        [Parameter(Mandatory)][string] $Name,
-        [Parameter(Mandatory)][string] $Text,
-        [System.Drawing.Size] $Size,
-        [System.Windows.Forms.Padding] $Margin,
-        [System.Drawing.Font] $Font = $null
-    )
-
-    $button = New-Object System.Windows.Forms.Button
-    $button.Name = $Name
-    $button.Text = $Text
-    $button.FlatStyle     = 'Flat'
-    
-    if ($Size) {$button.Size = $Size} 
-    else { $button.Size = New-Object System.Drawing.Size(120, 35)}
-    
-    if ($Margin) {$button.Margin = $Margin}
-    else { $button.Margin = New-Object System.Windows.Forms.Padding(5)}
-    
-    if ($Font) {$button.Font = $Font} 
-    else { $button.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)}
-    
-    $button.BackColor = $script:Theme.Primary
-    $button.ForeColor = $script:Theme.White
-    
-    return $button
-}
-
-
-function New-ButtonGroup {
-    <#
-    .SYNOPSIS
-        Creates a grouped set of buttons in a FlowLayoutPanel.
-    #>
-
-    param(
-        [Parameter(Mandatory)][System.Windows.Forms.FlowLayoutPanel] $ParentPanel,
-        [Parameter(Mandatory)][string] $GroupTitle,
-        [Parameter(Mandatory)][array] $ButtonDefinitions,
-        [Parameter(Mandatory)][hashtable] $ButtonsHashTable
-    )
-
-    $group = New-Object System.Windows.Forms.GroupBox
-    $group.Text = $GroupTitle
-    $group.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $group.Dock = 'Fill'
-    $group.Autosize = $true
-    $group.Padding = New-Object System.Windows.Forms.Padding(10)
-    $ParentPanel.Controls.Add($group)
-
-    $panel = New-Object System.Windows.Forms.FlowLayoutPanel
-    $panel.Dock = 'Fill'
-    $panel.FlowDirection = 'LeftToRight'
-    $panel.Autosize = $true
-    $group.Controls.Add($panel)
-
-    foreach ($def in $ButtonDefinitions) {
-        $btn = New-FormButton -Name "btn$($def.Key)" -Text $def.Text
-        $panel.Controls.Add($btn)
-        $ButtonsHashTable[$def.Key] = $btn
-    }
-}
 
 function Apply-Filter {
     <#
@@ -569,26 +530,62 @@ function Invoke-PowerOperation {
     }
 }
 
-
-function Set-StatusMessage {
+function Wire-UIEvents {
     <#
     .SYNOPSIS
-        Sets the status message with appropriate color coding.
+        Hooks up all UI events with properly captured UiRefs.
     #>
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $UiRefs,
-        [string]$Message,
-        [ValidateSet('Success','Warning','Error','Info')]
-        [string]$Type = 'Info'
+        [psobject] $UiRefs
     )
-    
-    $UiRefs.StatusLabel.Text = $Message
-    $UiRefs.StatusLabel.ForeColor = switch ($Type) {
-        'Success' { $script:Theme.Success }
-        'Warning' { $script:Theme.Warning }
-        'Error'   { $script:Theme.Error }
-        default   { $script:Theme.PrimaryDarker }
-    }
+
+    # Search button click event
+    $UiRefs.SearchButton.Add_Click({
+        param($sender, $e)
+        . $PSScriptRoot\VMsView.ps1
+        Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
+    })
+
+    # Search box key down event (Enter key)
+    $UiRefs.SearchBox.Add_KeyDown({
+        param($sender, $e)
+        if ($e.KeyCode -eq 'Enter') {
+            . $PSScriptRoot\VMsView.ps1
+            Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
+        }
+    })
+
+    # Refresh button click event
+    $UiRefs.RefreshButton.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Show-VMsView -ContentPanel $UiRefs.ContentPanel
+    })
+
+    # Power operation buttons
+    $UiRefs.Buttons.PowerOn.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'On'
+    })
+
+    $UiRefs.Buttons.PowerOff.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Off'
+    })
+
+    $UiRefs.Buttons.PowerAllOn.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOn'
+    })
+
+    $UiRefs.Buttons.PowerAllOff.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOff'
+    })
+
+    $UiRefs.Buttons.Restart.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Restart'
+    })
 }
