@@ -63,12 +63,11 @@ function New-DashboardLayout {
     $root.Dock         = 'Fill'
     $root.ColumnCount  = 1
     $root.RowCount     = 4
-    $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
-    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    
+    $null = $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
     $ContentPanel.Controls.Add($root)
 
     # ── Header ----------------------------------------------------------------
