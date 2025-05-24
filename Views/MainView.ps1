@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Drawing
 function Show-MainView {
     <#
     .SYNOPSIS
-        Displays the main application shell with auto-sized sidebar and content area.
+        Displays the application shell with auto-sized sidebar and content area.
     #>
 
     [CmdletBinding()]
@@ -17,12 +17,12 @@ function Show-MainView {
     $script:ActiveButton = $null
 
     # Main window
-    $main = New-Object System.Windows.Forms.Form
-    $main.Text          = 'VMware ESXi Management Console'
-    $main.StartPosition = 'CenterScreen'
-    $main.Size          = New-Object System.Drawing.Size(1150,650)
-    $main.MinimumSize   = New-Object System.Drawing.Size(850,650)
-    $main.BackColor     = $script:Theme.LightGray
+    $script:form = New-Object System.Windows.Forms.Form
+    $script:form.Text          = 'VMware ESXi Management Console'
+    $script:form.StartPosition = 'CenterScreen'
+    $script:form.Size          = New-Object System.Drawing.Size(1150,650)
+    $script:form.MinimumSize   = New-Object System.Drawing.Size(850,650)
+    $script:form.BackColor     = $script:Theme.LightGray
 
     # SplitContainer: Panel1 = sidebar, Panel2 = content
     $splitContainer = New-Object System.Windows.Forms.SplitContainer
@@ -30,9 +30,10 @@ function Show-MainView {
     $splitContainer.FixedPanel      = 'Panel1'
     $splitContainer.SplitterWidth   = 1
     
-    $main.Controls.Add($splitContainer)
+    $script:form.Controls.Add($splitContainer)
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
 
-    # -- Sidebar (Panel1) --
+    # ===== Sidebar (Panel1) ========================
     $sidebar = New-Object System.Windows.Forms.Panel
     $sidebar.Dock       = 'Fill'
     $sidebar.Autosize   = $true
@@ -89,19 +90,9 @@ function Show-MainView {
     $navPanel.WrapContents  = $false
     $navPanel.AutoScroll    = $true
     $navPanel.Autosize    = $true
-    $navPanel.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $navPanel.Padding     = New-Object System.Windows.Forms.Padding(10)
     $navPanel.BackColor  = $script:Theme.PrimaryDark
     $sidebarLayout.Controls.Add($navPanel,0,3)
-
-    # set spliiter distance after finishing adding everything for panel1
-    $splitContainer.SplitterDistance= 225
-
-    # -- Content panel (Panel2) --
-    $contentPanel = New-Object System.Windows.Forms.Panel
-    $contentPanel.Dock      = 'Fill'
-    $contentPanel.Autosize    = $true
-    $contentPanel.BackColor = $script:Theme.LightGray
-    $splitContainer.Panel2.Controls.Add($contentPanel)
 
     # Authentication button
     $script:AuthButton = New-Object System.Windows.Forms.Button
@@ -119,6 +110,13 @@ function Show-MainView {
 
     $navPanel.Controls.Add($script:AuthButton)
 
+    # -- Content panel (Panel2) -------------------------
+    $contentPanel = New-Object System.Windows.Forms.Panel
+    $contentPanel.Dock      = 'Fill'
+    $contentPanel.Autosize    = $true
+    $contentPanel.BackColor = $script:Theme.LightGray
+    $splitContainer.Panel2.Controls.Add($contentPanel)
+
      # Load nav buttons
     $scriptDir = $PSScriptRoot
     $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
@@ -129,6 +127,9 @@ function Show-MainView {
     $btnLogs      = New-NavButton -Text 'Logs'              -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
 
     $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
+
+    # set spliiter distance after finishing adding everything for panel1
+    $splitContainer.SplitterDistance= 225
 
 
     #----------------------------- Wire UI events -----------------------------------
@@ -159,18 +160,18 @@ function Show-MainView {
                     $btnDashboard.PerformClick() 
                 }
             } else {
-                $main.Close()
+                $script:form.Close()
             }
         }
     })
 
     # On load: show Dashboard
-    $main.Add_Load({
+    $script:form.Add_Load({
         $btnDashboard.PerformClick()
     })
 
     # Confirm on close
-    $main.Add_FormClosing({
+    $script:form.Add_FormClosing({
         $r = [System.Windows.Forms.MessageBox]::Show(
             'Exit application?', 'Confirm',
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
@@ -188,7 +189,8 @@ function Show-MainView {
     #------------------------ Display the UI ---------------------------
 
     [System.Windows.Forms.Application]::EnableVisualStyles()
-    $main.ShowDialog() | Out-Null
+    $script:form.ShowDialog() | Out-Null
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::Default
 }
 
 
@@ -265,6 +267,8 @@ function New-NavButton {
 
     # Click handler
     $btn.Add_Click({
+        $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
         foreach ($ctrl in $this.Parent.Controls) {
             if ($ctrl -is [System.Windows.Forms.Button] -and $ctrl -ne $script:AuthButton) {
                 $ctrl.BackColor = $script:Theme.PrimaryDarker
@@ -278,6 +282,8 @@ function New-NavButton {
 
         $info = $this.Tag
         Load-ViewIntoPanel -ScriptPath $info.Script -TargetPanel $info.Panel
+        
+        $script:Form.Cursor = [System.Windows.Forms.Cursors]::Default
     })
 
     return $btn
