@@ -114,7 +114,7 @@ function New-VMsLayout {
     $grid = New-Object System.Windows.Forms.DataGridView
     $grid.Name = 'gvVMs'
     $grid.Dock = 'Fill'
-    
+    $grid.AutoSizeColumnsMode = 'Fill'
     $grid.ReadOnly = $true
     $grid.AllowUserToAddRows = $false
     $grid.SelectionMode = 'FullRowSelect'
