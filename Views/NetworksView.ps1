@@ -17,21 +17,15 @@ function Show-NetworksView {
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    # Keep the panel in a global so REFRESH can call us again.
-    $script:NetworksContentPanel = $ContentPanel
-
     try {
-        $Refs = New-NetworksLayout -ContentPanel $ContentPanel
-        $data = Get-NetworksData -Refs $Refs
+        $uiRefs = New-NetworksLayout -ContentPanel $ContentPanel
+        $data = Get-NetworksData -Refs $uiRefs
 
         if ($data) {
-            Update-NetworksWithData -Refs $Refs -Data $data
-            
+            Update-NetworksWithData -Refs $uiRefs -Data $data
+            Wire-UIEvents -Refs $uiRefs
         }
-        Wire-UIEvents -Ref $Refs
-    }
-
-    catch {
+    } catch {
         Write-Verbose "Networks view initialisation failed: $_"
     }
 }
@@ -602,17 +596,7 @@ function Wire-UIEvents {
         # Refresh Button Click
         $Refs.RefreshButton.Add_Click({
             . $PSScriptRoot\NetworksView.ps1
-            try {
-                Set-StatusMessage -Refs $Refs -Message "Refreshing..." -Type Info
-                $data = Get-NetworksData -Refs $Refs
-                if ($data) {
-                    Update-NetworksWithData -Refs $Refs -Data $data
-                }
-            }
-            catch {
-                Write-Error "Error in RefreshButton click: $_"
-                Set-StatusMessage -Refs $Refs -Message "Error: $($_.Exception.Message)" -Type Error
-            }
+            Show-NetworksView -ContentPanel $Refs.ContentPanel
         })
 
         # Delete Network Button Click
@@ -688,8 +672,8 @@ function Wire-UIEvents {
             }
             catch {
                 Write-Error "Error in DeleteMultipleButton click: $_"
-                #Set-StatusMessage -Refs $Refs -
-                       }
+                Set-StatusMessage -Refs $Refs -Message "Error: $($_.Exception.Message)" -Type Error          
+            }
         })
 
         # Add Network Button Click
