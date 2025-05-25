@@ -180,7 +180,7 @@ function Get-DashboardData {
 
         # Add network and orphan data
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Analyzing network configuration..." -Type 'Info'
-        $data.PortGroups = Get-VMwarePortGroups
+        $data.PortGroups = $data['Get-VMHost'] | Get-VirtualPortGroup
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
         $data.OrphanedFiles = $data['Get-Datastore'] | Get-Orphans 
