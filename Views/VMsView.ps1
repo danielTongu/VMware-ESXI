@@ -18,13 +18,13 @@ function Show-VMsView {
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    $script:uiRefs = New-VMsLayout -ContentPanel $ContentPanel
+    $script:Refs = New-VMsLayout -ContentPanel $ContentPanel
 
     $data = Get-VMsData
 
     if ($data) {
-        Update-VMData -UiRefs $script:uiRefs -Data $data
-        Wire-UIEvents -UiRefs $script:uiRefs
+        Update-VMData -Refs $script:Refs -Data $data
+        Wire-UIEvents -Refs $script:Refs
     }
 }
 
@@ -214,14 +214,14 @@ function Set-StatusMessage {
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $UiRefs,
+        [psobject] $Refs,
         [string]$Message,
         [ValidateSet('Success','Warning','Error','Info')]
         [string]$Type = 'Info'
     )
     
-    $UiRefs.StatusLabel.Text = $Message
-    $UiRefs.StatusLabel.ForeColor = switch ($Type) {
+    $Refs.StatusLabel.Text = $Message
+    $Refs.StatusLabel.ForeColor = switch ($Type) {
         'Success' { $script:Theme.Success }
         'Warning' { $script:Theme.Warning }
         'Error'   { $script:Theme.Error }
@@ -314,7 +314,7 @@ function Get-VMsData {
     [CmdletBinding()] param()
 
     if (-not $script:Connection) {
-        Set-StatusMessage -UiRefs $UiRefs -Message "No vSphere connection available" -Type Error
+        Set-StatusMessage -Refs $script:Refs -Message "No vSphere connection available" -Type Error
         Write-Verbose "No vSphere connection available"
         return $null 
     }
@@ -352,25 +352,25 @@ function Update-VMData {
 
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][psobject] $UiRefs,
+        [Parameter(Mandatory)][psobject] $Refs,
         $Data
     )
 
-    Set-StatusMessage -UiRefs $UiRefs -Message "Refreshing VM data..." -Type Info  
+    Set-StatusMessage -Refs $Refs -Message "Refreshing VM data..." -Type Info  
     
     # Clear previous rows
-    $UiRefs.Grid.Rows.Clear()
+    $Refs.Grid.Rows.Clear()
 
     # Prepare for data display
     if (-not $Data) {
-        Set-StatusMessage -UiRefs $UiRefs -Message "No Data Found" -Type Error
+        Set-StatusMessage -Refs $Refs -Message "No Data Found" -Type Error
         return
     }
 
     # Insert one row per VM
     foreach ($vm in $Data) {
-        $rowIndex = $UiRefs.Grid.Rows.Add()
-        $row = $UiRefs.Grid.Rows[$rowIndex]
+        $rowIndex = $Refs.Grid.Rows.Add()
+        $row = $Refs.Grid.Rows[$rowIndex]
 
         $row.Cells['No'].Value = $rowIndex + 1
         $row.Cells['Name'].Value = $vm.Name
@@ -388,9 +388,9 @@ function Update-VMData {
     }
 
     # Resize columns for readability
-    $UiRefs.Grid.AutoResizeColumns()
+    $Refs.Grid.AutoResizeColumns()
 
-    Set-StatusMessage -UiRefs $UiRefs -Message "$($Data.Count) VMs found" -Type Success
+    Set-StatusMessage -Refs $Refs -Message "$($Data.Count) VMs found" -Type Success
 }
 
 
@@ -402,7 +402,7 @@ function Apply-Filter {
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $UiRefs,
+        [psobject] $Refs,
         $Sender,
         $EventArgs
     )
@@ -417,11 +417,11 @@ function Apply-Filter {
         $EventArgs.SuppressKeyPress = $true
     }
 
-    $needle = $UiRefs.SearchBox.Text.Trim()
+    $needle = $Refs.SearchBox.Text.Trim()
     $hasFilter = -not [string]::IsNullOrWhiteSpace($needle)
     $visibleCount = 0
 
-    foreach ($row in $UiRefs.Grid.Rows) {
+    foreach ($row in $Refs.Grid.Rows) {
         $name  = $row.Cells['Name'].Value
         $ip    = $row.Cells['IP'].Value
         $state = $row.Cells['PowerState'].Value
@@ -434,14 +434,14 @@ function Apply-Filter {
         if ($row.Visible) { $visibleCount++ }
     }
 
-    $total = $UiRefs.Grid.Rows.Count
+    $total = $Refs.Grid.Rows.Count
     if (-not $hasFilter) {
-        Set-StatusMessage -UiRefs $UiRefs -Message "Filter cleared: showing all $total VMs" -Type Success
+        Set-StatusMessage -Refs $Refs -Message "Filter cleared: showing all $total VMs" -Type Success
     }
     else {
         $message = "Filter applied: showing $visibleCount of $total VMs"
         $type = if ($visibleCount -gt 0) { 'Success' } else { 'Warning' }
-        Set-StatusMessage -UiRefs $UiRefs -Message $message -Type $type
+        Set-StatusMessage -Refs $Refs -Message $message -Type $type
     }
 }
 
@@ -454,7 +454,7 @@ function Invoke-PowerOperation {
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $UiRefs,
+        [psobject] $Refs,
         [ValidateSet('On','Off','AllOn','AllOff','Restart')]
         [string]$Operation,
         [bool]$Force = $false
@@ -463,20 +463,20 @@ function Invoke-PowerOperation {
     try {
         # Determine target VMs
         if ($Operation -like 'All*') {
-            $targetVMs = $UiRefs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Name'].Value }
+            $targetVMs = $Refs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Name'].Value }
             $Operation = $Operation -replace 'All', ''
         }
         else {
-            $selectedRows = @($UiRefs.Grid.SelectedRows)
+            $selectedRows = @($Refs.Grid.SelectedRows)
             if ($selectedRows.Count -eq 0) {
-                Set-StatusMessage -UiRefs $UiRefs -Message "No VMs selected" -Type Warning
+                Set-StatusMessage -Refs $Refs -Message "No VMs selected" -Type Warning
                 return
             }
             $targetVMs = $selectedRows | ForEach-Object { $_.Cells['Name'].Value }
         }
 
         if (-not $targetVMs) {
-            Set-StatusMessage -UiRefs $UiRefs -Message "No VMs to operate on" -Type Warning
+            Set-StatusMessage -Refs $Refs -Message "No VMs to operate on" -Type Warning
             return
         }
 
@@ -496,12 +496,12 @@ function Invoke-PowerOperation {
             )
 
             if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
-                Set-StatusMessage -UiRefs $UiRefs -Message "Operation cancelled" -Type Info
+                Set-StatusMessage -Refs $Refs -Message "Operation cancelled" -Type Info
                 return
             }
         }
 
-        Set-StatusMessage -UiRefs $UiRefs -Message "Performing $Operation operation..." -Type Info
+        Set-StatusMessage -Refs $Refs -Message "Performing $Operation operation..." -Type Info
 
         # Execute operation
         $successCount = 0
@@ -521,71 +521,71 @@ function Invoke-PowerOperation {
         }
 
         # Refresh and show status
-        Update-VMData -UiRefs $UiRefs -Data Get-VMsData
-        Set-StatusMessage -UiRefs $UiRefs -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
+        Update-VMData -Refs $Refs -Data Get-VMsData
+        Set-StatusMessage -Refs $Refs -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
     }
     catch {
         Write-Verbose "Power operation error: $_"
-        Set-StatusMessage -UiRefs $UiRefs -Message "Error performing $Operation operation" -Type Error
+        Set-StatusMessage -Refs $Refs -Message "Error performing $Operation operation" -Type Error
     }
 }
 
 function Wire-UIEvents {
     <#
     .SYNOPSIS
-        Hooks up all UI events with properly captured UiRefs.
+        Hooks up all UI events with properly captured Refs.
     #>
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $UiRefs
+        [psobject] $Refs
     )
 
     # Search button click event
-    $UiRefs.SearchButton.Add_Click({
+    $Refs.SearchButton.Add_Click({
         param($sender, $e)
         . $PSScriptRoot\VMsView.ps1
-        Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
+        Apply-Filter -Refs $Refs -Sender $sender -EventArgs $e
     })
 
     # Search box key down event (Enter key)
-    $UiRefs.SearchBox.Add_KeyDown({
+    $Refs.SearchBox.Add_KeyDown({
         param($sender, $e)
         if ($e.KeyCode -eq 'Enter') {
             . $PSScriptRoot\VMsView.ps1
-            Apply-Filter -UiRefs $UiRefs -Sender $sender -EventArgs $e
+            Apply-Filter -Refs Refs -Sender $sender -EventArgs $e
         }
     })
 
     # Refresh button click event
-    $UiRefs.RefreshButton.Add_Click({
+    $Refs.RefreshButton.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Show-VMsView -ContentPanel $UiRefs.ContentPanel
+        Show-VMsView -ContentPanel $Refs.ContentPanel
     })
 
     # Power operation buttons
-    $UiRefs.Buttons.PowerOn.Add_Click({
+    $Refs.Buttons.PowerOn.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'On'
+        Invoke-PowerOperation -Refs $Refs -Operation 'On'
     })
 
-    $UiRefs.Buttons.PowerOff.Add_Click({
+    $Refs.Buttons.PowerOff.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Off'
+        Invoke-PowerOperation -Refs $Refs -Operation 'Off'
     })
 
-    $UiRefs.Buttons.PowerAllOn.Add_Click({
+    $Refs.Buttons.PowerAllOn.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOn'
+        Invoke-PowerOperation -Refs $Refs -Operation 'AllOn'
     })
 
-    $UiRefs.Buttons.PowerAllOff.Add_Click({
+    $Refs.Buttons.PowerAllOff.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'AllOff'
+        Invoke-PowerOperation -Refs $Refs -Operation 'AllOff'
     })
 
-    $UiRefs.Buttons.Restart.Add_Click({
+    $Refs.Buttons.Restart.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -UiRefs $UiRefs -Operation 'Restart'
+        Invoke-PowerOperation -Refs $Refs -Operation 'Restart'
     })
 }
