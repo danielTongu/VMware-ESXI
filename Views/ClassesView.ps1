@@ -86,7 +86,7 @@ function New-ClassManagerLayout {
 
     $lblLast = New-Object System.Windows.Forms.Label
     $lblLast.Name = 'LastRefreshLabel'
-    $lblLast.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $lblLast.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
     $lblLast.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $lblLast.ForeColor = $script:Theme.White
     $lblLast.Location = New-Object System.Drawing.Point(20, 45)
@@ -432,7 +432,7 @@ function Update-ClassManagerWithData {
     try {
         $conn = $script:Connection
         # Update timestamp
-        $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss'))"
+        $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss tt'))"
 
         # Populate Overview tree
         $tree = $UiRefs.Tabs.Overview.TreeView
