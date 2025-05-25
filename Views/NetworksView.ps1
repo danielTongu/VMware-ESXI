@@ -95,6 +95,7 @@ function New-NetworksLayout {
     )
 
     try {
+        $ContentPanel.SuspendLayout()
         $ContentPanel.Controls.Clear()
         $ContentPanel.BackColor = $script:Theme.LightGray
 
@@ -125,66 +126,239 @@ function New-NetworksLayout {
         $tabs.BackColor   = $script:Theme.LightGray
         $root.Controls.Add($tabs, 0, 1)
 
-        # 4. Hosts -----------------------------------------------------------------
-        $tabHosts         = New-Object System.Windows.Forms.TabPage 'Hosts'
+        # 1. Networks Manager -----------------------------------------------------------------
+        $tabManage = New-Object System.Windows.Forms.TabPage 'Manage'
+        $tabManage.BackColor = $script:Theme.White
+        
+        # Main layout for the Manage tab
+        $manageLayout = New-Object System.Windows.Forms.TableLayoutPanel
+        $manageLayout.Dock = 'Fill'
+        $manageLayout.ColumnCount = 2
+        $manageLayout.RowCount = 2
+        $manageLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
+        $manageLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
+        $tabManage.Controls.Add($manageLayout)
+
+        # Top label to describe what this tab does.
+        $tabNetDescription = New-Object System.Windows.Forms.Label
+        $tabNetDescription.Text = "Manages Standard switches and their associated port groups.`n"
+        $tabNetDescription.ForeColor = $script:Theme.PrimaryDark
+        $tabNetDescription.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+        $tabNetDescription.Anchor = 'Left'
+        $tabNetDescription.AutoSize = $true
+        $manageLayout.Controls.Add($tabNetDescription,0,0)
+        $manageLayout.SetColumnSpan($tabNetDescription,2)
+
+        #── Left Panel: Add Single Network ────────────────────────────────────────
+        $grNetAdd = New-Object System.Windows.Forms.GroupBox
+        $grNetAdd.Text = 'Single Network'
+        $grNetAdd.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+        $grNetAdd.Dock = 'Fill'
+        $grNetAdd.Margin = New-Object System.Windows.Forms.Padding(5)
+        $grNetAdd.Padding = New-Object System.Windows.Forms.Padding(10)
+        
+        $layoutNetAdd = New-Object System.Windows.Forms.TableLayoutPanel
+        $layoutNetAdd.Dock = 'Fill'
+        $layoutNetAdd.ColumnCount = 3
+        $layoutNetAdd.RowCount = 2
+        $layoutNetAdd.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'AutoSize'))
+        $layoutNetAdd.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+        $layoutNetAdd.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+        
+        # Network Name Label
+        $labelNetworkName = New-Object System.Windows.Forms.Label
+        $labelNetworkName.Text = "Network Name:"
+        $labelNetworkName.Anchor = 'Left'
+        $labelNetworkName.AutoSize = $true
+        $layoutNetAdd.Controls.Add($labelNetworkName, 0, 0)
+        
+        # Network Name Input
+        $inputNetworkName = New-Object System.Windows.Forms.TextBox
+        $inputNetworkName.Dock = 'Fill'
+        $inputNetworkName.Margin = New-Object System.Windows.Forms.Padding(0,0,0,5)
+        $layoutNetAdd.Controls.Add($inputNetworkName, 1, 0)
+        
+        # Add Button
+        $btnAddNet = New-Object System.Windows.Forms.Button
+        $btnAddNet.Text = "Add Network"
+        $btnAddNet.Dock = 'Top'
+        $btnAddNet.Size = New-Object System.Drawing.Size(0, 35)
+        $btnAddNet.Margin = New-Object System.Windows.Forms.Padding(0,5,5,0)
+        $btnAddNet.BackColor = $script:Theme.Primary
+        $btnAddNet.ForeColor = $script:Theme.White
+        $layoutNetAdd.Controls.Add($btnAddNet, 1, 1)
+        
+        # Delete Button
+        $btnDelNet = New-Object System.Windows.Forms.Button
+        $btnDelNet.Text = "Delete Network"
+        $btnDelNet.Dock = 'Top'
+        $btnDelNet.Size = New-Object System.Drawing.Size(0, 35)
+        $btnDelNet.Margin = New-Object System.Windows.Forms.Padding(0,5,5,0)
+        $btnDelNet.BackColor = $script:Theme.Error
+        $btnDelNet.ForeColor = $script:Theme.White
+        $layoutNetAdd.Controls.Add($btnDelNet, 2, 1)
+        
+        $grNetAdd.Controls.Add($layoutNetAdd)
+        $manageLayout.Controls.Add($grNetAdd, 0, 1)
+        
+        #── Right Panel: Multiple Networks ──────────────────────────────────────────
+        $grMult = New-Object System.Windows.Forms.GroupBox
+        $grMult.Text = 'Multiple Networks'
+        $grMult.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+        $grMult.Dock = 'Fill'
+        $grMult.Margin = New-Object System.Windows.Forms.Padding(5)
+        $grMult.Padding = New-Object System.Windows.Forms.Padding(10)
+        
+        $layoutMult = New-Object System.Windows.Forms.TableLayoutPanel
+        $layoutMult.Dock = 'Fill'
+        $layoutMult.ColumnCount = 3
+        $layoutMult.RowCount = 4
+        $layoutMult.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'AutoSize'))
+        $layoutMult.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
+        $layoutMult.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
+        $layoutMult.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+        $layoutMult.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+        $layoutMult.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+        $layoutMult.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+        
+        # Course Label
+        $labelCourse = New-Object System.Windows.Forms.Label
+        $labelCourse.Text = "Course Prefix:"
+        $labelCourse.Anchor = 'Left'
+        $labelCourse.AutoSize = $true
+        $layoutMult.Controls.Add($labelCourse, 0, 0)
+        
+        # Course Input
+        $inputCourseID = New-Object System.Windows.Forms.TextBox
+        $inputCourseID.Dock = 'Fill'
+        $inputCourseID.Margin = New-Object System.Windows.Forms.Padding(0,0,0,5)
+        $layoutMult.Controls.Add($inputCourseID, 1, 0)
+        
+        # Start Number Label
+        $labelStartNum = New-Object System.Windows.Forms.Label
+        $labelStartNum.Text = "Start Number:"
+        $labelStartNum.Anchor = 'Left'
+        $labelStartNum.AutoSize = $true
+        $layoutMult.Controls.Add($labelStartNum, 0, 1)
+        
+        # Start Number Input
+        $inputStartNum = New-Object System.Windows.Forms.NumericUpDown
+        $inputStartNum.Dock = 'Fill'
+        $inputStartNum.Margin = New-Object System.Windows.Forms.Padding(0,0,0,5)
+        $inputStartNum.Minimum = 1
+        $inputStartNum.Maximum = 999
+        $layoutMult.Controls.Add($inputStartNum, 1, 1)
+        
+        # End Number Label
+        $labelEndNum = New-Object System.Windows.Forms.Label
+        $labelEndNum.Text = "End Number:"
+        $labelEndNum.Anchor = 'Left'
+        $labelEndNum.AutoSize = $true
+        $layoutMult.Controls.Add($labelEndNum, 0, 2)
+        
+        # End Number Input
+        $inputEndNum = New-Object System.Windows.Forms.NumericUpDown
+        $inputEndNum.Dock = 'Fill'
+        $inputEndNum.Margin = New-Object System.Windows.Forms.Padding(0,0,0,5)
+        $inputEndNum.Minimum = 1
+        $inputEndNum.Maximum = 999
+        $layoutMult.Controls.Add($inputEndNum, 1, 2)
+        
+        # Add Multiple Button
+        $btnAddMult = New-Object System.Windows.Forms.Button
+        $btnAddMult.Text = "Add Networks"
+        $btnAddMult.Dock = 'Top'
+        $btnAddMult.Size = New-Object System.Drawing.Size(0, 35)
+        $btnAddMult.Margin = New-Object System.Windows.Forms.Padding(0,10,5,0)
+        $btnAddMult.BackColor = $script:Theme.Primary
+        $btnAddMult.ForeColor = $script:Theme.White
+        $layoutMult.Controls.Add($btnAddMult, 1, 3)
+        
+        # Delete Multiple Button
+        $btnDelMult = New-Object System.Windows.Forms.Button
+        $btnDelMult.Text = "Delete Networks"
+        $btnDelMult.Dock = 'Top'
+        $btnDelMult.Size = New-Object System.Drawing.Size(0, 35)
+        $btnDelMult.Margin = New-Object System.Windows.Forms.Padding(0,10,5,0)
+        $btnDelMult.BackColor = $script:Theme.Error
+        $btnDelMult.ForeColor = $script:Theme.White
+        $layoutMult.Controls.Add($btnDelMult, 2, 3)
+        
+        $grMult.Controls.Add($layoutMult)
+        $manageLayout.Controls.Add($grMult, 1, 1)
+        
+        $tabs.TabPages.Add($tabManage)
+
+        # 2. Hosts -----------------------------------------------------------------
+        $tabHosts = New-Object System.Windows.Forms.TabPage 'Hosts'
         $tabHosts.BackColor = $script:Theme.White
-        $hostsTable       = New-NetworksTable `
-                                -Columns  @('Host','CPU Total','Memory GB','Model','Version') `
-                                -Name     'HostsTable' `
-                                -Refs     ([ref]$refs)
+        $hostsTable = New-NetworksTable `
+                        -Columns @('Host','CPU Total','Memory GB','Model','Version') `
+                        -Name 'HostsTable' `
+                        -Refs ([ref]$refs)
         $tabHosts.Controls.Add($hostsTable)
         $tabs.TabPages.Add($tabHosts)
 
-        # 5. Network Adapters ------------------------------------------------------
-        $tabNics          = New-Object System.Windows.Forms.TabPage 'Adapters'
+        # 3. Network Adapters ------------------------------------------------------
+        $tabNics = New-Object System.Windows.Forms.TabPage 'Adapters'
         $tabNics.BackColor = $script:Theme.White
-        $nicsTable        = New-NetworksTable `
-                                -Columns  @('Host','Name','MAC','Speed (Mbps)','Connected') `
-                                -Name     'NicsTable' `
-                                -Refs     ([ref]$refs)
+        $nicsTable = New-NetworksTable `
+                        -Columns @('Host','Name','MAC','Speed (Mbps)','Connected') `
+                        -Name 'NicsTable' `
+                        -Refs ([ref]$refs)
         $tabNics.Controls.Add($nicsTable)
         $tabs.TabPages.Add($tabNics)
 
-        # 6. Templates -------------------------------------------------------------
-        $tabTpl           = New-Object System.Windows.Forms.TabPage 'Templates'
+        # 4. Templates -------------------------------------------------------------
+        $tabTpl = New-Object System.Windows.Forms.TabPage 'Templates'
         $tabTpl.BackColor = $script:Theme.White
-        $tplTable         = New-NetworksTable `
-                                -Columns  @('Template','Guest OS','CPU','Memory GB','Disk GB') `
-                                -Name     'TemplatesTable' `
-                                -Refs     ([ref]$refs)
+        $tplTable = New-NetworksTable `
+                        -Columns @('Template','Guest OS','CPU','Memory GB','Disk GB') `
+                        -Name 'TemplatesTable' `
+                        -Refs ([ref]$refs)
         $tabTpl.Controls.Add($tplTable)
         $tabs.TabPages.Add($tabTpl)
 
-        # 7. Port Groups -----------------------------------------------------------
-        $tabPg            = New-Object System.Windows.Forms.TabPage 'Port Groups'
-        $tabPg.BackColor  = $script:Theme.White
-        $pgTable          = New-NetworksTable `
-                                -Columns  @('Name','VLAN','vSwitch','Active Ports') `
-                                -Name     'PortGroupsTable' `
-                                -Refs     ([ref]$refs)
+        # 5. Port Groups -----------------------------------------------------------
+        $tabPg = New-Object System.Windows.Forms.TabPage 'Port Groups'
+        $tabPg.BackColor = $script:Theme.White
+        $pgTable = New-NetworksTable `
+                        -Columns @('Name','VLAN','vSwitch','Active Ports') `
+                        -Name 'PortGroupsTable' `
+                        -Refs ([ref]$refs)
         $tabPg.Controls.Add($pgTable)
         $tabs.TabPages.Add($tabPg)
 
         # ── Actions bar -----------------------------------------------------------
-        $actionsPanel     = New-NetworksActions -Refs ([ref]$refs) -ParentPanel $ContentPanel
+        $actionsPanel = New-NetworksActions -Refs ([ref]$refs) -ParentPanel $ContentPanel
         $root.Controls.Add($actionsPanel, 0, 2)
 
         # ── Footer ----------------------------------------------------------------
-        $footer           = New-Object System.Windows.Forms.Panel
-        $footer.Dock      = 'Bottom'
-        $footer.Height    = 30
+        $footer = New-Object System.Windows.Forms.Panel
+        $footer.Dock = 'Bottom'
+        $footer.Height = 30
         $footer.BackColor = $script:Theme.LightGray
 
-        $status           = New-Object System.Windows.Forms.Label
-        $status.Name      = 'StatusLabel'
-        $status.AutoSize  = $true
-        $status.Font      = New-Object System.Drawing.Font('Segoe UI',9)
+        $status = New-Object System.Windows.Forms.Label
+        $status.Name = 'StatusLabel'
+        $status.AutoSize = $true
+        $status.Font = New-Object System.Drawing.Font('Segoe UI',9)
         $status.ForeColor = $script:Theme.Error
-        $status.Text      = '---'
+        $status.Text = '---'
         $footer.Controls.Add($status)
 
         $root.Controls.Add($footer, 0, 3)
         $refs['StatusLabel'] = $status
+
+        # Add references to the new controls
+        $refs.Add('NetworkNameInput', $inputNetworkName)
+        $refs.Add('AddNetworkButton', $btnAddNet)
+        $refs.Add('DeleteNetworkButton', $btnDelNet)
+        $refs.Add('CoursePrefixInput', $inputCourseID)
+        $refs.Add('StartNumberInput', $inputStartNum)
+        $refs.Add('EndNumberInput', $inputEndNum)
+        $refs.Add('AddMultipleButton', $btnAddMult)
+        $refs.Add('DeleteMultipleButton', $btnDelMult)
 
         return $refs
     }
