@@ -16,14 +16,12 @@ function Show-ClassesView {
         [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    $script:ClassesUiRefs = New-ClassManagerLayout -ContentPanel $ContentPanel
-
-    $script:ClassesContentPanel = $ContentPanel
+    $script:Refs = New-ClassManagerLayout -ContentPanel $ContentPanel
 
     $conn = $script:Connection
 
     if ($conn) {
-        Set-StatusMessage -Refs $script:ClassesUiRefs -Message "Connected to $($conn.Name)" -Type 'Success'
+        Set-StatusMessage -Refs $script:Refs -Message "Connected to $($conn.Name)" -Type 'Success'
         $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
         $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
         $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
@@ -33,10 +31,10 @@ function Show-ClassesView {
         $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
 
         $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
-        Update-ClassManagerWithData -UiRefs $script:ClassesUiRefs -Data $data
-        Wire-UIEvents -UiRefs $script:ClassesUiRefs -ContentPanel $ContentPanel
+        Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
+        Wire-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
-        Set-StatusMessage -Refs $script:ClassesUiRefs -Message "No connection established" -Type 'Error'
+        Set-StatusMessage -Refs $script:Refs -Message "No connection established" -Type 'Error'
     }
 
 }
@@ -410,153 +408,210 @@ function New-ClassManagerLayout {
 
 
 
-    # ----------- Tab for Delete operation ----------------------------------------
-    $deleteTab = New-Object System.Windows.Forms.TabPage 'Delete'
+    # ----------- Tab for Remove/Power operation ----------------------------------------
+    $deleteTab = New-Object System.Windows.Forms.TabPage 'Remove | Power'
     $deleteTab.BackColor = $script:Theme.White
     $tabs.TabPages.Add($deleteTab)
 
-    $deleteLayout = New-Object System.Windows.Forms.TableLayoutPanel
-    $deleteLayout.Dock = 'Fill'
-    $deleteLayout.ColumnCount = 2
-    $deleteLayout.RowCount = 6
-    $deleteLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'AutoSize'))
-    $deleteLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent', 100))
-    $deleteLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize')) # Class label and dropdown
-    $deleteLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize')) # Class server label and dropdown
-    $deleteLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize')) # Start student number label and numeric up-down control
-    $deleteLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize')) # End student number label and numeric up-down control
-    $deleteLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize')) # Buttons panel
-    $deleteTab.Controls.Add($deleteLayout)
+    # Main container with scrollable layout
+    $deleteContainer = New-Object System.Windows.Forms.Panel
+    $deleteContainer.Dock = 'Fill'
+    $deleteContainer.AutoSize = $true
+    $deleteContainer.AutoScroll = $true
+    $deleteTab.Controls.Add($deleteContainer)
 
-    # 1 - class folder label and dropdown
+    # Flow layout for the entire tab
+    $deleteFlowLayout = New-Object System.Windows.Forms.FlowLayoutPanel
+    $deleteFlowLayout.Dock = 'Fill'
+    $deleteFlowLayout.AutoSize = $true
+    $deleteFlowLayout.WrapContents = $true
+    $deleteFlowLayout.FlowDirection = 'LeftToRight'
+    $deleteContainer.Controls.Add($deleteFlowLayout)
+
+    # ================= PARAMETERS GROUPBOX =================
+    $groupParams = New-Object System.Windows.Forms.GroupBox
+    $groupParams.Text = "Parameters"
+    $groupParams.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $groupParams.AutoSize = $true
+    $groupParams.Padding = New-Object System.Windows.Forms.Padding(15)
+    $deleteFlowLayout.Controls.Add($groupParams)
+
+    $paramsLayout = New-Object System.Windows.Forms.TableLayoutPanel
+    $paramsLayout.Dock = 'Fill'
+    $paramsLayout.AutoSize = $true
+    $paramsLayout.ColumnCount = 2
+    $paramsLayout.RowCount = 3
+    $paramsLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    $paramsLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    $groupParams.Controls.Add($paramsLayout)
+
+    # Class Folder
     $lblClass = New-Object System.Windows.Forms.Label
-    $lblClass.Text = 'Select Class Folder:'
+    $lblClass.Text = 'Class Folder:'
     $lblClass.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblClass.AutoSize = $true
-    $deleteLayout.Controls.Add($lblClass, 0, 0)
+    $paramsLayout.Controls.Add($lblClass, 0, 0)
     
     $cmbClass = New-Object System.Windows.Forms.ComboBox
     $cmbClass.Name = 'ClassComboBox'
     $cmbClass.DropDownStyle = 'DropDownList'
     $cmbClass.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $cmbClass.Dock = 'Top'
     $cmbClass.Width = 200
-    $deleteLayout.Controls.Add($cmbClass, 1, 0)
+    $paramsLayout.Controls.Add($cmbClass, 1, 0)
 
-    # 2 - Class server label and dropdown
-    $lblServer = New-Object System.Windows.Forms.Label
-    $lblServer.Text = 'Select Class Server:'
-    $lblServer.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblServer.AutoSize = $true
-    $deleteLayout.Controls.Add($lblServer, 0, 1)
-
-    $cmbServer = New-Object System.Windows.Forms.ComboBox
-    $cmbServer.Name = 'ServerComboBox'
-    $cmbServer.DropDownStyle = 'DropDownList'
-    $cmbServer.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $cmbServer.Dock = 'Top'
-    $cmbServer.Width = 200
-    $deleteLayout.Controls.Add($cmbServer, 1, 1)
-
-    # 3 - Start student number label and numeric up-down control
-    $lblStartStuDel = New-Object System.Windows.Forms.Label
-    $lblStartStuDel.Text = 'Start Student Number:'
-    $lblStartStuDel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblStartStuDel.AutoSize = $true
-    $deleteLayout.Controls.Add($lblStartStuDel, 0, 2)
+    # Start Student Number
+    $lblStart = New-Object System.Windows.Forms.Label
+    $lblStart.Text = 'Start Student:'
+    $lblStart.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $paramsLayout.Controls.Add($lblStart, 0, 1)
     
-    $numStartStuDel = New-Object System.Windows.Forms.NumericUpDown
-    $numStartStuDel.Name = 'StartStudentNumberDel'
-    $numStartStuDel.Minimum = 1
-    $numStartStuDel.Maximum = 1000
-    $numStartStuDel.Value = 1
-    $numStartStuDel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numStartStuDel.Dock = 'Fill'
-    $numStartStuDel.Width = 100
-    $deleteLayout.Controls.Add($numStartStuDel, 1, 2)
+    $numStart = New-Object System.Windows.Forms.NumericUpDown
+    $numStart.Name = 'StartStudentNumberDel'
+    $numStart.Minimum = 1
+    $numStart.Maximum = 1000
+    $numStart.Value = 1
+    $numStart.Width = 80
+    $paramsLayout.Controls.Add($numStart, 1, 1)
 
-    # 4 - End student number label and numeric up-down control
-    $lblEndStuDel = New-Object System.Windows.Forms.Label
-    $lblEndStuDel.Text = 'End Student Number:'
-    $lblEndStuDel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblEndStuDel.AutoSize = $true
-    $deleteLayout.Controls.Add($lblEndStuDel, 0, 3)
+    # End Student Number
+    $lblEnd = New-Object System.Windows.Forms.Label
+    $lblEnd.Text = 'End Student:'
+    $lblEnd.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $paramsLayout.Controls.Add($lblEnd, 0, 2)
 
-    $numEndStuDel = New-Object System.Windows.Forms.NumericUpDown
-    $numEndStuDel.Dock = 'Fill'
-    $numEndStuDel.Name = 'EndStudentNumberDel'
-    $numEndStuDel.Minimum = 1
-    $numEndStuDel.Maximum = 1000
-    $numEndStuDel.Value = 1
-    $numEndStuDel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numEndStuDel.Dock = 'Fill'
-    $numEndStuDel.Width = 100
-    $deleteLayout.Controls.Add($numEndStuDel, 1, 3)
+    $numEnd = New-Object System.Windows.Forms.NumericUpDown
+    $numEnd.Name = 'EndStudentNumberDel'
+    $numEnd.Minimum = 1
+    $numEnd.Maximum = 1000
+    $numEnd.Value = 1
+    $numEnd.Width = 80
+    $paramsLayout.Controls.Add($numEnd, 1, 2)
 
-    # 5 - Buttons flow layout panel
-    $btnPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-    $btnPanel.Dock = 'Fill'
-    $btnPanel.FlowDirection = 'LeftToRight'
-    $btnPanel.AutoSize = $true
-    $btnPanel.WrapContents = $false
-    $deleteLayout.Controls.Add($btnPanel, 0, 4)
-    $deleteLayout.SetColumnSpan($btnPanel, 2)
+    # Host Name
+    $lblHost = New-Object System.Windows.Forms.Label
+    $lblHost.Text = 'Host Name:'
+    $lblHost.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $paramsLayout.Controls.Add($lblHost, 0, 3)
 
-    # 5-1 - Remove course folder VMs button
-    $btnRemoveCourseVMs = New-Object System.Windows.Forms.Button
-    $btnRemoveCourseVMs.Name = 'RemoveCourseVMsButton'
-    $btnRemoveCourseVMs.Text = 'Remove Course Folder VMs'
-    $btnRemoveCourseVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $btnRemoveCourseVMs.Size = New-Object System.Drawing.Size(200, 35)
-    $btnRemoveCourseVMs.BackColor = $script:Theme.Primary
-    $btnRemoveCourseVMs.ForeColor = $script:Theme.White
-    $btnRemoveCourseVMs.FlatStyle = 'Flat'
-    $btnPanel.Controls.Add($btnRemoveCourseVMs)
+    $cmbHost = New-Object System.Windows.Forms.ComboBox
+    $cmbHost.Name = 'ServerComboBox'
+    $cmbHost.DropDownStyle = 'DropDownList'
+    $cmbHost.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $cmbHost.Width = 200
+    $paramsLayout.Controls.Add($cmbHost, 1, 3)
 
+    # ================= ACTION GROUPBOXES =================
+    # Grouped by parameter requirements
 
-    # 5-2 - Remove Host button
+    # 1. Remove-CourseFolder (classFolder + start/end students)
+    $groupRemoveCourse = New-Object System.Windows.Forms.GroupBox
+    $groupRemoveCourse.Dock = 'Top'
+    $groupRemoveCourse.AutoSize = $true
+    $groupRemoveCourse.Text = "Requires: Class Folder + Student Range"
+    $groupRemoveCourse.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
+    $groupRemoveCourse.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $groupRemoveCourse.Padding = New-Object System.Windows.Forms.Padding(12)
+    $deleteFlowLayout.Controls.Add($groupRemoveCourse)
+
+    $layoutRemoveCourse = New-Object System.Windows.Forms.FlowLayoutPanel
+    $layoutRemoveCourse.Dock = 'Fill'
+    $layoutRemoveCourse.AutoSize = $true
+    $layoutRemoveCourse.FlowDirection = 'TopDown'
+    $layoutRemoveCourse.WrapContents = $true
+    $groupRemoveCourse.Controls.Add($layoutRemoveCourse)
+
+    $btnRemoveCourseFolderVMs = New-Object System.Windows.Forms.Button
+    $btnRemoveCourseFolderVMs.AutoSize = $true
+    $btnRemoveCourseFolderVMs.Dock = 'Fill'
+    $btnRemoveCourseFolderVMs.Name = 'RemoveCourseFolderVMsButton'
+    $btnRemoveCourseFolderVMs.Text = 'Remove Course Folder VMs'
+    $btnRemoveCourseFolderVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnRemoveCourseFolderVMs.Size = New-Object System.Drawing.Size(220, 35)
+    $btnRemoveCourseFolderVMs.BackColor = $script:Theme.Primary
+    $btnRemoveCourseFolderVMs.ForeColor = $script:Theme.White
+    $btnRemoveCourseFolderVMs.FlatStyle = 'Flat'
+    $layoutRemoveCourse.Controls.Add($btnRemoveCourseFolderVMs)
+
+    # 2. PowerOff-ClassVMs (classFolder only)
+    $groupPowerOffClass = New-Object System.Windows.Forms.GroupBox
+    $groupPowerOffClass.Dock = 'Top'
+    $groupPowerOffClass.Text = "Requires: Class Folder"
+    $groupPowerOffClass.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $groupPowerOffClass.AutoSize = $true
+    $groupPowerOffClass.Padding = New-Object System.Windows.Forms.Padding(12)
+    $deleteFlowLayout.Controls.Add($groupPowerOffClass)
+
+    $layoutPowerOffClass = New-Object System.Windows.Forms.FlowLayoutPanel
+    $layoutPowerOffClass.Dock = 'Fill'
+    $layoutPowerOffClass.FlowDirection = 'TopDown'
+    $layoutPowerOffClass.AutoSize = $true
+    $layoutPowerOffClass.WrapContents = $true
+    $groupPowerOffClass.Controls.Add($layoutPowerOffClass)
+
+    $btnPowerOffClassVMs = New-Object System.Windows.Forms.Button
+    $btnPowerOffClassVMs.Name = 'PowerOffClassVMsButton'
+    $btnPowerOffClassVMs.Text = 'Power Off Class VMs'
+    $btnPowerOffClassVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnPowerOffClassVMs.Size = New-Object System.Drawing.Size(220, 35)
+    $btnPowerOffClassVMs.BackColor = $script:Theme.Primary
+    $btnPowerOffClassVMs.ForeColor = $script:Theme.White
+    $btnPowerOffClassVMs.FlatStyle = 'Flat'
+    $layoutPowerOffClass.Controls.Add($btnPowerOffClassVMs)
+
+    # 3. Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params)
+    $groupHostOps = New-Object System.Windows.Forms.GroupBox
+    $groupHostOps.Dock = 'Fill'
+    $groupHostOps.Text = "Requires: All Parameters"
+    $groupHostOps.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $groupHostOps.AutoSize = $true
+    $groupHostOps.Padding = New-Object System.Windows.Forms.Padding(12)
+    $deleteFlowLayout.Controls.Add($groupHostOps)
+
+    $hostOpsLayout = New-Object System.Windows.Forms.FlowLayoutPanel
+    $hostOpsLayout.Dock = 'Fill'
+    $hostOpsLayout.AutoSize = $true
+    $hostOpsLayout.FlowDirection = 'TopDown'
+    $hostOpsLayout.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 0)
+    $hostOpsLayout.WrapContents = $true
+    $groupHostOps.Controls.Add($hostOpsLayout)
+
     $btnRemoveHost = New-Object System.Windows.Forms.Button
+    $btnRemoveHost.AutoSize = $true
+    $btnRemoveHost.Dock = 'Fill'
     $btnRemoveHost.Name = 'RemoveHostButton'
-    $btnRemoveHost.Text = 'Remove Hosts'
+    $btnRemoveHost.Text = 'Remove Host VMs'
     $btnRemoveHost.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $btnRemoveHost.Size = New-Object System.Drawing.Size(200, 35)
+    $btnRemoveHost.Size = New-Object System.Drawing.Size(180, 35)
     $btnRemoveHost.BackColor = $script:Theme.Primary
     $btnRemoveHost.ForeColor = $script:Theme.White
     $btnRemoveHost.FlatStyle = 'Flat'
-    $btnPanel.Controls.Add($btnRemoveHost)
+    $btnRemoveHost.Margin = New-Object System.Windows.Forms.Padding(5)
+    $hostOpsLayout.Controls.Add($btnRemoveHost)
 
-    # 5-3 - Power off specific Class VMS button
-    $btnPowerOffVMs = New-Object System.Windows.Forms.Button
-    $btnPowerOffVMs.Name = 'PowerOffVMsButton'
-    $btnPowerOffVMs.Text = 'Power Off Specific Class VMs'
-    $btnPowerOffVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $btnPowerOffVMs.Size = New-Object System.Drawing.Size(200, 35)
-    $btnPowerOffVMs.BackColor = $script:Theme.Primary
-    $btnPowerOffVMs.ForeColor = $script:Theme.White
-    $btnPowerOffVMs.FlatStyle = 'Flat'
-    $btnPanel.Controls.Add($btnPowerOffVMs)
+    $btnPowerOffSpecificClassVMs = New-Object System.Windows.Forms.Button
+    $btnPowerOffSpecificClassVMs.AutoSize = $true
+    $btnPowerOffSpecificClassVMs.Dock = 'Fill'
+    $btnPowerOffSpecificClassVMs.Name = 'PowerOffSpecificClassVMsButton'
+    $btnPowerOffSpecificClassVMs.Text = 'Power Off Specific Class VMs'
+    $btnPowerOffSpecificClassVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnPowerOffSpecificClassVMs.Size = New-Object System.Drawing.Size(180, 35)
+    $btnPowerOffSpecificClassVMs.BackColor = $script:Theme.Primary
+    $btnPowerOffSpecificClassVMs.ForeColor = $script:Theme.White
+    $btnPowerOffSpecificClassVMs.FlatStyle = 'Flat'
+    $btnPowerOffSpecificClassVMs.Margin = New-Object System.Windows.Forms.Padding(5)
+    $hostOpsLayout.Controls.Add($btnPowerOffSpecificClassVMs)
 
-    # 5-4 - Power on specific class VMs button
-    $btnPowerOnVMs = New-Object System.Windows.Forms.Button
-    $btnPowerOnVMs.Name = 'PowerOnVMsButton'
-    $btnPowerOnVMs.Text = 'Power On Specific Class VMs'
-    $btnPowerOnVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $btnPowerOnVMs.Size = New-Object System.Drawing.Size(200, 35)
-    $btnPowerOnVMs.BackColor = $script:Theme.Primary
-    $btnPowerOnVMs.ForeColor = $script:Theme.White
-    $btnPowerOnVMs.FlatStyle = 'Flat'
-    $btnPanel.Controls.Add($btnPowerOnVMs)
-
-    # 5-5 - Power off class VMs button
-    $btnPowerOffVMs = New-Object System.Windows.Forms.Button
-    $btnPowerOffVMs.Name = 'PowerOffVMsButton'
-    $btnPowerOffVMs.Text = 'Power Off Class VMs'
-    $btnPowerOffVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $btnPowerOffVMs.Size = New-Object System.Drawing.Size(200, 35)
-    $btnPowerOffVMs.BackColor = $script:Theme.Primary
-    $btnPowerOffVMs.ForeColor = $script:Theme.White
-    $btnPowerOffVMs.FlatStyle = 'Flat'
-    $btnPanel.Controls.Add($btnPowerOffVMs)
+    $btnPowerOnSpecificClassVMs = New-Object System.Windows.Forms.Button
+    $btnPowerOnSpecificClassVMs.AutoSize = $true
+    $btnPowerOnSpecificClassVMs.Dock = 'Fill'
+    $btnPowerOnSpecificClassVMs.Name = 'PowerOnSpecificClassVMsButton'
+    $btnPowerOnSpecificClassVMs.Text = 'Power On Specific Class VMs'
+    $btnPowerOnSpecificClassVMs.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnPowerOnSpecificClassVMs.Size = New-Object System.Drawing.Size(180, 35)
+    $btnPowerOnSpecificClassVMs.BackColor = $script:Theme.Primary
+    $btnPowerOnSpecificClassVMs.ForeColor = $script:Theme.White
+    $btnPowerOnSpecificClassVMs.FlatStyle = 'Flat'
+    $btnPowerOnSpecificClassVMs.Margin = New-Object System.Windows.Forms.Padding(5)
+    $hostOpsLayout.Controls.Add($btnPowerOnSpecificClassVMs)
 
     
 
@@ -599,14 +654,19 @@ function New-ClassManagerLayout {
                 CreateVMsButton      = $btnCreateVMs
             }
             Delete = @{
+                # Parameters
                 ClassComboBox        = $cmbClass
                 ServerComboBox       = $cmbServer
                 StartStudentNumber   = $numStartStuDel
                 EndStudentNumber     = $numEndStuDel
-                RemoveCourseVMsButton= $btnRemoveCourseVMs
-                RemoveHostButton     = $btnRemoveHost
-                PowerOffVMsButton    = $btnPowerOffVMs
-                PowerOnVMsButton     = $btnPowerOnVMs
+                # Requires all parameters
+                RemoveHostButton            = $btnRemoveHost
+                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificVMs
+                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificVMs
+                # Requires Class Folder + Start/End Students
+                RemoveCourseFolderVMsButton       = $btnRemoveCourseFolderVMs
+                # Requires Class Folder only
+                PowerOffClassVMsButton    = $btnPowerOffClassVMs
             }
         }
         StatusLabel = $lblStatus
@@ -736,14 +796,14 @@ function Wire-UIEvents {
 
     # Overview Tab Events
     $UiRefs.Tabs.Overview.RefreshButton.Add_Click({
-        . $PSScriptRoot\ClassesViews.ps1
-        Show-ClassesView -ContentPanel $script:ClassesUiRefs.ContentPanel -Refs $UiRefs
-        Set-StatusMessage -Refs $UiRefs -Message "Overview refreshed" -Type 'Success'
+        . $PSScriptRoot\ClassesView.ps1
+        Show-ClassesView -ContentPanel $script:Refs.ContentPanel -UiRefs $UiRefs
+        Set-StatusMessage -Refs $script:Refs -Message "Overview refreshed" -Type 'Success'
     })
 
     # Create Tab Events
     $UiRefs.Tabs.Create.ImportButton.Add_Click({
-         . $PSScriptRoot\ClassesViews.ps1
+        . $PSScriptRoot\ImportStudentList.ps1
         $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
         $openFileDialog.Filter = "Text Files (*.txt)|*.txt|CSV Files (*.csv)|*.csv|All Files (*.*)|*.*"
         $openFileDialog.Title = "Select Student List File"
@@ -752,26 +812,27 @@ function Wire-UIEvents {
             try {
                 $content = Get-Content -Path $openFileDialog.FileName -Raw
                 $UiRefs.Tabs.Create.StudentNames.Text = $content
-                Set-StatusMessage -Refs $UiRefs -Message "Student list imported successfully" -Type 'Success'
+                Set-StatusMessage -Refs $script:Refs -Message "Student list imported successfully" -Type 'Success'
             } catch {
-                Set-StatusMessage -Refs $UiRefs -Message "Failed to import student list: $_" -Type 'Error'
+                Set-StatusMessage -Refs $script:Refs -Message "Failed to import student list: $_" -Type 'Error'
             }
         }
     })
 
     $UiRefs.Tabs.Create.CreateVMsButton.Add_Click({
-        . $PSScriptRoot\ClassesViews.ps1
         try {
             # Gather all the input values
             $startNum = $UiRefs.Tabs.Create.StartStudentNumber.Value
             $endNum = $UiRefs.Tabs.Create.EndStudentNumber.Value
             $className = $UiRefs.Tabs.Create.ClassFolder.Text.Trim()
-            $datastore = $UiRefs.Tabs.Create.DataStoreDropdown.SelectedItem
             $serverName = $UiRefs.Tabs.Create.ServerName.Text.Trim()
+            $datastore = $UiRefs.Tabs.Create.DataStoreDropdown.SelectedItem
             $template = $UiRefs.Tabs.Create.ServerTemplate.SelectedItem
             $customization = $UiRefs.Tabs.Create.ServerCustomization.SelectedItem
-            $studentNames = $UiRefs.Tabs.Create.StudentNames.Text -split "`n" | Where-Object { $_.Trim() -ne '' }
-            $selectedAdapters = $UiRefs.Tabs.Create.ServerAdapters.CheckedItems
+            $selectedAdapters = @()
+            foreach ($item in $UiRefs.Tabs.Create.ServerAdapters.CheckedItems) {
+                $selectedAdapters += $item
+            }
             
             # Validate inputs
             if ([string]::IsNullOrWhiteSpace($className)) {
@@ -812,16 +873,15 @@ function Wire-UIEvents {
             
             # Call the VM creation function
             New-CourseVMs -courseInfo $courseInfo
-            Set-StatusMessage -Refs $UiRefs -Message "Successfully created VMs for class $className" -Type 'Success'
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully created VMs for class $className" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $UiRefs -Message "Error creating VMs: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error creating VMs: $_" -Type 'Error'
         }
     })
 
     # Delete Tab Events
-    $UiRefs.Tabs.Delete.RemoveCourseVMsButton.Add_Click({
-         . $PSScriptRoot\ClassesViews.ps1
+    $UiRefs.Tabs.Delete.RemoveCourseFolderVMsButton.Add_Click({
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
@@ -832,15 +892,30 @@ function Wire-UIEvents {
             }
             
             Remove-CourseFolder -classFolder $classFolder -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $UiRefs -Message "Successfully removed VMs for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed VMs for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $UiRefs -Message "Error removing VMs: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error removing VMs: $_" -Type 'Error'
+        }
+    })
+
+    $UiRefs.Tabs.Delete.PowerOffClassVMsButton.Add_Click({
+        try {
+            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
+            
+            if (-not $classFolder) {
+                throw "Please select a class folder"
+            }
+            
+            PowerOff-ClassVMs -classFolder $classFolder
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off VMs for class $classFolder" -Type 'Success'
+            
+        } catch {
+            Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
         }
     })
 
     $UiRefs.Tabs.Delete.RemoveHostButton.Add_Click({
-         . $PSScriptRoot\ClassesViews.ps1
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
@@ -856,16 +931,14 @@ function Wire-UIEvents {
             }
             
             Remove-Host -classFolder $classFolder -hostName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $UiRefs -Message "Successfully removed host $serverName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $serverName for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $UiRefs -Message "Error removing host: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error removing host: $_" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Delete.PowerOffVMsButton.Add_Click({
-         . $PSScriptRoot\ClassesViews.ps1
-
+    $UiRefs.Tabs.Delete.PowerOffSpecificClassVMsButton.Add_Click({
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
@@ -881,15 +954,14 @@ function Wire-UIEvents {
             }
             
             PowerOff-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $UiRefs -Message "Successfully powered off $serverName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $serverName for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $UiRefs -Message "Error powering off VMs: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Delete.PowerOnVMsButton.Add_Click({
-         . $PSScriptRoot\ClassesViews.ps1
+    $UiRefs.Tabs.Delete.PowerOnSpecificClassVMsButton.Add_Click({
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
@@ -905,10 +977,10 @@ function Wire-UIEvents {
             }
             
             PowerOn-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $UiRefs -Message "Successfully powered on $serverName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $serverName for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $UiRefs -Message "Error powering on VMs: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error powering on VMs: $_" -Type 'Error'
         }
     })
 }
@@ -984,60 +1056,6 @@ function Remove-Host {
 
         }
 
-    }
-    END{}
-}
-
-
-function Remove-VMs {
-    param( 
-        [string]$classFolder,
-        [int]$startStudents,
-        [int]$endStudents
-    )
-    BEGIN{}
-    PROCESS{
-        # Loop through for the number of students in the class
-        for ($i=$startStudents; $i -le $endStudents; $i++) {
-            $userAccount = $classFolder+'_S'+$i
-
-    
-            # set the folder name
-            $folderName = $classFolder+'_S'+$i
-    
-            # power off the VMs
-            Stop-VMs  $foldername 
-    
-            # remove the student folder
-            Get-Folder -Name $folderName | Remove-Folder -Confirm:$false -DeletePermanently
-
-            # write messsage
-            Write-Host $folderName " removed"
-
-        } 
-    }
-    END{}
-}
-
-function Stop-VMs {
-    <#
-    .SYNOPSIS
-        Stops all VMs in a specified location.
-    .PARAMETER location
-        The location where the VMs are located.
-    #>
-
-    param(
-        [string]$location
-    )
-    BEGIN{}
-    PROCESS{
-        $MyVMs = Get-VM -Location $location 
-        ForEach ($MyVM in $MyVMs) {
-            If ($MyVM.PowerState -eq "PoweredOn") {
-                Stop-VM -VM $MyVM -Confirm:$false
-            }
-        }
     }
     END{}
 }
@@ -1230,4 +1248,57 @@ function New-CourseVMs {
         }
     }
     END { }
+}
+
+function Remove-VMs {
+    param( 
+        [string]$classFolder,
+        [int]$startStudents,
+        [int]$endStudents
+    )
+    BEGIN{}
+    PROCESS{
+        # Loop through for the number of students in the class
+        for ($i=$startStudents; $i -le $endStudents; $i++) {
+            $userAccount = $classFolder+'_S'+$i
+
+    
+            # set the folder name
+            $folderName = $classFolder+'_S'+$i
+    
+            # power off the VMs
+            Stop-VMs  $foldername 
+    
+            # remove the student folder
+            Get-Folder -Name $folderName | Remove-Folder -Confirm:$false -DeletePermanently
+
+            # write messsage
+            Write-Host $folderName " removed"
+
+        } 
+    }
+    END{}
+}
+
+function Stop-VMs {
+    <#
+    .SYNOPSIS
+        Stops all VMs in a specified location.
+    .PARAMETER location
+        The location where the VMs are located.
+    #>
+
+    param(
+        [string]$location
+    )
+    BEGIN{}
+    PROCESS{
+        $MyVMs = Get-VM -Location $location 
+        ForEach ($MyVM in $MyVMs) {
+            If ($MyVM.PowerState -eq "PoweredOn") {
+                Stop-VM -VM $MyVM -Confirm:$false
+            }
+        }
+    }
+    END{}
 }
