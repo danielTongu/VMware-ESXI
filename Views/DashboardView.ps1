@@ -1,4 +1,5 @@
 # ─────────────────────────  Assemblies  ──────────────────────────────────────
+. "$PSScriptRoot\OrphansView.ps1"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms.DataVisualization
@@ -78,12 +79,14 @@ function Get-DashboardData {
         try {
             if ($data.Datastores.Count -gt 0) {
                 $firstDs              = $data.Datastores[0].Name
-                $data.OrphanedFiles   = [OrphanCleaner]::FindOrphanedFiles($firstDs)
+                $data.OrphanedFiles   = @(Find-OrphanedFiles -DatastoreName $firstDs)
             }
             else { $data.OrphanedFiles = @() }
         }
-        catch { $data.OrphanedFiles   = @() }
-
+        catch { 
+            Write-Verbose "Failed to retrieve orphaned files: $_"
+            $data.OrphanedFiles   = @() }
+            
         return $data
     }
     catch {
