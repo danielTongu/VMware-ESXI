@@ -2,30 +2,27 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$script:ActiveButton = $null
-
-<#
-.SYNOPSIS
-    Displays the main application shell with auto-sized sidebar and content area.
-.DESCRIPTION
-    Builds a SplitContainer with a navigation sidebar and a content panel.
-    Navigation buttons load individual view scripts, and the status bar
-    reflects the current connection in $script:Connection.
-.NOTES
-    Version: 1.0 (revised)
-    Date: 2025-05-14
-#>
 function Show-MainView {
+    <#
+    .SYNOPSIS
+        Displays the application shell with auto-sized sidebar and content area.
+    #>
+
     [CmdletBinding()]
     param()
 
+
+    #----------------------------- Build the UI ------------------------------------
+
+    $script:ActiveButton = $null
+
     # Main window
-    $main = New-Object System.Windows.Forms.Form
-    $main.Text          = 'VMware ESXi Management Console'
-    $main.StartPosition = 'CenterScreen'
-    $main.Size          = New-Object System.Drawing.Size(1150,650)
-    $main.MinimumSize   = New-Object System.Drawing.Size(850,650)
-    $main.BackColor     = $script:Theme.LightGray
+    $script:form = New-Object System.Windows.Forms.Form
+    $script:form.Text          = 'VMware ESXi Management Console'
+    $script:form.StartPosition = 'CenterScreen'
+    $script:form.Size          = New-Object System.Drawing.Size(1150,650)
+    $script:form.MinimumSize   = New-Object System.Drawing.Size(850,650)
+    $script:form.BackColor     = $script:Theme.LightGray
 
     # SplitContainer: Panel1 = sidebar, Panel2 = content
     $splitContainer = New-Object System.Windows.Forms.SplitContainer
@@ -33,49 +30,58 @@ function Show-MainView {
     $splitContainer.FixedPanel      = 'Panel1'
     $splitContainer.SplitterWidth   = 1
     
-    $main.Controls.Add($splitContainer)
+    $script:form.Controls.Add($splitContainer)
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
 
-    # -- Sidebar (Panel1) --
+    # ===== Sidebar (Panel1) ========================
     $sidebar = New-Object System.Windows.Forms.Panel
-    $sidebar.Dock      = 'Fill'
-    $sidebar.BackColor = $script:Theme.PrimaryDarker
+    $sidebar.Dock       = 'Fill'
+    $sidebar.Autosize   = $true
+    $sidebar.AutoScroll = $true
+    $sidebar.BackColor  = $script:Theme.PrimaryDarker
     $splitContainer.Panel1.Controls.Add($sidebar)
 
     # TableLayout: header + nav
     $sidebarLayout = New-Object System.Windows.Forms.TableLayoutPanel
     $sidebarLayout.Dock        = 'Fill'
-    $sidebarLayout.RowCount    = 2
+    $sidebarLayout.Autosize    = $true
+    $sidebarLayout.RowCount    = 4
     $sidebarLayout.ColumnCount = 1
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Absolute',150))
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize')) 
+    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
     $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
     $sidebar.Controls.Add($sidebarLayout)
-
-    # Header panel
-    $sidebarHeader = New-Object System.Windows.Forms.Panel
-    $sidebarHeader.Dock      = 'Fill'
-    $sidebarHeader.BackColor = $script:Theme.PrimaryDark
-    $sidebarLayout.Controls.Add($sidebarHeader,0,0)
 
     # Title label
     $title = New-Object System.Windows.Forms.Label
     $title.Text      = 'VMware ESXi'
-    $title.Font      = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawing.FontStyle]::Bold)
+    $title.Font      = New-Object System.Drawing.Font('Segoe UI',16,[System.Drawing.FontStyle]::Bold)
     $title.ForeColor = $script:Theme.White
     $title.AutoSize  = $true
-    $title.Location  = New-Object System.Drawing.Point(10,10)
-    $sidebarHeader.Controls.Add($title)
+    $title.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($title,0,0)
 
     # Logo
     $logo = New-Object System.Windows.Forms.PictureBox
     $logo.Size      = New-Object System.Drawing.Size(100,100)
-    $logo.Location  = New-Object System.Drawing.Point(10,40)
     $logo.SizeMode  = 'Zoom'
     try {
         $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
     } catch {
         $logo.BackColor = $script:Theme.LightGray
     }
-    $sidebarHeader.Controls.Add($logo)
+    $logo.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($logo,0,1)
+
+    # Username label
+    $usernameLabel = New-Object System.Windows.Forms.Label
+    $usernameLabel.Text      = if ($script:username) { "User: $($script:username)" } else { "Not logged in" }
+    $usernameLabel.Font      = New-Object System.Drawing.Font('Segoe UI',8)
+    $usernameLabel.ForeColor = $script:Theme.White
+    $usernameLabel.AutoSize  = $true
+    $usernameLabel.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $sidebarLayout.Controls.Add($usernameLabel,0,2)
 
     # Navigation panel
     $navPanel = New-Object System.Windows.Forms.FlowLayoutPanel
@@ -83,32 +89,14 @@ function Show-MainView {
     $navPanel.FlowDirection = 'TopDown'
     $navPanel.WrapContents  = $false
     $navPanel.AutoScroll    = $true
-    $navPanel.Padding       = New-Object System.Windows.Forms.Padding(10,20,10,20)
-    $sidebarLayout.Controls.Add($navPanel,0,1)
-
-    # set spliiter distance after finishing adding everything for panel1
-    $splitContainer.SplitterDistance= 225
-
-    # -- Content panel (Panel2) --
-    $contentPanel = New-Object System.Windows.Forms.Panel
-    $contentPanel.Dock      = 'Fill'
-    $contentPanel.BackColor = $script:Theme.LightGray
-    $splitContainer.Panel2.Controls.Add($contentPanel)
-
-    # Load nav buttons
-    $scriptDir = $PSScriptRoot
-    $btnDashboard = New-NavButton -Text 'Dashboard'          -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
-    $btnClasses   = New-NavButton -Text 'Class Management'   -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
-    $btnVMs       = New-NavButton -Text 'Virtual Machines'   -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
-    $btnNetworks  = New-NavButton -Text 'Network Management' -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
-    $btnOrphans   = New-NavButton -Text 'Orphaned Files'     -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
-    $btnLogs      = New-NavButton -Text 'Logs'               -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
-
-    $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
+    $navPanel.Autosize    = $true
+    $navPanel.Padding     = New-Object System.Windows.Forms.Padding(10)
+    $navPanel.BackColor  = $script:Theme.PrimaryDark
+    $sidebarLayout.Controls.Add($navPanel,0,3)
 
     # Authentication button
     $script:AuthButton = New-Object System.Windows.Forms.Button
-    $script:AuthButton.Text      = $(if ($script:Connection) { ' Logout' } else {  'Login' })
+    $script:AuthButton.Text      = $(if ($script:Connection) { ' Logout' } else {  ' Login' })
     $script:AuthButton.Font      = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
     $script:AuthButton.ForeColor = $script:Theme.White
     $script:AuthButton.BackColor = $script:Theme.PrimaryDarker
@@ -122,52 +110,68 @@ function Show-MainView {
 
     $navPanel.Controls.Add($script:AuthButton)
 
+    # -- Content panel (Panel2) -------------------------
+    $contentPanel = New-Object System.Windows.Forms.Panel
+    $contentPanel.Dock      = 'Fill'
+    $contentPanel.Autosize    = $true
+    $contentPanel.BackColor = $script:Theme.LightGray
+    $splitContainer.Panel2.Controls.Add($contentPanel)
+
+     # Load nav buttons
+    $scriptDir = $PSScriptRoot
+    $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
+    $btnClasses   = New-NavButton -Text 'Class Manager'     -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
+    $btnVMs       = New-NavButton -Text 'Virtual Machines'  -ScriptPath "$scriptDir\VMsView.ps1"       -TargetPanel $contentPanel
+    $btnNetworks  = New-NavButton -Text 'Network        '   -ScriptPath "$scriptDir\NetworksView.ps1"  -TargetPanel $contentPanel
+    $btnOrphans   = New-NavButton -Text 'Orphaned Files'    -ScriptPath "$scriptDir\OrphansView.ps1"   -TargetPanel $contentPanel
+    $btnLogs      = New-NavButton -Text 'Logs'              -ScriptPath "$scriptDir\LogsView.ps1"      -TargetPanel $contentPanel
+
+    $navPanel.Controls.AddRange(@( $btnDashboard, $btnClasses, $btnVMs, $btnNetworks, $btnOrphans, $btnLogs ))
+
+    # set spliiter distance after finishing adding everything for panel1
+    $splitContainer.SplitterDistance= 225
+
+
+    #----------------------------- Wire UI events -----------------------------------
+
+
     # Auth button click handler
     $script:AuthButton.Add_Click({
         if ($script:Connection) {
-            # Logout
             try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
             $script:Connection = $null
-            $this.Text = '   Login'
+            $script:username = $null
+            $script:password = $null
+            $this.Text = ' Login'
             $this.FlatAppearance.BorderColor = $script:Theme.Success
+            $usernameLabel.Text = "Not logged in"
             $contentPanel.Controls.Clear()
-            Update-StatusBar -StatusPanel $script:StatusPanel
         } else {
-            # Login
             . "$scriptDir\LoginView.ps1"
+
             if (Show-LoginView) {
-                $this.Text = '   Logout'
+                $this.Text = ' Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
-                if ($script:ActiveButton) { $script:ActiveButton.PerformClick() } else { $btnDashboard.PerformClick() }
-                Update-StatusBar -StatusPanel $script:StatusPanel
+                $usernameLabel.Text = "User: $($script:username)"
+
+                if ($script:ActiveButton) { 
+                    $script:ActiveButton.PerformClick() 
+                } else { 
+                    $btnDashboard.PerformClick() 
+                }
             } else {
-                $main.Close()
+                $script:form.Close()
             }
         }
     })
 
-    # Status bar at bottom
-    $statusBar = New-Object System.Windows.Forms.StatusBar
-    $statusBar.Dock       = 'Bottom'
-    $statusBar.SizingGrip = $false
-    $statusBar.BackColor  = $script:Theme.PrimaryDarker
-    $statusBar.ForeColor  = $script:Theme.White
-    $statusBar.Font       = New-Object System.Drawing.Font('Segoe UI',9)
-
-    $script:StatusPanel = New-Object System.Windows.Forms.StatusBarPanel
-    $script:StatusPanel.AutoSize    = [System.Windows.Forms.StatusBarPanelAutoSize]::Spring
-    $script:StatusPanel.BorderStyle = [System.Windows.Forms.StatusBarPanelBorderStyle]::None
-    $statusBar.Panels.Add($script:StatusPanel)
-    $main.Controls.Add($statusBar)
-
-    # On load: show Dashboard & update status
-    $main.Add_Load({
+    # On load: show Dashboard
+    $script:form.Add_Load({
         $btnDashboard.PerformClick()
-        Update-StatusBar -StatusPanel $script:StatusPanel
     })
 
     # Confirm on close
-    $main.Add_FormClosing({
+    $script:form.Add_FormClosing({
         $r = [System.Windows.Forms.MessageBox]::Show(
             'Exit application?', 'Confirm',
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
@@ -182,50 +186,24 @@ function Show-MainView {
         }
     })
 
+    #------------------------ Display the UI ---------------------------
+
     [System.Windows.Forms.Application]::EnableVisualStyles()
-    $main.ShowDialog() | Out-Null
+    $script:form.ShowDialog() | Out-Null
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::Default
 }
 
-<#
-.SYNOPSIS
-    Updates the status bar with current connection info or offline status.
-.PARAMETER StatusPanel
-    The StatusBarPanel to update.
-#>
-function Update-StatusBar {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][System.Windows.Forms.StatusBarPanel]$StatusPanel
-    )
 
-    try {
-        if ($script:Connection) {
-            # Attempt to retrieve host name/version
-            try {
-                $hostObj = Get-VMHost -Server $script:Connection -ErrorAction Stop
-                $stamp   = Get-Date -Format 'G'
-                $StatusPanel.Text = "Connected to $($hostObj.Name) | v$($hostObj.Version) | User $($script:Connection.User) | $stamp"
-            } catch {
-                $StatusPanel.Text = "Connected | $(Get-Date -Format 'G')"
-            }
-        } else {
-            $StatusPanel.Text = "Offline | $(Get-Date -Format 'G')"
-        }
-    } catch {
-        Write-Host "Update-StatusBar error: $($_.Exception.Message)" -ForegroundColor Red
-        $StatusPanel.Text = "Status error | $(Get-Date -Format 'G')"
-    }
-}
-
-<#
-.SYNOPSIS
-    Loads a view script into the content panel.
-.PARAMETER ScriptPath
-    Full path to the .ps1 view script.
-.PARAMETER TargetPanel
-    The panel where the view will render.
-#>
 function Load-ViewIntoPanel {
+    <#
+    .SYNOPSIS
+        Loads a view script into the content panel.
+    .PARAMETER ScriptPath
+        Full path to the .ps1 view script.
+    .PARAMETER TargetPanel
+        The panel where the view will render.
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$ScriptPath,
@@ -233,46 +211,36 @@ function Load-ViewIntoPanel {
     )
 
     $TargetPanel.Controls.Clear()
-    try {
-        if (-not (Test-Path $ScriptPath)) { throw "Script not found: $ScriptPath" }
-        . $ScriptPath
-        $viewFuncs = @('Show-DashboardView','Show-VMsView','Show-ClassesView','Show-NetworksView','Show-OrphansView','Show-LogsView')
-        
-        foreach ($f in $viewFuncs) {
-            if (Get-Command $f -ErrorAction SilentlyContinue) {
-                & $f -ContentPanel $TargetPanel
-                return
-            }
+    
+    if (-not (Test-Path $ScriptPath)) { throw "Script not found: $ScriptPath" }
+    . $ScriptPath
+    $viewFuncs = @('Show-DashboardView','Show-VMsView','Show-ClassesView','Show-NetworksView','Show-OrphansView','Show-LogsView')
+    
+    foreach ($f in $viewFuncs) {
+        if (Get-Command $f -ErrorAction SilentlyContinue) {
+            & $f -ContentPanel $TargetPanel
+            return
         }
-        throw "No view function found in $ScriptPath"
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Unable to load view: $($_.Exception.Message)",
-            "View Error",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-        $lbl = New-Object System.Windows.Forms.Label
-        $lbl.Text      = "Error loading view."
-        $lbl.ForeColor = $script:Theme.Error
-        $lbl.Location  = New-Object System.Drawing.Point(20,20)
-        $TargetPanel.Controls.Add($lbl)
     }
+
+    throw "No view function found in $ScriptPath"
 }
 
-<#
-.SYNOPSIS
-    Creates a navigation button that loads a view when clicked.
-.PARAMETER Text
-    The button label.
-.PARAMETER ScriptPath
-    Path to associated view script.
-.PARAMETER TargetPanel
-    The panel to load the view into.
-.OUTPUTS
-    System.Windows.Forms.Button
-#>
+
 function New-NavButton {
+    <#
+    .SYNOPSIS
+        Creates a navigation button that loads a view when clicked.
+    .PARAMETER Text
+        The button label.
+    .PARAMETER ScriptPath
+        Path to associated view script.
+    .PARAMETER TargetPanel
+        The panel to load the view into.
+    .OUTPUTS
+        System.Windows.Forms.Button
+    #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Text,
@@ -281,7 +249,7 @@ function New-NavButton {
     )
 
     $btn = New-Object System.Windows.Forms.Button
-    $btn.Text      = "   $Text"
+    $btn.Text      = " $Text"
     $btn.Font      = New-Object System.Drawing.Font('Segoe UI',10)
     $btn.ForeColor = $script:Theme.White
     $btn.BackColor = $script:Theme.PrimaryDarker
@@ -299,6 +267,8 @@ function New-NavButton {
 
     # Click handler
     $btn.Add_Click({
+        $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
         foreach ($ctrl in $this.Parent.Controls) {
             if ($ctrl -is [System.Windows.Forms.Button] -and $ctrl -ne $script:AuthButton) {
                 $ctrl.BackColor = $script:Theme.PrimaryDarker
@@ -312,7 +282,8 @@ function New-NavButton {
 
         $info = $this.Tag
         Load-ViewIntoPanel -ScriptPath $info.Script -TargetPanel $info.Panel
-        Update-StatusBar -StatusPanel $script:StatusPanel
+        
+        $script:Form.Cursor = [System.Windows.Forms.Cursors]::Default
     })
 
     return $btn
