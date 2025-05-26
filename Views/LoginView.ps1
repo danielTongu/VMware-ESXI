@@ -207,10 +207,11 @@ function Handle-Login {
         $LoginButton.Text   = 'CONNECTING...'
         $LoginButton.Refresh()
 
+        $script:username   = $UserBox.Text
         $script:Server     = $Server
         $script:Connection = Connect-VIServer -Server $Server -Credential $psCred -ErrorAction Stop
-
         $script:LoginResult = $true
+        
         $Form.Close()
     }
     catch {

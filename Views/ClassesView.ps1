@@ -28,7 +28,12 @@ function Show-ClassesView {
             $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
             $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
             $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
-            $classes    = Get-Folder -Server $conn -Type VM -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+            $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
+            $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc
+            $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
+            $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
 
             $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
             Update-ClassManagerWithData -UiRefs $script:ClassesUiRefs -Data $data
@@ -86,7 +91,7 @@ function New-ClassManagerLayout {
 
     $lblLast = New-Object System.Windows.Forms.Label
     $lblLast.Name = 'LastRefreshLabel'
-    $lblLast.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $lblLast.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
     $lblLast.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $lblLast.ForeColor = $script:Theme.White
     $lblLast.Location = New-Object System.Drawing.Point(20, 45)
@@ -432,7 +437,7 @@ function Update-ClassManagerWithData {
     try {
         $conn = $script:Connection
         # Update timestamp
-        $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss'))"
+        $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss tt'))"
 
         # Populate Overview tree
         $tree = $UiRefs.Tabs.Overview.TreeView
