@@ -904,6 +904,9 @@ function Wire-UIEvents {
     # CREATE TAB VMS BUTTON
     $UiRefs.Tabs.Create.CreateVMsButton.Add_Click({
         
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         # --------------- Check if null before trying to update ---------------
         if ($null -eq $script:adapters) { # Swapped in each of the input values and all have passed
             [System.Windows.Forms.MessageBox]::Show(
