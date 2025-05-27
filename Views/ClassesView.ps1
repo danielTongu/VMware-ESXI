@@ -28,7 +28,9 @@ function Show-ClassesView {
         $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
         $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc
         $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
-        $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+        $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
+                       Where-Object { $_.Name -notmatch '_' } |
+                       Select-Object -ExpandProperty Name
 
         $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
@@ -711,20 +713,36 @@ function Update-ClassManagerWithData {
         $tree.Nodes[0].Expand()
         # Add each class as a child node
         foreach ($cls in $Data.Classes) {
-            # Add class node
+            # Add class name as top-level node
             $nCls = $tree.Nodes.Add($cls)
-            $students = Get-Folder -Server $conn -Name $cls -ErrorAction SilentlyContinue |
-                        Get-Folder -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-            
-            # Add students to class node
-            foreach ($stu in $students) {
-                $nStu = $nCls.Nodes.Add($stu)
-                $folder =   Get-Folder -Server $conn -Name $cls -ErrorAction SilentlyContinue |
-                            Get-Folder -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $stu }
 
-                $vms = if ($folder) { Get-VM -Server $conn -Location $folder -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name } else { @() }
-                # Add VMs to student node
-                foreach ($vm in $vms) { $nStu.Nodes.Add($vm) }
+            # Retrieve class folder
+            $classFolder = Get-Folder -Server $conn -Name $cls -Location $classesRoot -ErrorAction SilentlyContinue
+
+            # Retrieve class subfolders
+            $students    = if ($classFolder) {
+                Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty Name
+            } else { @() }
+
+            foreach ($stu in $students) {
+                # Add students as child nodes
+                $nStu = $nCls.Nodes.Add($stu)
+
+                # Retrieve student folder
+                $studentFolder = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue |
+                                 Where-Object { $_.Name -eq $stu }
+
+                # Retrieve VM names
+                $vms = if ($studentFolder) {
+                    Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name
+                } else { @() }
+
+                foreach ($vm in $vms) {
+                    # Add VMs as child nodes
+                    $nStu.Nodes.Add($vm)
+                }
             }
         }
     } else {
