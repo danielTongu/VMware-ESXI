@@ -152,7 +152,7 @@ function New-ClassManagerLayout {
 
     $tree = New-Object System.Windows.Forms.TreeView
     $tree.Name = 'OverviewTree'
-    $tree.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $tree.Font = New-Object System.Drawing.Font('Segoe UI', 11)
     $tree.Dock = 'Fill'
     $ovPanel.Controls.Add($tree, 0, 0)
 
