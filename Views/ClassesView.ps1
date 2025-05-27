@@ -819,84 +819,241 @@ function Wire-UIEvents {
         Set-StatusMessage -Refs $script:Refs -Message "Overview refreshed" -Type 'Success'
     })
 
-    # Create Tab Events
-    $UiRefs.Tabs.Create.ImportButton.Add_Click({
-        . $PSScriptRoot\ImportStudentList.ps1
-        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
-        $openFileDialog.Filter = "Text Files (*.txt)|*.txt|CSV Files (*.csv)|*.csv|All Files (*.*)|*.*"
-        $openFileDialog.Title = "Select Student List File"
-        
-        if ($openFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            try {
-                $content = Get-Content -Path $openFileDialog.FileName -Raw
-                $UiRefs.Tabs.Create.StudentNames.Text = $content
-                Set-StatusMessage -Refs $script:Refs -Message "Student list imported successfully" -Type 'Success'
-            } catch {
-                Set-StatusMessage -Refs $script:Refs -Message "Failed to import student list: $_" -Type 'Error'
-            }
-        }
-    })
+    #  ----------------------  Create Tab Events  ----------------------
 
-    $UiRefs.Tabs.Create.CreateVMsButton.Add_Click({
-        try {
-            # Gather all the input values
-            $startNum = $UiRefs.Tabs.Create.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Create.EndStudentNumber.Value
-            $className = $UiRefs.Tabs.Create.ClassFolder.Text.Trim()
-            $serverName = $UiRefs.Tabs.Create.ServerName.Text.Trim()
-            $datastore = $UiRefs.Tabs.Create.DataStoreDropdown.SelectedItem
-            $template = $UiRefs.Tabs.Create.ServerTemplate.SelectedItem
-            $customization = $UiRefs.Tabs.Create.ServerCustomization.SelectedItem
-            $selectedAdapters = @()
-            foreach ($item in $UiRefs.Tabs.Create.ServerAdapters.CheckedItems) {
-                $selectedAdapters += $item
-            }
+    # Gather all the needed GUI components (required for Scope issues, approved by Dr. White)
+    $script:className = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
+    $script:textBox = $UiRefs.Tabs.Create.StudentNames                      # Student Names
+    $script:dataStore = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
+    $script:serverName = $UiRefs.Tabs.Create.ServerName                     # Server Name
+    $script:template = $UiRefs.Tabs.Create.ServerTemplate                   # Template
+    $script:customization = $UiRefs.Tabs.Create.ServerCustomization         # Customization   
+    $script:adapters = $UiRefs.Tabs.Create.ServerAdapters                   # Adapters
+
+    # CREATE TAB IMPORT BUTTON
+    $UiRefs.Tabs.Create.ImportButton.Add_Click({
+
+        # create an open file dialog box object from Windows Forms  
+        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        # set the filter to only accept TXT files
+        $openFileDialog.Filter = "Text files (*.txt)|*.txt"
+        #set the title
+        $openFileDialog.Title = "Select a TXT File"
+
+        # open the file dialog and wait for user input
+        # check if the user's actions resulted in "OK" being returned (user would've selected a file and pressed open)
+        if ($openFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            # save the file path in a local variable
+            $filePath = $openFileDialog.FileName
+            # print statement for now
+            Write-Host "You selected: $filePath"
             
-            # Validate inputs
+            # check if the file path doesn't have an extension equal to the .txt extension
+            if ([System.IO.Path]::GetExtension($filePath) -ne ".txt") {
+                # display a popup to the user of the error
+                [System.Windows.Forms.MessageBox]::Show(
+                "Please select a valid .txt file.", # message
+                "Invalid File Type", # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Warning # icon
+                )
+                # exit early to avoid proceeding with the rest of the code
+                return
+            }
+
+            # now read the content of the file into a variable (one student per line)
+            $studentNames = Get-Content $filePath
+
+            # Check if StudentsTextBox is valid before trying to update it
+            if ($null -eq $script:textBox) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Error: StudentsTextBox is not initialized!", # message
+                    "Initialization Error",   # title
+                    [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                    [System.Windows.Forms.MessageBoxIcon]::Error # icon
+                )
+                # exit early to avoid proceeding with the rest of the code
+                return
+            }
+
+
+            # populate the text box with the newly acquired student names (one per line)
+            $script:textBox.Text = ($studentNames -join "`r`n")
+
+            # display a popup to the user notify the student that the names were imported correctly
+            [System.Windows.Forms.MessageBox]::Show(
+                "Student names imported successfully.", # message
+                "Import Success",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Information # icon
+            )
+
+
+        # if this point was reached then the user either closed the dialog or pressed cancel meaning the result wasn't "OK"
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No file was selected.", # message
+                "No File Selected",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Information # icon
+            )
+        }
+    })    
+
+
+    # CREATE TAB VMS BUTTON
+    $UiRefs.Tabs.Create.CreateVMsButton.Add_Click({
+        
+        # --------------- Check if null before trying to update ---------------
+        if ($null -eq $script:adapters) { # Swapped in each of the input values and all have passed
+            [System.Windows.Forms.MessageBox]::Show(
+                "Error: Adapters were not initialized!", # message
+                "Initialization Error",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Error # icon
+            )
+            # exit early to avoid proceeding with the rest of the code
+            return
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Adapters were initialized!", # message
+                "Initialization Successful",   # title
+                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
+                [System.Windows.Forms.MessageBoxIcon]::Information # icon
+            )
+
+            # --------------- Grab the actual user input ---------------
+            # ClassName
+            $className = $script:className.Text.Trim()
+            # StudentNames
+            $students = $script:textBox.Text
+            $studentArray = $students -split "`r?`n" # store each line in an array
+            # Datastore
+            $datastore = $script:dataStore.SelectedItem
+            # ServerName
+            $serverName = $script:serverName.Text.Trim()
+            # Template
+            $templateName = $script:template.SelectedItem
+            # Customization
+            $customization = $script:customization.SelectedItem
+            # Adapters
+            $adapters = $script:adapters.CheckedItems
+            $selectedAdapters = @()
+            ForEach($item in $adapters) {
+                $selectedAdapters += $item # store each checked box in an array
+            }
+
+            # --------------- Print statements to test if user input was gathered correctly ---------------
+            # ClassName
+            Write-Host "Class Name: $className"
+            # StudentNames
+            ForEach($studentName in $studentArray) {
+                Write-Host "Student Name: $studentName"
+            }
+            # Datastore
+            Write-Host "DataStore: $dataStore"
+            # ServerName
+            Write-Host "Server Name: $serverName"
+            # Template
+            Write-Host "Template Name: $templateName"
+            # Customization
+            Write-Host "Customization: $customization"
+            # Adapters
+            ForEach($item in $selectedAdapters) {
+                Write-Host "Adapter: $item"
+            }
+
+            # exit early to avoid proceeding with the rest of the code
+            # return
+        }
+        
+
+        # --------------- Try catch block used to validate inputs ---------------
+        try {
+            
+            # Class Name
             if ([string]::IsNullOrWhiteSpace($className)) {
                 throw "Class folder name cannot be empty"
             }
-            
-            if ($startNum -gt $endNum) {
-                throw "Start student number cannot be greater than end student number"
+
+            # Student Names
+            if ([string]::IsNullOrWhiteSpace($students)) {
+                throw "Student names cannot be empty"
             }
             
+            # Datastore
+            if (-not $datastore) {
+                throw "Please select a datastore"
+            }
+
+            # Server Name
             if ([string]::IsNullOrWhiteSpace($serverName)) {
                 throw "Server name cannot be empty"
             }
             
+            # Template
             if (-not $template) {
                 throw "Please select a template"
             }
+
+            # Customization
+            if (-not $customization) {
+                "Please select a customization"
+            }
             
+            # Adapters
             if ($selectedAdapters.Count -eq 0) {
                 throw "Please select at least one network adapter"
             }
             
-            # Create course info object
+            # --------------- Create course info object ---------------
+            # Start with ServerInfo which will be placed within the CourseInfo Object
             $serverInfo = @{
                 serverName = $serverName
                 template = $template
-                customization = if ($customization -ne "None") { $customization } else { $null }
+                customization = $customization
                 adapters = $selectedAdapters
             }
             
+            # Now store values into the CourseInfo Object
             $courseInfo = [PSCustomObject]@{
-                startStudents = $startNum
-                endStudents = $endNum
-                classFolder = $className
-                dataStore = $datastore
-                servers = @($serverInfo)
+                classFolder = $className    # Name of the Class
+                students = $studentArray    # Array of all the Students needing a folder
+                dataStore = $datastore      # Name of the DataStore
+                servers = @($serverInfo)    # Info regarding the Server
             }
-            
-            # Call the VM creation function
-            New-CourseVMs -courseInfo $courseInfo
+
+            # Print statements to test if the Object was created properly and we can access the data
+            Write-Host "`n"
+
+            # Class Name
+            Write-Host "Class Name: $($courseInfo.classFolder)"
+            # Student Names
+            ForEach($studentName in $courseInfo.students) {
+                Write-Host "Student Name: $studentName"
+            }
+            # DataStore
+            Write-Host "DataStore: $($courseInfo.datastore)"
+            # ServerName
+            Write-Host "Server Name: $($courseInfo.servers.serverName)"
+            # Template
+            Write-Host "Template: $($courseInfo.servers.template.SelectedItem)"
+            # Customization
+            Write-Host "Customization: $($courseInfo.servers.customization)"
+            # Adapters
+            ForEach($item in $courseInfo.servers.adapters) {
+                Write-Host "Adapters: $item"
+            }
+
+            # --------------- Call the VM creation function ---------------
+            # New-CourseVMs -courseInfo $courseInfo 
             Set-StatusMessage -Refs $script:Refs -Message "Successfully created VMs for class $className" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error creating VMs: $_" -Type 'Error'
         }
     })
+
 
     # Delete Tab Events
     $UiRefs.Tabs.Delete.RemoveCourseFolderVMsButton.Add_Click({
