@@ -631,6 +631,7 @@ function Wire-UIEvents {
 
     # Refresh Button Click
     $Refs.RefreshButton.Add_Click({
+        Write-Host "[DEBUG] Refresh button clicked - Refreshing network data"
         . $PSScriptRoot\NetworksView.ps1
         Show-NetworksView -ContentPanel $script:uiRefs.ContentPanel
         Set-StatusMessage -Refs $script:uiRefs -Message "Data refreshed." -Type Success
@@ -641,7 +642,10 @@ function Wire-UIEvents {
         . $PSScriptRoot\NetworksView.ps1
         
         $networkName = $script:uiRefs.NetworkNameInput.Text.Trim()
+        Write-Host "[DEBUG] Delete Network - Name: '$networkName'"
+        
         if ([string]::IsNullOrWhiteSpace($networkName)) {
+            Write-Host "[DEBUG] Validation failed - Empty network name"
             Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a network name." -Type Warning
             return
         }
@@ -654,12 +658,13 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Host "[DEBUG] Confirmed deletion of network '$networkName'"
             Set-StatusMessage -Refs $script:uiRefs -Message "Deleting network '$networkName'..." -Type Info
             Get-VirtualPortGroup -VMHost (Get-VMHost) -Name $networkName | Remove-VirtualPortGroup -Confirm:$false
             Get-VirtualSwitch -Name $networkName | Remove-VirtualSwitch -Confirm:$false
             Set-StatusMessage -Refs $script:uiRefs -Message "Deleted successfully." -Type Success
-        } 
-        else {
+        } else {
+            Write-Host "[DEBUG] User cancelled network deletion"
             Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
         }
     })
@@ -671,14 +676,16 @@ function Wire-UIEvents {
         $courseNumber = $script:uiRefs.CoursePrefixInput.Text.Trim()
         $startStudents = [int]$script:uiRefs.StartNumberInput.Value
         $endStudents = [int]$script:uiRefs.EndNumberInput.Value
+        
+        Write-Host "[DEBUG] Delete Multiple Networks - Course: '$courseNumber', Range: $startStudents-$endStudents"
 
         if ([string]::IsNullOrWhiteSpace($courseNumber)) {
+            Write-Host "[DEBUG] Validation failed - Empty course prefix"
             Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a course prefix." -Type Warning
-        } 
-        elseif ($startStudents -gt $endStudents) {
+        } elseif ($startStudents -gt $endStudents) {
+            Write-Host "[DEBUG] Validation failed - Invalid range ($startStudents > $endStudents)"
             Set-StatusMessage -Refs $script:uiRefs -Message "Start number must be less than or equal to end number." -Type Warning
-        } 
-        else {
+        } else {
             $msg = "Are you sure you want to delete networks '$courseNumber`_S$startStudents' to '$courseNumber`_S$endStudents' and their associated switches?"
             $result = [System.Windows.Forms.MessageBox]::Show(
                 $msg,
@@ -686,18 +693,20 @@ function Wire-UIEvents {
                 [System.Windows.Forms.MessageBoxButtons]::YesNo,
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             )
+            
             if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                Write-Host "[DEBUG] Confirmed deletion of multiple networks"
                 Set-StatusMessage -Refs $script:uiRefs -Message "Deleting..." -Type Info
-
                 $vmHost = Get-VMHost
                 for ($i = $startStudents; $i -le $endStudents; $i++) {
                     $adapterName = $courseNumber + '_S' + $i
+                    Write-Host "[DEBUG] Deleting network: $adapterName"
                     Get-VirtualPortGroup -VMHost $vmHost -Name $adapterName | Remove-VirtualPortGroup -Confirm:$false
                     Get-VirtualSwitch -Name $adapterName | Remove-VirtualSwitch -Confirm:$false
                 }
                 Set-StatusMessage -Refs $script:uiRefs -Message "Deleted successfully." -Type Success
-            } 
-            else {
+            } else {
+                Write-Host "[DEBUG] User cancelled multiple network deletion"
                 Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
             }
         }
@@ -708,7 +717,10 @@ function Wire-UIEvents {
         . $PSScriptRoot\NetworksView.ps1
     
         $networkName = $script:uiRefs.NetworkNameInput.Text.Trim()
+        Write-Host "[DEBUG] Add Network - Name: '$networkName'"
+        
         if ([string]::IsNullOrWhiteSpace($networkName)) {
+            Write-Host "[DEBUG] Validation failed - Empty network name"
             Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a network name." -Type Warning
             return
         }
@@ -721,13 +733,15 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Host "[DEBUG] Confirmed adding network '$networkName'"
             Set-StatusMessage -Refs $script:uiRefs -Message "Adding '$networkName'..." -Type Info
             $vmHost = Get-VMHost
+            Write-Host "[DEBUG] Creating virtual switch and port group"
             $vSwitch = New-VirtualSwitch -Name $networkName -VMHost $vmHost
             $vPortGroup = New-VirtualPortGroup -Name $networkName -VirtualSwitch $vSwitch
             Set-StatusMessage -Refs $script:uiRefs -Message "Added '$networkName' successfully." -Type Success
-        } 
-        else {
+        } else {
+            Write-Host "[DEBUG] User cancelled network addition"
             Set-StatusMessage -Refs $script:uiRefs -Message "Add cancelled." -Type Info
         }
     })
@@ -739,14 +753,16 @@ function Wire-UIEvents {
         $courseNumber = $script:uiRefs.CoursePrefixInput.Text.Trim()
         $startStudents = [int]$script:uiRefs.StartNumberInput.Value
         $endStudents = [int]$script:uiRefs.EndNumberInput.Value
+        
+        Write-Host "[DEBUG] Add Multiple Networks - Course: '$courseNumber', Range: $startStudents-$endStudents"
 
         if ([string]::IsNullOrWhiteSpace($courseNumber)) {
+            Write-Host "[DEBUG] Validation failed - Empty course prefix"
             Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a course prefix." -Type Warning
-        } 
-        elseif ($startStudents -gt $endStudents) {
+        } elseif ($startStudents -gt $endStudents) {
+            Write-Host "[DEBUG] Validation failed - Invalid range ($startStudents > $endStudents)"
             Set-StatusMessage -Refs $script:uiRefs -Message "Start number must be less than or equal to end number." -Type Warning
-        } 
-        else {
+        } else {
             $msg = "Are you sure you want to add networks '$courseNumber`_S$startStudents' to '$courseNumber`_S$endStudents' and their associated switches?"
             $result = [System.Windows.Forms.MessageBox]::Show(
                 $msg,
@@ -756,31 +772,30 @@ function Wire-UIEvents {
             )
 
             if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                Write-Host "[DEBUG] Confirmed adding multiple networks"
                 Set-StatusMessage -Refs $script:uiRefs -Message "Adding..." -Type Info
                 $vmHost = Get-VMHost
 
                 for ($i = $startStudents; $i -le $endStudents; $i++) {
                     $adapterName = $courseNumber + "_S" + $i
                     if (Get-VirtualSwitch -Name $adapterName -ErrorAction SilentlyContinue) {
-                        Write-Host "Adapter '$adapterName' already exists."
-                    } 
-                    else {
+                        Write-Host "[DEBUG] Network '$adapterName' already exists - skipping"
+                    } else {
                         try {
+                            Write-Host "[DEBUG] Creating network: $adapterName"
                             $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost
                             $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch
                         }
                         catch {
-                            Write-Error "Failed to create network '$adapterName': $_"
+                            Write-Host "[ERROR] Failed to create network '$adapterName': $_"
                         }
                     }
                 }
                 Set-StatusMessage -Refs $script:uiRefs -Message "Added successfully." -Type Success
-            } 
-            else {
+            } else {
+                Write-Host "[DEBUG] User cancelled multiple network addition"
                 Set-StatusMessage -Refs $script:uiRefs -Message "Add cancelled." -Type Info
             }
         }
     })
-
-    
 }
