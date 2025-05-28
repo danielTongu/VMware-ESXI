@@ -297,6 +297,137 @@ function Update-OrphanData {
     }
 }
 
+<#
+    .SYNOPSIS
+        Scans a datastore for orphaned files not associated with any registered VM or template.
+
+    .DESCRIPTION
+        (This function is a similiar implementaion from the client Get-VmwOrphan function) 
+        searches a specified datastore and compares all discovered files against 
+        those belonging to registered virtual machines and templates. Files that remain unaccounted 
+        for (not linked to any VM or template) are considered orphaned. System files and folders 
+        commonly found on datastores are excluded from the results.
+
+    .PARAMETER DatastoreName
+        The target datastore to scan for orphaned files.
+
+    .OUTPUTS 
+        Returns the orphan file 
+        
+#>
+function Find-OrphanedFiles {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DatastoreName
+    )
+
+    # Load the datastore object
+    $ds = Get-Datastore -Name $DatastoreName
+    if (-not $ds) {
+        Write-Error "Datastore '$DatastoreName' not found."
+        return
+    }
+
+    # Prepare FileQueryFlags and queries
+    $flags = New-Object VMware.Vim.FileQueryFlags
+    $flags.FileOwner = $true
+    $flags.FileSize = $true
+    $flags.FileType = $true
+    $flags.Modification = $true
+
+    $qFloppy = New-Object VMware.Vim.FloppyImageFileQuery
+    $qFolder = New-Object VMware.Vim.FolderFileQuery
+    $qISO = New-Object VMware.Vim.IsoImageFileQuery
+    $qConfig = New-Object VMware.Vim.VmConfigFileQuery
+    $qConfig.Details = New-Object VMware.Vim.VmConfigFileQueryFlags
+    $qConfig.Details.ConfigVersion = $true
+    $qTemplate = New-Object VMware.Vim.TemplateConfigFileQuery
+    $qTemplate.Details = New-Object VMware.Vim.VmConfigFileQueryFlags
+    $qTemplate.Details.ConfigVersion = $true
+    $qDisk = New-Object VMware.Vim.VmDiskFileQuery
+    $qDisk.Details = New-Object VMware.Vim.VmDiskFileQueryFlags
+    $qDisk.Details.CapacityKB = $true
+    $qDisk.Details.DiskExtents = $true
+    $qDisk.Details.DiskType = $true
+    $qDisk.Details.HardwareVersion = $true
+    $qDisk.Details.Thin = $true
+    $qLog = New-Object VMware.Vim.VmLogFileQuery
+    $qRAM = New-Object VMware.Vim.VmNvramFileQuery
+    $qSnap = New-Object VMware.Vim.VmSnapshotFileQuery
+
+    $searchSpec = New-Object VMware.Vim.HostDatastoreBrowserSearchSpec
+    $searchSpec.details = $flags
+    $searchSpec.Query = $qFloppy, $qFolder, $qISO, $qConfig, $qTemplate, $qDisk, $qLog, $qRAM, $qSnap
+    $searchSpec.sortFoldersFirst = $true
+
+    # Get datastore browser view
+    $dsBrowser = Get-View -Id $ds.ExtensionData.browser
+    $rootPath = "[" + $ds.Name + "]"
+
+    # Search all files recursively
+    $searchResult = $dsBrowser.SearchDatastoreSubFolders($rootPath, $searchSpec) | Sort-Object -Property { $_.FolderPath.Length }
+
+    # Create a hashtable of all files on the datastore
+    $fileTable = @{}
+    foreach ($folder in $searchResult) {
+        foreach ($file in $folder.File) {
+            # Add a space if folder path ends with ']'
+            $key = "$($folder.FolderPath)$(if ($folder.FolderPath[-1] -eq ']') { ' ' })$($file.Path)"
+            $fileTable[$key] = $file
+
+            # Remove folder keys if any (avoid folder vs file key conflict)
+            $folderKey = $folder.FolderPath.TrimEnd('/')
+            if ($fileTable.ContainsKey($folderKey)) {
+                $fileTable.Remove($folderKey)
+            }
+        }
+    }
+
+    # Remove files referenced by registered VMs on this datastore
+    Get-VM -Datastore $ds | ForEach-Object {
+        $_.ExtensionData.LayoutEx.File | ForEach-Object {
+            if ($fileTable.ContainsKey($_.Name)) {
+                $fileTable.Remove($_.Name)
+            }
+        }
+    }
+
+    # Remove files referenced by registered Templates on this datastore
+    Get-Template | Where-Object { $_.DatastoreIdList -contains $ds.Id } | ForEach-Object {
+        $_.ExtensionData.LayoutEx.File | ForEach-Object {
+            if ($fileTable.ContainsKey($_.Name)) {
+                $fileTable.Remove($_.Name)
+            }
+        }
+    }
+
+    # Remove system files
+    $systemFilePatterns = @('\.vmkdump', '\.log$', '\.vswp$', '\.nvram$', '\.lck$', '\.vmsn$', '\.delta$', '\.sdd\.sf$')
+    foreach ($pattern in $systemFilePatterns) {
+        $keysToRemove = $fileTable.Keys | Where-Object { $_ -match $pattern }
+        foreach ($key in $keysToRemove) {
+            $fileTable.Remove($key)
+        }
+    }
+
+    # Return the orphan files as PSObjects
+    return $fileTable.GetEnumerator() | ForEach-Object {
+        $file = $_.Value
+        [PSCustomObject]@{
+            Path         = $file.Path
+            Folder       = $_.Key
+            SizeBytes    = $file.FileSize
+            CapacityKB   = if ($file.PSObject.Properties.Match('CapacityKB')) { $file.CapacityKB } else { $null }
+            Modification = $file.Modification
+            Owner        = $file.Owner
+            Thin         = if ($file.PSObject.Properties.Match('Thin')) { $file.Thin } else { $null }
+            DiskType     = if ($file.PSObject.Properties.Match('DiskType')) { $file.DiskType } else { $null }
+            Extents      = if ($file.PSObject.Properties.Match('DiskExtents')) { ($file.DiskExtents -join ',') } else { $null }
+            HWVersion    = if ($file.PSObject.Properties.Match('HardwareVersion')) { $file.HardwareVersion } else { $null }
+        }
+    }
+}
 
 function Format-FileSize {
     <#
