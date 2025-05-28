@@ -1013,7 +1013,7 @@ function Wire-UIEvents {
             # Start with ServerInfo which will be placed within the CourseInfo Object
             $serverInfo = @{
                 serverName = $serverName
-                template = $template
+                template = $templateName
                 customization = $customization
                 adapters = $selectedAdapters
             }
@@ -1040,7 +1040,7 @@ function Wire-UIEvents {
             # ServerName
             Write-Host "Server Name: $($courseInfo.servers.serverName)"
             # Template
-            Write-Host "Template: $($courseInfo.servers.template.SelectedItem)"
+            Write-Host "Template: $($courseInfo.servers.template)"
             # Customization
             Write-Host "Customization: $($courseInfo.servers.customization)"
             # Adapters
@@ -1049,7 +1049,7 @@ function Wire-UIEvents {
             }
 
             # --------------- Call the VM creation function ---------------
-            # New-CourseVMs -courseInfo $courseInfo 
+            New-CourseVMs -courseInfo $courseInfo 
             Set-StatusMessage -Refs $script:Refs -Message "Successfully created VMs for class $className" -Type 'Success'
             
         } catch {
@@ -1357,38 +1357,64 @@ function New-CourseVMs {
     )
     BEGIN { }
     PROCESS {
+
+        # import common functions
+        # Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
+
         # Connect to the server
-        ConnectTo-VMServer
+        # ConnectTo-VMServer
 
         # Get the VM host
         $vmHost = Get-VMHost 2> $null
 
-        # Loop through each student number
-        for ($i = $courseInfo.startStudents; $i -le $courseInfo.endStudents; $i++) {
-            $userAccount = $courseInfo.classFolder + "_" + $i
+        # Get the root Classes folder
+        $classesRoot = Get-Folder -Name 'Classes'
+
+        # Check if the class folder already exists
+        $classFolder = Get-Folder -Name $courseInfo.classFolder -ErrorAction SilentlyContinue
+        if (-not $classFolder) {
+            # Print statement
+            Write-Host "Class Folder: $($courseInfo.classFolder) doesn't exist. Will begin creating it now..."
+            # Create new folder
+            $classFolder = New-Folder -Name $courseInfo.classFolder -Location $classesRoot 2> $null
+            # Check now if the folder (we just created) exists
+            if (-not $classFolder) {
+                throw "Failed to create class folder..."
+            }
+        # If this point is reached then it already exists
+        } else {
+            # Print statement
+            Write-Host "Class Folder: $($courseInfo.classFolder) already exists."
+        }
+
+        # Loop through each student in the array of names
+        ForEach ($student in $courseInfo.students) {
+            $userAccount = $courseInfo.classFolder + "_" + $student
 
             # Ensure student folder exists
             $studentFolder = Get-Folder -Name $userAccount 2> $null
             if (-not $studentFolder) {
                 Write-Host "Creating folder for $userAccount"
-                $studentFolder = New-Folder -Name $userAccount -Location (Get-Folder -Name $courseInfo.classFolder) 2> $null
+                $studentFolder = New-Folder -Name $userAccount -Location $classFolder 2> $null
 
-                $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
-                $role = Get-VIRole -Name StudentUser 2> $null
-                if ($account -and $role) {
-                    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
-                }
+                # Commenting out the Permissions for now...
+                # $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
+                # $role = Get-VIRole -Name StudentUser 2> $null
+                # if ($account -and $role) {
+                #    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
+                # }
             } else {
                 Write-Host "Folder for $userAccount exists"
             }
 
             # Create servers for the student
             foreach ($server in $courseInfo.servers) {
-                Write-Host "Building $($server.serverName)"
+                $studentVMName = "$student" + "_" + "$($server.serverName)"
+                Write-Host "Building VM $studentVMName"
                 if ($server.customization) {
-                    New-VM -Name $server.serverName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization > $null 2>&1
+                    New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization > $null 2>&1
                 } else {
-                    New-VM -Name $server.serverName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder > $null 2>&1
+                    New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder > $null 2>&1
                 }
 
                 # Configure network adapters
@@ -1400,7 +1426,7 @@ function New-CourseVMs {
                         'NATswitch'  { $adapterName = $adapter }
                         'inside'     { $adapterName = $adapter }
                         default {
-                            $adapterName = $adapter + $i
+                            $adapterName = "$adapter" + "_" + "$student"
                             if (-not (Get-VirtualSwitch -Name $adapterName 2> $null)) {
                                 Write-Host "Creating network adapter $adapterName"
                                 $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost 2> $null
@@ -1412,7 +1438,7 @@ function New-CourseVMs {
                     }
 
                     Write-Host "Connecting to $adapterName"
-                    Get-VM -Name $server.serverName -Location $studentFolder |
+                    Get-VM -Name $studentVMName -Location $studentFolder |
                         Get-NetworkAdapter -Name $networkAdapter |
                         Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false > $null 2>&1
                     $adapterNumber++
@@ -1420,9 +1446,9 @@ function New-CourseVMs {
 
                 # Power on the VM
                 Write-Host "Powering on"
-                Get-VM -Name $server.serverName -Location $studentFolder | Start-VM -Confirm:$false > $null 2>&1
+                Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false > $null 2>&1
             }
-            Write-Host ""
+            Write-Host "Finished processing student: $student`n"
         }
     }
     END { }
