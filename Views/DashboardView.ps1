@@ -184,7 +184,8 @@ function Get-DashboardData {
         $data.PortGroups = $data['Get-VMHost'] | Get-VirtualPortGroup
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
-        $data.OrphanedFiles = $data['Get-Datastore'] | Get-Orphans 
+        $data.OrphanedFiles = $data['Get-Datastore'] | ForEach-Object { Find-OrphanedFiles -DatastoreName $_ }
+
 
         return @{
             HostInfo     = $data['Get-VMHost']
@@ -387,7 +388,7 @@ function Update-DashboardWithData {
         Adapters      = $Data.Adapters.Count
         Templates     = $Data.Templates.Count
         PortGroups    = $Data.PortGroups.Count
-        OrphanedFiles = ($Data.OrphanedFiles | Measure-Object -Property OrphanCount -Sum).Sum
+        OrphanedFiles = @($Data.OrphanedFiles).Count
     }
 
     foreach ($key in $cardValues.Keys) {
