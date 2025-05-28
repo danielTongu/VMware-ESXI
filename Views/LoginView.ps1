@@ -95,11 +95,21 @@ function Show-LoginView {
         UseSystemPasswordChar   = $true
         MaxLength               = 100
         Location                = [System.Drawing.Point]::new(30,354)
-        Size                    = [System.Drawing.Size]::new(340,35)
+        Size                    = [System.Drawing.Size]::new(340,35) 
         Anchor                  = 'Top,Left,Right'
     }
 
-    $form.Controls.AddRange(@($lblPass,$txtPass))
+    # Eye toggle button with checkbox
+    $chkShowPass = New-Object System.Windows.Forms.CheckBox -Property @{
+    Text     = "Show Password"
+    Location = [System.Drawing.Point]::new(30, 390)  # Adjust Y position as needed
+    Size     = [System.Drawing.Size]::new(150, 20)
+    ForeColor = $script:Theme.PrimaryDark
+    }
+    $chkShowPass.Add_CheckedChanged({
+        $txtPass.UseSystemPasswordChar = -not $chkShowPass.Checked
+    })
+    $form.Controls.AddRange(@($lblPass, $txtPass, $chkShowPass))
 
     # Status label
     $lblStatus = New-Object System.Windows.Forms.Label -Property @{
