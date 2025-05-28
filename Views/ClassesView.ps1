@@ -658,13 +658,13 @@ function New-ClassManagerLayout {
             Delete = @{
                 # Parameters
                 ClassComboBox        = $cmbClass
-                ServerComboBox       = $cmbServer
+                ServerComboBox       = $cmbHost         # Changed from $cmbServer to $cmbHost
                 StartStudentNumber   = $numStartStuDel
                 EndStudentNumber     = $numEndStuDel
                 # Requires all parameters
                 RemoveHostButton            = $btnRemoveHost
-                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificVMs
-                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificVMs
+                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificClassVMs     # Fixed name
+                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificClassVMs      # Fixed name
                 # Requires Class Folder + Start/End Students
                 RemoveCourseFolderVMsButton       = $btnRemoveCourseFolderVMs
                 # Requires Class Folder only
@@ -781,11 +781,14 @@ function Update-ClassManagerWithData {
         if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
     }
 
-    $cmbServer = $UiRefs.Tabs.Delete.ServerComboBox
-    $cmbServer.Items.Clear()
-    if ($Data.Servers) {
-        $cmbServer.Items.AddRange($Data.Servers)
-        if ($cmbServer.Items.Count -gt 0) { $cmbServer.SelectedIndex = 0 }
+    if ($UiRefs.Tabs.Delete.ServerComboBox) {
+    $UiRefs.Tabs.Delete.ServerComboBox.Items.Clear()
+        if ($Data.Servers) {
+            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange($Data.Servers)
+            if ($UiRefs.Tabs.Delete.ServerComboBox.Items.Count -gt 0) { 
+                $UiRefs.Tabs.Delete.ServerComboBox.SelectedIndex = 0 
+            }
+        }
     }
     # Set status message
     Set-StatusMessage -Refs $UiRefs -Message "UI updated with latest data" -Type 'Success'
