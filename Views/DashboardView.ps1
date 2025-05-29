@@ -251,118 +251,40 @@ function Get-VMwarePortGroups {
 function Get-Orphans {
     <#
     .SYNOPSIS
-        Enhanced orphan detection using vSphere API
-    .DESCRIPTION
-        Combines the efficiency of direct API calls with modern PowerShell practices
+        Wrapper function for the Find-OrphanedFiles
+    .OUTPUTS
+        formated data so the user can see on the UI
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore[]]$Datastore
+        [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore]$Datastore
     )
 
-    Begin {
-        # Initialize search specification (like Get-VmwOrphan)
-        $flags = [VMware.Vim.FileQueryFlags]@{
-            FileOwner = $true
-            FileSize = $true
-            FileType = $true
-            Modification = $true
+    process {
+        Write-Verbose "Scanning datastore: $($Datastore.Name)"
+
+        $orphans = Find-OrphanedFiles -DatastoreName $Datastore.Name
+
+        # Format orphaned files for UI
+        $orphansMapped = $orphans | ForEach-Object {
+            [PSCustomObject]@{
+                Name      = $_.Path
+                Type      = $_.DiskType
+                Size      = $_.SizeBytes
+                Modified  = $_.Modification
+                Owner     = $_.Owner
+                Datastore = $Datastore.Name
+                FullPath  = "$($Datastore.Name) $($_.Path)"
+                RawFile   = $_
+            }
         }
 
-        $searchSpec = [VMware.Vim.HostDatastoreBrowserSearchSpec]@{
-            details = $flags
-            sortFoldersFirst = $true
-        }
-
-        # Initialize file queries
-        $searchSpec.Query = @(
-            [VMware.Vim.FloppyImageFileQuery]::new(),
-            [VMware.Vim.FolderFileQuery]::new(),
-            [VMware.Vim.IsoImageFileQuery]::new(),
-            [VMware.Vim.VmConfigFileQuery]::new(),
-            [VMware.Vim.TemplateConfigFileQuery]::new(),
-            [VMware.Vim.VmDiskFileQuery]::new(),
-            [VMware.Vim.VmLogFileQuery]::new(),
-            [VMware.Vim.VmNvramFileQuery]::new(),
-            [VMware.Vim.VmSnapshotFileQuery]::new()
-        )
-    }
-
-    Process {
-        foreach ($ds in $Datastore) {
-            try {
-                Write-Verbose "Scanning datastore $($ds.Name)..."
-                $startTime = Get-Date
-
-                # Get all files from datastore
-                $dsBrowser = Get-View -Id $ds.ExtensionData.browser
-                $rootPath = "[$($ds.Name)]"
-                $searchResult = $dsBrowser.SearchDatastoreSubFolders($rootPath, $searchSpec)
-
-                # Create file table
-                $fileTable = @{}
-                foreach ($folder in $searchResult) {
-                    foreach ($file in $folder.File) {
-                        $key = "$($folder.FolderPath)$(if($folder.FolderPath[-1] -eq ']'){' '})$($file.Path)"
-                        $fileTable[$key] = $file
-                    }
-                }
-
-                # Remove registered VM files
-                Get-VM -Datastore $ds | ForEach-Object {
-                    $_.ExtensionData.LayoutEx.File | ForEach-Object {
-                        if ($fileTable.ContainsKey($_.Name)) {
-                            $fileTable.Remove($_.Name)
-                        }
-                    }
-                }
-
-                # Remove registered template files
-                Get-Template | Where-Object { $_.DatastoreIdList -contains $ds.Id } | ForEach-Object {
-                    $_.ExtensionData.LayoutEx.File | ForEach-Object {
-                        if ($fileTable.ContainsKey($_.Name)) {
-                            $fileTable.Remove($_.Name)
-                        }
-                    }
-                }
-
-                # Filter out system files
-                $systemFiles = $fileTable.Keys | Where-Object { $_ -match '\] \.|vmkdump' }
-                $systemFiles | ForEach-Object { $fileTable.Remove($_) }
-
-                # Prepare output
-                $orphans = foreach ($entry in $fileTable.GetEnumerator()) {
-                    [PSCustomObject]@{
-                        Name         = $entry.Value.Path
-                        FullPath     = $entry.Key
-                        Size         = $entry.Value.FileSize
-                        Modified     = $entry.Value.Modification
-                        Owner        = $entry.Value.Owner
-                        Type         = $entry.Value.GetType().Name.Replace('FileInfo','')
-                        Datastore    = $ds.Name
-                    }
-                }
-
-                $duration = (Get-Date) - $startTime
-                Write-Verbose "Scan completed in $($duration.TotalSeconds.ToString('0.00')) seconds. Found $($orphans.Count) orphans."
-
-                [PSCustomObject]@{
-                    Datastore   = $ds.Name
-                    OrphanCount = $orphans.Count
-                    Orphans     = $orphans
-                    ScanTime    = $duration.TotalSeconds
-                }
-            }
-            catch {
-                Write-Warning "Error scanning $($ds.Name): $_"
-                [PSCustomObject]@{
-                    Datastore   = $ds.Name
-                    OrphanCount = -1
-                    Orphans     = @()
-                    Error       = $_.Exception.Message
-                }
-            }
+        # Output expected object
+        [PSCustomObject]@{
+            Datastore   = $Datastore.Name
+            OrphanCount = @($orphansMapped).Count
+            Orphans     = $orphansMapped
         }
     }
 }

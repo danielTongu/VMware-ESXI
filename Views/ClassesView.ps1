@@ -478,6 +478,7 @@ function New-ClassManagerLayout {
     $cmbClass.Width = 200
     $paramsLayout.Controls.Add($cmbClass, 1, 0)
 
+    <#
     # Start Student Number
     $lblStart = New-Object System.Windows.Forms.Label
     $lblStart.Text = 'Start Student:'
@@ -505,6 +506,7 @@ function New-ClassManagerLayout {
     $numEnd.Value = 1
     $numEnd.Width = 80
     $paramsLayout.Controls.Add($numEnd, 1, 2)
+    #>
 
     # Host Name
     $lblHost = New-Object System.Windows.Forms.Label
@@ -513,7 +515,7 @@ function New-ClassManagerLayout {
     $paramsLayout.Controls.Add($lblHost, 0, 3)
 
     $cmbHost = New-Object System.Windows.Forms.ComboBox
-    $cmbHost.Name = 'ServerComboBox'
+    $cmbHost.Name = 'HostComboBox'
     $cmbHost.DropDownStyle = 'DropDownList'
     $cmbHost.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $cmbHost.Width = 200
@@ -676,11 +678,11 @@ function New-ClassManagerLayout {
             Delete = @{
                 # Parameters
                 ClassComboBox        = $cmbClass
-                ServerComboBox       = $cmbHost         # Changed from $cmbServer to $cmbHost
+                HostComboBox         = $cmbHost         # Changed from $cmbServer to $cmbHost
                 StartStudentNumber   = $numStartStuDel
                 EndStudentNumber     = $numEndStuDel
                 # Requires all parameters
-                RemoveHostButton            = $btnRemoveHost
+                RemoveHostButton                 = $btnRemoveHost
                 PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificClassVMs     # Fixed name
                 PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificClassVMs      # Fixed name
                 # Requires Class Folder + Start/End Students
@@ -799,12 +801,12 @@ function Update-ClassManagerWithData {
         if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
     }    
 
-    if ($UiRefs.Tabs.Delete.ServerComboBox) {
-    $UiRefs.Tabs.Delete.ServerComboBox.Items.Clear()
+    if ($UiRefs.Tabs.Delete.HostComboBox) {
+        $UiRefs.Tabs.Delete.HostComboBox.Items.Clear()
         if ($Data.Servers) {
-            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange(@($Data.Servers))
-            if ($UiRefs.Tabs.Delete.ServerComboBox.Items.Count -gt 0) { 
-                $UiRefs.Tabs.Delete.ServerComboBox.SelectedIndex = 0 
+            $UiRefs.Tabs.Delete.HostComboBox.Items.AddRange(@($Data.Servers))
+            if ($UiRefs.Tabs.Delete.HostComboBox.Items.Count -gt 0) { 
+                $UiRefs.Tabs.Delete.HostComboBox.SelectedIndex = 0 
             }
         }
     }
@@ -843,13 +845,17 @@ function Wire-UIEvents {
     #  ----------------------  Create Tab Events  ----------------------
 
     # Gather all the needed GUI components (required for Scope issues, approved by Dr. White)
-    $script:className = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
-    $script:textBox = $UiRefs.Tabs.Create.StudentNames                      # Student Names
-    $script:dataStore = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
-    $script:serverName = $UiRefs.Tabs.Create.ServerName                     # Server Name
-    $script:template = $UiRefs.Tabs.Create.ServerTemplate                   # Template
-    $script:customization = $UiRefs.Tabs.Create.ServerCustomization         # Customization   
-    $script:adapters = $UiRefs.Tabs.Create.ServerAdapters                   # Adapters
+    $script:className     = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
+    $script:textBox       = $UiRefs.Tabs.Create.StudentNames                    # Student Names
+    $script:dataStore     = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
+    $script:serverName    = $UiRefs.Tabs.Create.ServerName                      # Server Name
+    $script:template      = $UiRefs.Tabs.Create.ServerTemplate                  # Template
+    $script:customization = $UiRefs.Tabs.Create.ServerCustomization             # Customization   
+    $script:adapters      = $UiRefs.Tabs.Create.ServerAdapters                  # Adapters
+
+    # Needed in Remove | Power tab
+    $script:classFolder     = $UiRefs.Tabs.Delete.ClassComboBox
+    $script:hostName        = $UiRefs.Tabs.Delete.HostComboBox
 
     # CREATE TAB IMPORT BUTTON
     $UiRefs.Tabs.Create.ImportButton.Add_Click({
@@ -1105,8 +1111,11 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOffClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
+            $classFolder = $script:classFolder.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1121,20 +1130,23 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.RemoveHostButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
             }
             
-            if (-not $serverName) {
+            if (-not $hostName) {
                 throw "Please select a server"
             }
-            
-            Remove-Host -classFolder $classFolder -hostName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $serverName for class $classFolder" -Type 'Success'
+
+            Remove-Host -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error removing host: $_" -Type 'Error'
@@ -1142,22 +1154,23 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOffSpecificClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
             }
             
-            if (-not $serverName) {
+            if (-not $hostName) {
                 throw "Please select a server"
             }
             
-            PowerOff-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $serverName for class $classFolder" -Type 'Success'
+            PowerOff-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
@@ -1165,11 +1178,12 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOnSpecificClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1179,8 +1193,8 @@ function Wire-UIEvents {
                 throw "Please select a server"
             }
             
-            PowerOn-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $serverName for class $classFolder" -Type 'Success'
+            PowerOn-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error powering on VMs: $_" -Type 'Error'
@@ -1207,11 +1221,6 @@ function Remove-CourseFolder {
         [int]$endStudents = 1
     )
 
-    # Import common functions if needed
-    Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1' -ErrorAction SilentlyContinue
-
-    ConnectTo-VMServer
-
     if (Get-Folder $classFolder -ErrorAction Ignore) {
         # Loop through for the number of students in the class
         Remove-VMs $classFolder $startStudents $endStudents
@@ -1224,36 +1233,43 @@ function Remove-CourseFolder {
 function Remove-Host {
     <#
     .SYNOPSIS
-        Removes a host VM and its associated student folders.
+        Removes a host VM from student folders
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER hostName
         The name of the host VM to remove.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
     #>  
 
     param(
-        [PSCustomObject]$hostInfo
+        [string]$classFolder,
+        [string]$hostName
     )
     BEGIN{}
     PROCESS{
-        # Loop through for the number of students in the class
-        foreach ($student in $hostInfo.students) {
-            $userAccount = $classFolder + '_' + $student
-    
-            # set the folder name
-            $folderName = $classFolder + '_' + $student
+        try {
+            # Get the Classes folder path
+            $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+            $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+            $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+            $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-            $MyVM = Get-VM -Location $folderName -Name $hostName
-            If ($MyVM.PowerState -eq "PoweredOn") {
-                Stop-VM -VM $MyVM -Confirm:$false
+            # Get student folder names
+            $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+            # Loop through for the number of students in the class
+            foreach ($student in $studentFolders) {
+
+                $MyVM = Get-VM -Location $student -Name $hostName -ErrorAction SilentlyContinue
+                if ($MyVM -and $MyVM.PowerState -eq "PoweredOn") {
+                    Stop-VM -VM $MyVM -Confirm:$false
+                }
+
+                Remove-VM -DeletePermanently -VM $MyVM -Confirm:$false
+
+                Set-StatusMessage -Refs $script:Refs -Message "Removed VM $hostName from $($student.Name)" -Type 'Success'
             }
-            
-            Remove-VM -DeletePermanently -VM $MyVM -Confirm:$false
-
+        } catch {
+            Set-StatusMessage -Refs $script:Refs -Message "Failed to remove host VMs: $_" -Type 'Error'
         }
 
     }
@@ -1271,100 +1287,110 @@ function PowerOff-ClassVMs {
     param (
         [string]$classFolder
     )
+    try {
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-    $MyVMs = Get-VM -Location $classFolder 2> $null | Sort-Object -Property Folder
-    ForEach ($MyVM in $MyVMs) {
-        If ($MyVM.PowerState -eq "PoweredOn") {
-            Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
-            Stop-VM -VM $MyVM -Confirm:$false > $null 2>&1
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+        $MyVMs = Get-VM -Location $studentFolders | Sort-Object -Property Folder
+        foreach ($MyVM in $MyVMs) {
+            if ($MyVM.PowerState -eq "PoweredOn") {
+                # Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
+                Stop-VM -VM $MyVM -Confirm:$false
+            }
         }
-    } # ForEach ($MyVM in $MyVMs)
+
+        Set-StatusMessage -Refs $script:Refs -Message "Stopped VMs from '$classFolder'" -Type 'Success'
+    } catch {
+        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+    }
 }
 
 function PowerOff-SpecificClassVMs {
     <#
     .SYNOPSIS
-        Powers off specific VMs in a class folder based on student numbers.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
+        Powers off specific VMs in a class folder.
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER serverName
         The name of the server to power off.
     #>
-
     param (
-        [int]$startStudents = 1,
-        [int]$endStudents = 1,
         [string]$classFolder,
-        [string]$serverName
+        [string]$hostName
     )
 
-    # import common functions
-    Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
+    try {
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-    ConnectTo-VMServer
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
 
-    # Loop through for the number of students in the class
-    for ($i=$startStudents; $i -le $endStudents; $i++) {
-        # set the folder name
-        $folderName = $classFolder+'_S'+$i
+        # Loop through for the number of students in the class
+        foreach ($folderName in $studentFolders) {
+            # get the VM
+            $MyVM = Get-VM -Location $folderName -Name $hostName -ErrorAction SilentlyContinue
+
+            # power off the VMs
+            If ($MyVM.PowerState -eq "PoweredOn") {
+                    Stop-VM -VM $MyVM -Confirm:$false
+            }
         
-        # get the VM
-        $MyVM = Get-VM -Location $folderName -Name $serverName 2> $null 
+            # write messsage
+            Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered off" -Type 'Success'
 
-        # power off the VMs
-        If ($MyVM.PowerState -eq "PoweredOn") {
-                Stop-VM -VM $MyVM -Confirm:$false > $null 2>&1
         }
-    
-        # write messsage
-        Write-Host $folderName " " $serverName " powered off"
-
-    } # for ($i=$startStudents; $i -le $endStudents; $i++)
+    } catch {
+        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+    }
 }
 
 function PowerOn-SpecificClassVMs {
     <#
     .SYNOPSIS
-        Powers on specific VMs in a class folder based on student numbers.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
+        Powers on specific VMs in a class folder.
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER serverName
-        The name of the server to power on.
+        The name of the server to power off.
     #>
-    
-
     param (
-        [int]$startStudents = 1,
-        [int]$endStudents = 1,
         [string]$classFolder,
-        [string]$serverName
+        [string]$hostName
     )
 
+    # Get the Classes folder path
+    $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+    $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+    $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+    $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
+
+    # Get student folder names
+    $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
     # Loop through for the number of students in the class
-    for ($i=$startStudents; $i -le $endStudents; $i++) {
-        # set the folder name
-        $folderName = $classFolder+'_S'+$i
-        
+    foreach ($folderName in $studentFolders) {
         # get the VM
-        $MyVM = Get-VM -Location $folderName -Name $serverName 2> $null 
+        $MyVM = Get-VM -Location $folderName -Name $hostName -ErrorAction SilentlyContinue
 
         # power off the VMs
         If (($MyVM.PowerState -eq "PoweredOff") -or ($MyVM.PowerState -eq "Suspended")) {
-                Start-VM -VM $MyVM -Confirm:$false > $null 2>&1
+                Start-VM -VM $MyVM -Confirm:$false
         }
     
         # write messsage
-        Write-Host $folderName " " $serverName " powered on"
+        Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered on" -Type 'Success'
 
-    } # for ($i=$startStudents; $i -le $endStudents; $i++)
+    }
 }
 
 function New-CourseVMs {
