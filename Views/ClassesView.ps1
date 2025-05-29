@@ -32,7 +32,25 @@ function Show-ClassesView {
                        Where-Object { $_.Name -notmatch '_' } |
                        Select-Object -ExpandProperty Name
 
-        $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
+        # Get all VMs inside the Classes folder
+        $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
+        $vmNames = @()
+        foreach ($classFolder in $classSubFolders) {
+            $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
+            foreach ($studentFolder in $studentFolders) {
+                $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
+                if ($vms) { $vmNames += $vms.Name }
+            }
+        }   
+
+        $data = @{
+            Templates   = $templates
+            Datastores  = $datastores
+            Networks    = $networks
+            Classes     = $classes
+            Servers     = $vmNames | Sort-Object -Unique
+            LastUpdated = Get-Date
+        }
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
         Wire-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
@@ -779,12 +797,12 @@ function Update-ClassManagerWithData {
     if ($Data.Classes) {
         $cmbClass.Items.AddRange($Data.Classes)
         if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
-    }
+    }    
 
     if ($UiRefs.Tabs.Delete.ServerComboBox) {
     $UiRefs.Tabs.Delete.ServerComboBox.Items.Clear()
         if ($Data.Servers) {
-            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange($Data.Servers)
+            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange(@($Data.Servers))
             if ($UiRefs.Tabs.Delete.ServerComboBox.Items.Count -gt 0) { 
                 $UiRefs.Tabs.Delete.ServerComboBox.SelectedIndex = 0 
             }
@@ -1105,8 +1123,6 @@ function Wire-UIEvents {
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1219,19 +1235,16 @@ function Remove-Host {
     #>  
 
     param(
-        [string]$classFolder,
-        [string]$hostName,
-        [int]$startStudents,
-        [int]$endStudents
+        [PSCustomObject]$hostInfo
     )
     BEGIN{}
     PROCESS{
         # Loop through for the number of students in the class
-        for ($i=$startStudents; $i -le $endStudents; $i++) {
-            $userAccount = $classFolder+'_S'+$i
+        foreach ($student in $hostInfo.students) {
+            $userAccount = $classFolder + '_' + $student
     
             # set the folder name
-            $folderName = $classFolder+'_S'+$i
+            $folderName = $classFolder + '_' + $student
 
             $MyVM = Get-VM -Location $folderName -Name $hostName
             If ($MyVM.PowerState -eq "PoweredOn") {
