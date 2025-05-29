@@ -941,7 +941,12 @@ function Wire-UIEvents {
             # Template
             $templateName = $script:template.SelectedItem
             # Customization
-            $customization = $script:customization.SelectedItem
+            $customizationSelection = $script:customization.SelectedItem
+            if ($customizationSelection -eq 'None') {
+                $customization = $null
+            } else {
+                $customization = $customizationSelection
+            }
             # Adapters
             $adapters = $script:adapters.CheckedItems
             $selectedAdapters = @()
@@ -1353,7 +1358,11 @@ function New-CourseVMs {
     .SYNOPSIS
         Creates student VM folders and VMs for a course, including network setup.
     .PARAMETER courseInfo
-        PSCustomObject with properties: startStudents, endStudents, classFolder, dataStore, servers (array).
+        PSCustomObject with properties: 
+        - students (array of names), 
+        - classFolder (string), 
+        - dataStore (string),
+        - servers (array of PSCustomObjects with properties: serverName, template, customization, adapters).
     #>
     param(
         [PSCustomObject]$courseInfo
@@ -1370,8 +1379,8 @@ function New-CourseVMs {
         # Get the VM host
         $vmHost = Get-VMHost 2> $null
 
-        # Get the root Classes folder
-        $classesRoot = Get-Folder -Name 'Classes'
+        # Get the root Classes folder (will need to be changed if for whatever reason the Classes naming changes)
+        $classesRoot = Get-Folder -Name 'Classes' -ErrorAction Stop
 
         # Check if the class folder already exists
         $classFolder = Get-Folder -Name $courseInfo.classFolder -ErrorAction SilentlyContinue
@@ -1410,47 +1419,71 @@ function New-CourseVMs {
                 Write-Host "Folder for $userAccount exists"
             }
 
-            # Create servers for the student
+            # Create VMs for the student
             foreach ($server in $courseInfo.servers) {
                 $studentVMName = "$student" + "_" + "$($server.serverName)"
                 Write-Host "Building VM $studentVMName"
-                if ($server.customization) {
-                    New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization > $null 2>&1
-                } else {
-                    New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder > $null 2>&1
+                
+                try {
+                    if ($server.customization) {
+                        New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization -ErrorAction Stop
+                    } else {
+                        New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -ErrorAction Stop
+                    }
+                    Write-Host "Success in creating $studentVMName"
+                } catch {
+                    Write-Warning "Failed to create $studentVMName"
+                    Write-Warning $_.Exception.Message
+                    continue
                 }
 
                 # Configure network adapters
                 $adapterNumber = 1
                 foreach ($adapter in $server.adapters) {
                     $networkAdapter = "Network Adapter $adapterNumber"
+                    
                     switch ($adapter) {
                         'Instructor' { $adapterName = $courseInfo.classFolder + '_In' }
-                        'NATswitch'  { $adapterName = $adapter }
-                        'inside'     { $adapterName = $adapter }
+                        'NATswitch'  { $adapterName = 'NATswitch' }
+                        'inside'     { $adapterName = 'inside' }
                         default {
                             $adapterName = "$adapter" + "_" + "$student"
-                            if (-not (Get-VirtualSwitch -Name $adapterName 2> $null)) {
-                                Write-Host "Creating network adapter $adapterName"
-                                $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost 2> $null
-                                $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch 2> $null
+                            if (-not (Get-VirtualSwitch -Name $adapterName -ErrorAction SilentlyContinue)) {
+                                try {
+                                    Write-Host "Creating virtual switch and port group: $adapterName"
+                                    $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost -ErrorAction Stop
+                                    $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch -ErrorAction Stop
+                                } catch {
+                                    Write-Warning "Failed to create virtual switch or port group $adapterName"
+                                    continue
+                                }
                             } else {
-                                Write-Host "$adapterName exists"
+                                Write-Host "$adapterName already exists"
                             }
                         }
                     }
 
-                    Write-Host "Connecting to $adapterName"
-                    Get-VM -Name $studentVMName -Location $studentFolder |
-                        Get-NetworkAdapter -Name $networkAdapter |
-                        Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false > $null 2>&1
+                    try {
+                        Write-Host "Connecting to $adapterName"
+                        Get-VM -Name $studentVMName -Location $studentFolder |
+                            Get-NetworkAdapter -Name $networkAdapter |
+                            Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false -ErrorAction Stop
+                    } catch {
+                        Write-Warning "Failed to connect network adapter $networkAdapter on $studentVMName to $adapterName"
+                    }
+
                     $adapterNumber++
                 }
 
-                # Power on the VM
-                Write-Host "Powering on"
-                Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false > $null 2>&1
+                try {
+                    # Power on the VM
+                    Write-Host "Powering on $studentVMName"
+                    Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false -ErrorAction Stop
+                } catch {
+                    Write-Warning "Failed to power on VM $studentVMName"
+                }
             }
+
             Write-Host "Finished processing student: $student`n"
         }
     }
