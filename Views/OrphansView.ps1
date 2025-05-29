@@ -297,7 +297,8 @@ function Update-OrphanData {
     }
 }
 
-<#
+function Find-OrphanedFiles {
+    <#
     .SYNOPSIS
         Scans a datastore for orphaned files not associated with any registered VM or template.
 
@@ -314,8 +315,8 @@ function Update-OrphanData {
     .OUTPUTS 
         Returns the orphan file 
         
-#>
-function Find-OrphanedFiles {
+    #>
+    
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -472,7 +473,7 @@ function Update-OrphanGrid {
     }
     
     # Update grid
-    $script:UiRefs.OrphansGrid.DataSource = [System.Collections.ArrayList]$filteredData
+    $script:UiRefs.OrphansGrid.DataSource = [System.Collections.ArrayList]@($filteredData)
 }
 
 function Wire-UIEvents {
