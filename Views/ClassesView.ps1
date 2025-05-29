@@ -478,6 +478,7 @@ function New-ClassManagerLayout {
     $cmbClass.Width = 200
     $paramsLayout.Controls.Add($cmbClass, 1, 0)
 
+    <#
     # Start Student Number
     $lblStart = New-Object System.Windows.Forms.Label
     $lblStart.Text = 'Start Student:'
@@ -505,6 +506,7 @@ function New-ClassManagerLayout {
     $numEnd.Value = 1
     $numEnd.Width = 80
     $paramsLayout.Controls.Add($numEnd, 1, 2)
+    #>
 
     # Host Name
     $lblHost = New-Object System.Windows.Forms.Label
@@ -513,7 +515,7 @@ function New-ClassManagerLayout {
     $paramsLayout.Controls.Add($lblHost, 0, 3)
 
     $cmbHost = New-Object System.Windows.Forms.ComboBox
-    $cmbHost.Name = 'ServerComboBox'
+    $cmbHost.Name = 'HostComboBox'
     $cmbHost.DropDownStyle = 'DropDownList'
     $cmbHost.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $cmbHost.Width = 200
@@ -676,11 +678,11 @@ function New-ClassManagerLayout {
             Delete = @{
                 # Parameters
                 ClassComboBox        = $cmbClass
-                ServerComboBox       = $cmbHost         # Changed from $cmbServer to $cmbHost
+                HostComboBox         = $cmbHost         # Changed from $cmbServer to $cmbHost
                 StartStudentNumber   = $numStartStuDel
                 EndStudentNumber     = $numEndStuDel
                 # Requires all parameters
-                RemoveHostButton            = $btnRemoveHost
+                RemoveHostButton                 = $btnRemoveHost
                 PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificClassVMs     # Fixed name
                 PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificClassVMs      # Fixed name
                 # Requires Class Folder + Start/End Students
@@ -799,12 +801,12 @@ function Update-ClassManagerWithData {
         if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
     }    
 
-    if ($UiRefs.Tabs.Delete.ServerComboBox) {
-    $UiRefs.Tabs.Delete.ServerComboBox.Items.Clear()
+    if ($UiRefs.Tabs.Delete.HostComboBox) {
+        $UiRefs.Tabs.Delete.HostComboBox.Items.Clear()
         if ($Data.Servers) {
-            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange(@($Data.Servers))
-            if ($UiRefs.Tabs.Delete.ServerComboBox.Items.Count -gt 0) { 
-                $UiRefs.Tabs.Delete.ServerComboBox.SelectedIndex = 0 
+            $UiRefs.Tabs.Delete.HostComboBox.Items.AddRange(@($Data.Servers))
+            if ($UiRefs.Tabs.Delete.HostComboBox.Items.Count -gt 0) { 
+                $UiRefs.Tabs.Delete.HostComboBox.SelectedIndex = 0 
             }
         }
     }
@@ -843,13 +845,17 @@ function Wire-UIEvents {
     #  ----------------------  Create Tab Events  ----------------------
 
     # Gather all the needed GUI components (required for Scope issues, approved by Dr. White)
-    $script:className = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
-    $script:textBox = $UiRefs.Tabs.Create.StudentNames                      # Student Names
-    $script:dataStore = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
-    $script:serverName = $UiRefs.Tabs.Create.ServerName                     # Server Name
-    $script:template = $UiRefs.Tabs.Create.ServerTemplate                   # Template
-    $script:customization = $UiRefs.Tabs.Create.ServerCustomization         # Customization   
-    $script:adapters = $UiRefs.Tabs.Create.ServerAdapters                   # Adapters
+    $script:className     = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
+    $script:textBox       = $UiRefs.Tabs.Create.StudentNames                    # Student Names
+    $script:dataStore     = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
+    $script:serverName    = $UiRefs.Tabs.Create.ServerName                      # Server Name
+    $script:template      = $UiRefs.Tabs.Create.ServerTemplate                  # Template
+    $script:customization = $UiRefs.Tabs.Create.ServerCustomization             # Customization   
+    $script:adapters      = $UiRefs.Tabs.Create.ServerAdapters                  # Adapters
+
+    # Needed in Remove | Power tab
+    $script:classFolder     = $UiRefs.Tabs.Delete.ClassComboBox
+    $script:hostName        = $UiRefs.Tabs.Delete.HostComboBox
 
     # CREATE TAB IMPORT BUTTON
     $UiRefs.Tabs.Create.ImportButton.Add_Click({
@@ -1121,20 +1127,23 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.RemoveHostButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
             }
             
-            if (-not $serverName) {
+            if (-not $hostName) {
                 throw "Please select a server"
             }
-            
-            Remove-Host -classFolder $classFolder -hostName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $serverName for class $classFolder" -Type 'Success'
+
+            Remove-Host -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error removing host: $_" -Type 'Error'
@@ -1207,11 +1216,6 @@ function Remove-CourseFolder {
         [int]$endStudents = 1
     )
 
-    # Import common functions if needed
-    Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1' -ErrorAction SilentlyContinue
-
-    ConnectTo-VMServer
-
     if (Get-Folder $classFolder -ErrorAction Ignore) {
         # Loop through for the number of students in the class
         Remove-VMs $classFolder $startStudents $endStudents
@@ -1229,31 +1233,38 @@ function Remove-Host {
         The folder containing the class VMs.
     .PARAMETER hostName
         The name of the host VM to remove.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
     #>  
 
     param(
-        [PSCustomObject]$hostInfo
+        [string]$classFolder,
+        [string]$hostName
     )
     BEGIN{}
     PROCESS{
-        # Loop through for the number of students in the class
-        foreach ($student in $hostInfo.students) {
-            $userAccount = $classFolder + '_' + $student
-    
-            # set the folder name
-            $folderName = $classFolder + '_' + $student
+        try {
+            # Get the Classes folder path
+            $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+            $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+            $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+            $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-            $MyVM = Get-VM -Location $folderName -Name $hostName
-            If ($MyVM.PowerState -eq "PoweredOn") {
-                Stop-VM -VM $MyVM -Confirm:$false
+            # Get student folder names
+            $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+            # Loop through for the number of students in the class
+            foreach ($student in $studentFolders) {
+
+                $MyVM = Get-VM -Location $student -Name $hostName -ErrorAction SilentlyContinue
+                if ($MyVM -and $MyVM.PowerState -eq "PoweredOn") {
+                    Stop-VM -VM $MyVM -Confirm:$false
+                }
+
+                Remove-VM -DeletePermanently -VM $MyVM -Confirm:$false
+
+                Set-StatusMessage -Refs $script:Refs -Message "Removed VM $hostName from $($student.Name)" -Type 'Success'
             }
-            
-            Remove-VM -DeletePermanently -VM $MyVM -Confirm:$false
-
+        } catch {
+            Set-StatusMessage -Refs $script:Refs -Message "Failed to remove host VMs: $_" -Type 'Error'
         }
 
     }
@@ -1301,11 +1312,6 @@ function PowerOff-SpecificClassVMs {
         [string]$classFolder,
         [string]$serverName
     )
-
-    # import common functions
-    Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
-
-    ConnectTo-VMServer
 
     # Loop through for the number of students in the class
     for ($i=$startStudents; $i -le $endStudents; $i++) {
