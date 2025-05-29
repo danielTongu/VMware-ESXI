@@ -521,7 +521,8 @@ function Invoke-PowerOperation {
         }
 
         # Refresh and show status
-        Update-VMData -Refs $Refs -Data Get-VMsData
+        # Simulate clicking the Refresh button to reload data and update status
+        $Refs.RefreshButton.PerformClick()
         Set-StatusMessage -Refs $Refs -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
     }
     catch {

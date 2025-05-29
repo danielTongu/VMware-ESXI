@@ -32,7 +32,25 @@ function Show-ClassesView {
                        Where-Object { $_.Name -notmatch '_' } |
                        Select-Object -ExpandProperty Name
 
-        $data = @{ Templates=$templates; Datastores=$datastores; Networks=$networks; Classes=$classes; LastUpdated=Get-Date }
+        # Get all VMs inside the Classes folder
+        $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
+        $vmNames = @()
+        foreach ($classFolder in $classSubFolders) {
+            $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
+            foreach ($studentFolder in $studentFolders) {
+                $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
+                if ($vms) { $vmNames += $vms.Name }
+            }
+        }   
+
+        $data = @{
+            Templates   = $templates
+            Datastores  = $datastores
+            Networks    = $networks
+            Classes     = $classes
+            Servers     = $vmNames | Sort-Object -Unique
+            LastUpdated = Get-Date
+        }
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
         Wire-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
@@ -658,13 +676,13 @@ function New-ClassManagerLayout {
             Delete = @{
                 # Parameters
                 ClassComboBox        = $cmbClass
-                ServerComboBox       = $cmbServer
+                ServerComboBox       = $cmbHost         # Changed from $cmbServer to $cmbHost
                 StartStudentNumber   = $numStartStuDel
                 EndStudentNumber     = $numEndStuDel
                 # Requires all parameters
                 RemoveHostButton            = $btnRemoveHost
-                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificVMs
-                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificVMs
+                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificClassVMs     # Fixed name
+                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificClassVMs      # Fixed name
                 # Requires Class Folder + Start/End Students
                 RemoveCourseFolderVMsButton       = $btnRemoveCourseFolderVMs
                 # Requires Class Folder only
@@ -779,13 +797,16 @@ function Update-ClassManagerWithData {
     if ($Data.Classes) {
         $cmbClass.Items.AddRange($Data.Classes)
         if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
-    }
+    }    
 
-    $cmbServer = $UiRefs.Tabs.Delete.ServerComboBox
-    $cmbServer.Items.Clear()
-    if ($Data.Servers) {
-        $cmbServer.Items.AddRange($Data.Servers)
-        if ($cmbServer.Items.Count -gt 0) { $cmbServer.SelectedIndex = 0 }
+    if ($UiRefs.Tabs.Delete.ServerComboBox) {
+    $UiRefs.Tabs.Delete.ServerComboBox.Items.Clear()
+        if ($Data.Servers) {
+            $UiRefs.Tabs.Delete.ServerComboBox.Items.AddRange(@($Data.Servers))
+            if ($UiRefs.Tabs.Delete.ServerComboBox.Items.Count -gt 0) { 
+                $UiRefs.Tabs.Delete.ServerComboBox.SelectedIndex = 0 
+            }
+        }
     }
     # Set status message
     Set-StatusMessage -Refs $UiRefs -Message "UI updated with latest data" -Type 'Success'
@@ -938,13 +959,19 @@ function Wire-UIEvents {
             # Template
             $templateName = $script:template.SelectedItem
             # Customization
-            $customization = $script:customization.SelectedItem
+            $customizationSelection = $script:customization.SelectedItem
+            if ($customizationSelection -eq 'None') {
+                $customization = $null
+            } else {
+                $customization = $customizationSelection
+            }
             # Adapters
             $adapters = $script:adapters.CheckedItems
             $selectedAdapters = @()
             ForEach($item in $adapters) {
                 $selectedAdapters += $item # store each checked box in an array
             }
+            $trimmedAdapters = $selectedAdapters | ForEach-Object { $_ -replace '\s*\(.*\)$', '' }
 
             # --------------- Print statements to test if user input was gathered correctly ---------------
             # ClassName
@@ -962,7 +989,7 @@ function Wire-UIEvents {
             # Customization
             Write-Host "Customization: $customization"
             # Adapters
-            ForEach($item in $selectedAdapters) {
+            ForEach($item in $trimmedAdapters) {
                 Write-Host "Adapter: $item"
             }
 
@@ -1005,7 +1032,7 @@ function Wire-UIEvents {
             }
             
             # Adapters
-            if ($selectedAdapters.Count -eq 0) {
+            if ($trimmedAdapters.Count -eq 0) {
                 throw "Please select at least one network adapter"
             }
             
@@ -1013,9 +1040,9 @@ function Wire-UIEvents {
             # Start with ServerInfo which will be placed within the CourseInfo Object
             $serverInfo = @{
                 serverName = $serverName
-                template = $template
+                template = $templateName
                 customization = $customization
-                adapters = $selectedAdapters
+                adapters = $trimmedAdapters
             }
             
             # Now store values into the CourseInfo Object
@@ -1040,7 +1067,7 @@ function Wire-UIEvents {
             # ServerName
             Write-Host "Server Name: $($courseInfo.servers.serverName)"
             # Template
-            Write-Host "Template: $($courseInfo.servers.template.SelectedItem)"
+            Write-Host "Template: $($courseInfo.servers.template)"
             # Customization
             Write-Host "Customization: $($courseInfo.servers.customization)"
             # Adapters
@@ -1049,7 +1076,7 @@ function Wire-UIEvents {
             }
 
             # --------------- Call the VM creation function ---------------
-            # New-CourseVMs -courseInfo $courseInfo 
+            New-CourseVMs -courseInfo $courseInfo 
             Set-StatusMessage -Refs $script:Refs -Message "Successfully created VMs for class $className" -Type 'Success'
             
         } catch {
@@ -1097,8 +1124,6 @@ function Wire-UIEvents {
         try {
             $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
             $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1211,19 +1236,16 @@ function Remove-Host {
     #>  
 
     param(
-        [string]$classFolder,
-        [string]$hostName,
-        [int]$startStudents,
-        [int]$endStudents
+        [PSCustomObject]$hostInfo
     )
     BEGIN{}
     PROCESS{
         # Loop through for the number of students in the class
-        for ($i=$startStudents; $i -le $endStudents; $i++) {
-            $userAccount = $classFolder+'_S'+$i
+        foreach ($student in $hostInfo.students) {
+            $userAccount = $classFolder + '_' + $student
     
             # set the folder name
-            $folderName = $classFolder+'_S'+$i
+            $folderName = $classFolder + '_' + $student
 
             $MyVM = Get-VM -Location $folderName -Name $hostName
             If ($MyVM.PowerState -eq "PoweredOn") {
@@ -1350,79 +1372,158 @@ function New-CourseVMs {
     .SYNOPSIS
         Creates student VM folders and VMs for a course, including network setup.
     .PARAMETER courseInfo
-        PSCustomObject with properties: startStudents, endStudents, classFolder, dataStore, servers (array).
+        PSCustomObject with properties: 
+        - students (array of names), 
+        - classFolder (string), 
+        - dataStore (string),
+        - servers (array of PSCustomObjects with properties: serverName, template, customization, adapters).
     #>
     param(
         [PSCustomObject]$courseInfo
     )
     BEGIN { }
     PROCESS {
+
+        # Believe these aren't necessary
+
+        # import common functions
+        # Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
         # Connect to the server
-        ConnectTo-VMServer
+        # ConnectTo-VMServer
 
         # Get the VM host
         $vmHost = Get-VMHost 2> $null
 
-        # Loop through each student number
-        for ($i = $courseInfo.startStudents; $i -le $courseInfo.endStudents; $i++) {
-            $userAccount = $courseInfo.classFolder + "_" + $i
+        # Get all available Port Groups on the VMHost
+        $availablePortGroups = Get-VirtualPortGroup -VMHost $vmHost | Select-Object -ExpandProperty Name
+        # Trim and set to Lower Case to avoid any case sensitive checks
+        $normalizedPortGroups = $availablePortGroups | ForEach-Object { $_.Trim().ToLower() }
 
-            # Ensure student folder exists
+        # Print the available Port Groups
+        Write-Host "Available Port Groups on host: $($availablePortGroups -join ', ')"
+        
+        # Exit early for testing
+        # return
+
+        # Get the root Classes folder (will need to be changed if for whatever reason the Classes naming changes)
+        $classesRoot = Get-Folder -Name 'Classes' -ErrorAction Stop
+
+        # Get the class folder and check if the folder doesn't exist
+        $classFolder = Get-Folder -Name $courseInfo.classFolder -ErrorAction SilentlyContinue
+        if (-not $classFolder) {
+            # Print statement
+            Write-Host "Class Folder: $($courseInfo.classFolder) doesn't exist. Will begin creating it now..."
+            # Create new folder
+            $classFolder = New-Folder -Name $courseInfo.classFolder -Location $classesRoot 2> $null
+            # Check now if the folder (we just created) doesn't exists
+            if (-not $classFolder) {
+                throw "Failed to create class folder..."
+            }
+        # If this point is reached then it already exists
+        } else {
+            # Print statement
+            Write-Host "Class Folder: $($courseInfo.classFolder) already exists."
+        }
+
+        # Loop through each student in the array of names
+        ForEach ($student in $courseInfo.students) {
+            # Set up how each student will be referenced with the class folder name pre-appended
+            $userAccount = $courseInfo.classFolder + "_" + $student
+
+            # Try to get folder and check if student folder doesn't exists
             $studentFolder = Get-Folder -Name $userAccount 2> $null
             if (-not $studentFolder) {
+                # Print statement
                 Write-Host "Creating folder for $userAccount"
-                $studentFolder = New-Folder -Name $userAccount -Location (Get-Folder -Name $courseInfo.classFolder) 2> $null
+                # Create new folder
+                $studentFolder = New-Folder -Name $userAccount -Location $classFolder 2> $null
 
-                $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
-                $role = Get-VIRole -Name StudentUser 2> $null
-                if ($account -and $role) {
-                    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
-                }
+                # Commenting out the Permissions for now...
+                # $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
+                # $role = Get-VIRole -Name StudentUser 2> $null
+                # if ($account -and $role) {
+                #    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
+                # }
+
+            # If this point was reached then the student folder already exists
             } else {
+                # Print statement
                 Write-Host "Folder for $userAccount exists"
             }
 
-            # Create servers for the student
+            # Loop over every VM that was declared to create each VM for the student
             foreach ($server in $courseInfo.servers) {
-                Write-Host "Building $($server.serverName)"
-                if ($server.customization) {
-                    New-VM -Name $server.serverName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization > $null 2>&1
-                } else {
-                    New-VM -Name $server.serverName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder > $null 2>&1
+                # Set up how each student VM will be referenced with the VM name appended
+                $studentVMName = "$student" + "_" + "$($server.serverName)"
+                # Print statement
+                Write-Host "Building VM $studentVMName"
+                
+                # Try catch to check creation of VM
+                try {
+                    if ($server.customization) {
+                        New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization -ErrorAction Stop
+                    } else {
+                        New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -ErrorAction Stop
+                    }
+                    # Print statement
+                    Write-Host "Success in creating $studentVMName"
+                
+                    # Allow time for the VM inventory to update
+                    Start-Sleep -Seconds 10
+                } catch {
+                    # Warning Statements
+                    Write-Warning "Failed to create $studentVMName"
+                    Write-Warning $_.Exception.Message
+                    continue
                 }
 
-                # Configure network adapters
-                $adapterNumber = 1
+                # Configure the network adapters
+                $adapterNumber = 1 # Set up counter
+                # Loop over each adapter that was chosen
                 foreach ($adapter in $server.adapters) {
-                    $networkAdapter = "Network Adapter $adapterNumber"
-                    switch ($adapter) {
-                        'Instructor' { $adapterName = $courseInfo.classFolder + '_In' }
-                        'NATswitch'  { $adapterName = $adapter }
-                        'inside'     { $adapterName = $adapter }
-                        default {
-                            $adapterName = $adapter + $i
-                            if (-not (Get-VirtualSwitch -Name $adapterName 2> $null)) {
-                                Write-Host "Creating network adapter $adapterName"
-                                $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost 2> $null
-                                $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch 2> $null
-                            } else {
-                                Write-Host "$adapterName exists"
-                            }
+                    # Set up how each adapter will be referenced
+                    # Trim and set to Lower Case to avoid any case sensitive checks
+                    $adapterName = $adapter.Trim()
+                    $normalizedAdapterName = $adapterName.ToLower()
+                    $networkAdapterName = "Network Adapter $adapterNumber"
+
+                    # Check if the array of available Port Groups (we normalized) contains the Adapter the user chose (remember we also normalized this)
+                    if ($normalizedPortGroups -contains $normalizedAdapterName) {
+                        # Try catch to check connection between VM and Port
+                        try {
+                            # Print statement
+                            Write-Host "Connecting $networkAdapterName on $studentVMName to port group $adapterName"
+                            Get-VM -Name $studentVMName -Location $studentFolder |
+                                Get-NetworkAdapter -Name $networkAdapterName |
+                                Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false -ErrorAction Stop
+                        } catch {
+                            # Warning statements
+                            Write-Warning "Failed to connect $networkAdapterName on $studentVMName to port group $adapterName"
+                            Write-Warning $_.Exception.Message
                         }
+                    # If this point was reached then the Port Group doesn't exist on the host.
+                    } else {
+                        Write-Warning "Port group $adapterName doesn't exist on host. Will skip $networkAdapterName for $studentVMName"
                     }
 
-                    Write-Host "Connecting to $adapterName"
-                    Get-VM -Name $server.serverName -Location $studentFolder |
-                        Get-NetworkAdapter -Name $networkAdapter |
-                        Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false > $null 2>&1
+                    # Increment the counter
                     $adapterNumber++
                 }
 
-                # Power on the VM
-                Write-Host "Powering on"
-                Get-VM -Name $server.serverName -Location $studentFolder | Start-VM -Confirm:$false > $null 2>&1
+                # Try catch to check powering on the VM
+                try {
+                    # Print statement
+                    Write-Host "Powering on $studentVMName"
+                    Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false -ErrorAction Stop
+                } catch {
+                    # Warning statements
+                    Write-Warning "Failed to power on VM $studentVMName"
+                    Write-Warning $_.Exception.Message
+                }
             }
-            Write-Host ""
+
+            # Final print statement
+            Write-Host "Finished processing student: $student`n"
         }
     }
     END { }
