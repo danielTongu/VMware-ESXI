@@ -971,6 +971,7 @@ function Wire-UIEvents {
             ForEach($item in $adapters) {
                 $selectedAdapters += $item # store each checked box in an array
             }
+            $trimmedAdapters = $selectedAdapters | ForEach-Object { $_ -replace '\s*\(.*\)$', '' }
 
             # --------------- Print statements to test if user input was gathered correctly ---------------
             # ClassName
@@ -988,7 +989,7 @@ function Wire-UIEvents {
             # Customization
             Write-Host "Customization: $customization"
             # Adapters
-            ForEach($item in $selectedAdapters) {
+            ForEach($item in $trimmedAdapters) {
                 Write-Host "Adapter: $item"
             }
 
@@ -1031,7 +1032,7 @@ function Wire-UIEvents {
             }
             
             # Adapters
-            if ($selectedAdapters.Count -eq 0) {
+            if ($trimmedAdapters.Count -eq 0) {
                 throw "Please select at least one network adapter"
             }
             
@@ -1041,7 +1042,7 @@ function Wire-UIEvents {
                 serverName = $serverName
                 template = $templateName
                 customization = $customization
-                adapters = $selectedAdapters
+                adapters = $trimmedAdapters
             }
             
             # Now store values into the CourseInfo Object
@@ -1383,26 +1384,38 @@ function New-CourseVMs {
     BEGIN { }
     PROCESS {
 
+        # Believe these aren't necessary
+
         # import common functions
         # Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
-
         # Connect to the server
         # ConnectTo-VMServer
 
         # Get the VM host
         $vmHost = Get-VMHost 2> $null
 
+        # Get all available Port Groups on the VMHost
+        $availablePortGroups = Get-VirtualPortGroup -VMHost $vmHost | Select-Object -ExpandProperty Name
+        # Trim and set to Lower Case to avoid any case sensitive checks
+        $normalizedPortGroups = $availablePortGroups | ForEach-Object { $_.Trim().ToLower() }
+
+        # Print the available Port Groups
+        Write-Host "Available Port Groups on host: $($availablePortGroups -join ', ')"
+        
+        # Exit early for testing
+        # return
+
         # Get the root Classes folder (will need to be changed if for whatever reason the Classes naming changes)
         $classesRoot = Get-Folder -Name 'Classes' -ErrorAction Stop
 
-        # Check if the class folder already exists
+        # Get the class folder and check if the folder doesn't exist
         $classFolder = Get-Folder -Name $courseInfo.classFolder -ErrorAction SilentlyContinue
         if (-not $classFolder) {
             # Print statement
             Write-Host "Class Folder: $($courseInfo.classFolder) doesn't exist. Will begin creating it now..."
             # Create new folder
             $classFolder = New-Folder -Name $courseInfo.classFolder -Location $classesRoot 2> $null
-            # Check now if the folder (we just created) exists
+            # Check now if the folder (we just created) doesn't exists
             if (-not $classFolder) {
                 throw "Failed to create class folder..."
             }
@@ -1414,12 +1427,15 @@ function New-CourseVMs {
 
         # Loop through each student in the array of names
         ForEach ($student in $courseInfo.students) {
+            # Set up how each student will be referenced with the class folder name pre-appended
             $userAccount = $courseInfo.classFolder + "_" + $student
 
-            # Ensure student folder exists
+            # Try to get folder and check if student folder doesn't exists
             $studentFolder = Get-Folder -Name $userAccount 2> $null
             if (-not $studentFolder) {
+                # Print statement
                 Write-Host "Creating folder for $userAccount"
+                # Create new folder
                 $studentFolder = New-Folder -Name $userAccount -Location $classFolder 2> $null
 
                 # Commenting out the Permissions for now...
@@ -1428,75 +1444,85 @@ function New-CourseVMs {
                 # if ($account -and $role) {
                 #    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
                 # }
+
+            # If this point was reached then the student folder already exists
             } else {
+                # Print statement
                 Write-Host "Folder for $userAccount exists"
             }
 
-            # Create VMs for the student
+            # Loop over every VM that was declared to create each VM for the student
             foreach ($server in $courseInfo.servers) {
+                # Set up how each student VM will be referenced with the VM name appended
                 $studentVMName = "$student" + "_" + "$($server.serverName)"
+                # Print statement
                 Write-Host "Building VM $studentVMName"
                 
+                # Try catch to check creation of VM
                 try {
                     if ($server.customization) {
                         New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -OSCustomizationSpec $server.customization -ErrorAction Stop
                     } else {
                         New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -ErrorAction Stop
                     }
+                    # Print statement
                     Write-Host "Success in creating $studentVMName"
+                
+                    # Allow time for the VM inventory to update
+                    Start-Sleep -Seconds 10
                 } catch {
+                    # Warning Statements
                     Write-Warning "Failed to create $studentVMName"
                     Write-Warning $_.Exception.Message
                     continue
                 }
 
-                # Configure network adapters
-                $adapterNumber = 1
+                # Configure the network adapters
+                $adapterNumber = 1 # Set up counter
+                # Loop over each adapter that was chosen
                 foreach ($adapter in $server.adapters) {
-                    $networkAdapter = "Network Adapter $adapterNumber"
-                    
-                    switch ($adapter) {
-                        'Instructor' { $adapterName = $courseInfo.classFolder + '_In' }
-                        'NATswitch'  { $adapterName = 'NATswitch' }
-                        'inside'     { $adapterName = 'inside' }
-                        default {
-                            $adapterName = "$adapter" + "_" + "$student"
-                            if (-not (Get-VirtualSwitch -Name $adapterName -ErrorAction SilentlyContinue)) {
-                                try {
-                                    Write-Host "Creating virtual switch and port group: $adapterName"
-                                    $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost -ErrorAction Stop
-                                    $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch -ErrorAction Stop
-                                } catch {
-                                    Write-Warning "Failed to create virtual switch or port group $adapterName"
-                                    continue
-                                }
-                            } else {
-                                Write-Host "$adapterName already exists"
-                            }
+                    # Set up how each adapter will be referenced
+                    # Trim and set to Lower Case to avoid any case sensitive checks
+                    $adapterName = $adapter.Trim()
+                    $normalizedAdapterName = $adapterName.ToLower()
+                    $networkAdapterName = "Network Adapter $adapterNumber"
+
+                    # Check if the array of available Port Groups (we normalized) contains the Adapter the user chose (remember we also normalized this)
+                    if ($normalizedPortGroups -contains $normalizedAdapterName) {
+                        # Try catch to check connection between VM and Port
+                        try {
+                            # Print statement
+                            Write-Host "Connecting $networkAdapterName on $studentVMName to port group $adapterName"
+                            Get-VM -Name $studentVMName -Location $studentFolder |
+                                Get-NetworkAdapter -Name $networkAdapterName |
+                                Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false -ErrorAction Stop
+                        } catch {
+                            # Warning statements
+                            Write-Warning "Failed to connect $networkAdapterName on $studentVMName to port group $adapterName"
+                            Write-Warning $_.Exception.Message
                         }
+                    # If this point was reached then the Port Group doesn't exist on the host.
+                    } else {
+                        Write-Warning "Port group $adapterName doesn't exist on host. Will skip $networkAdapterName for $studentVMName"
                     }
 
-                    try {
-                        Write-Host "Connecting to $adapterName"
-                        Get-VM -Name $studentVMName -Location $studentFolder |
-                            Get-NetworkAdapter -Name $networkAdapter |
-                            Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false -ErrorAction Stop
-                    } catch {
-                        Write-Warning "Failed to connect network adapter $networkAdapter on $studentVMName to $adapterName"
-                    }
-
+                    # Increment the counter
                     $adapterNumber++
                 }
 
+                # Try catch to check powering on the VM
                 try {
-                    # Power on the VM
+                    # Print statement
                     Write-Host "Powering on $studentVMName"
                     Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false -ErrorAction Stop
                 } catch {
+                    # Warning statements
                     Write-Warning "Failed to power on VM $studentVMName"
+                    Write-Warning $_.Exception.Message
                 }
             }
 
+            # Final print statement
             Write-Host "Finished processing student: $student`n"
         }
     }
