@@ -1111,8 +1111,11 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOffClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
+            $classFolder = $script:classFolder.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1228,7 +1231,7 @@ function Remove-CourseFolder {
 function Remove-Host {
     <#
     .SYNOPSIS
-        Removes a host VM and its associated student folders.
+        Removes a host VM from student folders
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER hostName
@@ -1282,14 +1285,28 @@ function PowerOff-ClassVMs {
     param (
         [string]$classFolder
     )
+    try {
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-    $MyVMs = Get-VM -Location $classFolder 2> $null | Sort-Object -Property Folder
-    ForEach ($MyVM in $MyVMs) {
-        If ($MyVM.PowerState -eq "PoweredOn") {
-            Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
-            Stop-VM -VM $MyVM -Confirm:$false > $null 2>&1
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+        $MyVMs = Get-VM -Location $studentFolders | Sort-Object -Property Folder
+        foreach ($MyVM in $MyVMs) {
+            if ($MyVM.PowerState -eq "PoweredOn") {
+                # Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
+                Stop-VM -VM $MyVM -Confirm:$false
+            }
         }
-    } # ForEach ($MyVM in $MyVMs)
+
+        Set-StatusMessage -Refs $script:Refs -Message "Stopped VMs from '$classFolder'" -Type 'Success'
+    } catch {
+        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+    }
 }
 
 function PowerOff-SpecificClassVMs {
