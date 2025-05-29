@@ -1111,8 +1111,11 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOffClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
+            $classFolder = $script:classFolder.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1151,22 +1154,23 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOffSpecificClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
             }
             
-            if (-not $serverName) {
+            if (-not $hostName) {
                 throw "Please select a server"
             }
             
-            PowerOff-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $serverName for class $classFolder" -Type 'Success'
+            PowerOff-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
@@ -1174,11 +1178,12 @@ function Wire-UIEvents {
     })
 
     $UiRefs.Tabs.Delete.PowerOnSpecificClassVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $serverName = $UiRefs.Tabs.Delete.ServerComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
+            $classFolder = $script:classFolder.SelectedItem
+            $hostName    = $script:hostName.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
@@ -1188,8 +1193,8 @@ function Wire-UIEvents {
                 throw "Please select a server"
             }
             
-            PowerOn-SpecificClassVMs -classFolder $classFolder -serverName $serverName -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $serverName for class $classFolder" -Type 'Success'
+            PowerOn-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $hostName for class $classFolder" -Type 'Success'
             
         } catch {
             Set-StatusMessage -Refs $script:Refs -Message "Error powering on VMs: $_" -Type 'Error'
@@ -1228,7 +1233,7 @@ function Remove-CourseFolder {
 function Remove-Host {
     <#
     .SYNOPSIS
-        Removes a host VM and its associated student folders.
+        Removes a host VM from student folders
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER hostName
@@ -1282,95 +1287,110 @@ function PowerOff-ClassVMs {
     param (
         [string]$classFolder
     )
+    try {
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
 
-    $MyVMs = Get-VM -Location $classFolder 2> $null | Sort-Object -Property Folder
-    ForEach ($MyVM in $MyVMs) {
-        If ($MyVM.PowerState -eq "PoweredOn") {
-            Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
-            Stop-VM -VM $MyVM -Confirm:$false > $null 2>&1
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+        $MyVMs = Get-VM -Location $studentFolders | Sort-Object -Property Folder
+        foreach ($MyVM in $MyVMs) {
+            if ($MyVM.PowerState -eq "PoweredOn") {
+                # Write-Host "Stopping " $MyVM.Folder   $MyVM.Name
+                Stop-VM -VM $MyVM -Confirm:$false
+            }
         }
-    } # ForEach ($MyVM in $MyVMs)
+
+        Set-StatusMessage -Refs $script:Refs -Message "Stopped VMs from '$classFolder'" -Type 'Success'
+    } catch {
+        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+    }
 }
 
 function PowerOff-SpecificClassVMs {
     <#
     .SYNOPSIS
-        Powers off specific VMs in a class folder based on student numbers.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
+        Powers off specific VMs in a class folder.
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER serverName
         The name of the server to power off.
     #>
-
     param (
-        [int]$startStudents = 1,
-        [int]$endStudents = 1,
         [string]$classFolder,
-        [string]$serverName
+        [string]$hostName
     )
 
-    # Loop through for the number of students in the class
-    for ($i=$startStudents; $i -le $endStudents; $i++) {
-        # set the folder name
-        $folderName = $classFolder+'_S'+$i
+    try {
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
+
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+        # Loop through for the number of students in the class
+        foreach ($folderName in $studentFolders) {
+            # get the VM
+            $MyVM = Get-VM -Location $folderName -Name $hostName -ErrorAction SilentlyContinue
+
+            # power off the VMs
+            If ($MyVM.PowerState -eq "PoweredOn") {
+                    Stop-VM -VM $MyVM -Confirm:$false
+            }
         
-        # get the VM
-        $MyVM = Get-VM -Location $folderName -Name $serverName 2> $null 
+            # write messsage
+            Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered off" -Type 'Success'
 
-        # power off the VMs
-        If ($MyVM.PowerState -eq "PoweredOn") {
-                Stop-VM -VM $MyVM -Confirm:$false > $null 2>&1
         }
-    
-        # write messsage
-        Write-Host $folderName " " $serverName " powered off"
-
-    } # for ($i=$startStudents; $i -le $endStudents; $i++)
+    } catch {
+        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+    }
 }
 
 function PowerOn-SpecificClassVMs {
     <#
     .SYNOPSIS
-        Powers on specific VMs in a class folder based on student numbers.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
+        Powers on specific VMs in a class folder.
     .PARAMETER classFolder
         The folder containing the class VMs.
     .PARAMETER serverName
-        The name of the server to power on.
+        The name of the server to power off.
     #>
-    
-
     param (
-        [int]$startStudents = 1,
-        [int]$endStudents = 1,
         [string]$classFolder,
-        [string]$serverName
+        [string]$hostName
     )
 
+    # Get the Classes folder path
+    $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+    $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+    $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+    $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
+
+    # Get student folder names
+    $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
     # Loop through for the number of students in the class
-    for ($i=$startStudents; $i -le $endStudents; $i++) {
-        # set the folder name
-        $folderName = $classFolder+'_S'+$i
-        
+    foreach ($folderName in $studentFolders) {
         # get the VM
-        $MyVM = Get-VM -Location $folderName -Name $serverName 2> $null 
+        $MyVM = Get-VM -Location $folderName -Name $hostName -ErrorAction SilentlyContinue
 
         # power off the VMs
         If (($MyVM.PowerState -eq "PoweredOff") -or ($MyVM.PowerState -eq "Suspended")) {
-                Start-VM -VM $MyVM -Confirm:$false > $null 2>&1
+                Start-VM -VM $MyVM -Confirm:$false
         }
     
         # write messsage
-        Write-Host $folderName " " $serverName " powered on"
+        Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered on" -Type 'Success'
 
-    } # for ($i=$startStudents; $i -le $endStudents; $i++)
+    }
 }
 
 function New-CourseVMs {
