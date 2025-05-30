@@ -91,7 +91,6 @@ function Show-LoginView {
     }
 
     $txtPass = New-Object System.Windows.Forms.TextBox -Property @{
-        Text                    = $script:password
         UseSystemPasswordChar   = $true
         MaxLength               = 100
         Location                = [System.Drawing.Point]::new(30,354)
