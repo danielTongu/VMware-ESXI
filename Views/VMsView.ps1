@@ -21,7 +21,7 @@ function Show-VMsView {
     $script:Refs = New-VMsLayout -ContentPanel $ContentPanel
 
      $data = Get-VMsData
-     
+
     if ($data) {
         Update-VMData -Refs $script:Refs -Data $data
         Wire-UIEvents -Refs $script:Refs
@@ -191,7 +191,7 @@ function New-VMsLayout {
     $statusLabel.AutoSize = $true
     $statusLabel.Name = 'StatusLabel'
     $statusLabel.Text = 'Ready'
-    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
 
@@ -334,33 +334,33 @@ function Get-VMsData {
             },
             @{ Name='CPU'      ; Expression={ $_.NumCpu } },
             @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } },
-           @{ Name='Folder'    ; Expression={ 
-                   $folder = $_.Folder
-                   $pathParts = @()
-                   
-                   # Walk up the folder hierarchy
-                   while ($folder) {
-                       $pathParts += $folder.Name
-                       $folder = $folder.Parent
-                   }
-                   
-                   # Reverse to get top-down path
-                   $fullPath = ($pathParts[-1..-($pathParts.Count)] -join '\')
-                   Write-Verbose "VM: $($_.Name) - Full Path: $fullPath"
-                   
-                   # Look for class folder (CS followed by 3 digits)
-                   if ($fullPath -match '\\(CS\d{3})\\') {
-                       return $matches[1]
-                   }
-                   # Look for other identifiable folders
-                   elseif ($fullPath -match '\\(GoldImages)\\') {
-                       return $matches[1]
-                   }
-                   # Default case
-                   else {
-                       return 'Root'
-                   }
-               }
+            @{ Name='Folder'    ; Expression={ 
+                    $folder = $_.Folder
+                    $pathParts = @()
+                    
+                    # Walk up the folder hierarchy
+                    while ($folder) {
+                        $pathParts += $folder.Name
+                        $folder = $folder.Parent
+                    }
+                    
+                    # Reverse to get top-down path
+                    $fullPath = ($pathParts[-1..-($pathParts.Count)] -join '\')
+                    Write-Verbose "VM: $($_.Name) - Full Path: $fullPath"
+                    
+                    # Look for class folder (CS followed by 3 digits)
+                    if ($fullPath -match '\\(CS\d{3})\\') {
+                        return $matches[1]
+                    }
+                    # Look for other identifiable folders
+                    elseif ($fullPath -match '\\(GoldImages)\\') {
+                        return $matches[1]
+                    }
+                    # Default case
+                    else {
+                        return 'Root'
+                    }
+                }
             }
             
         

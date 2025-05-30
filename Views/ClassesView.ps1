@@ -647,7 +647,7 @@ function New-ClassManagerLayout {
     $lblStatus = New-Object System.Windows.Forms.Label
     $lblStatus.Name = 'StatusLabel'
     $lblStatus.Text = 'No Connection'
-    $lblStatus.Font = New-Object System.Drawing.Font('Segoe UI',9)
+    $lblStatus.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $lblStatus.ForeColor = $script:Theme.PrimaryDark
     $lblStatus.AutoSize = $true
     $lblStatus.Location = New-Object System.Drawing.Point(10,5)
