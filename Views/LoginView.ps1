@@ -99,10 +99,10 @@ function Show-LoginView {
         Anchor                  = 'Top,Left,Right'
     }
 
-    # Eye toggle button with checkbox
+    # Toggle button with checkbox
     $chkShowPass = New-Object System.Windows.Forms.CheckBox -Property @{
     Text     = "Show Password"
-    Location = [System.Drawing.Point]::new(30, 390)  # Adjust Y position as needed
+    Location = [System.Drawing.Point]::new(30, 390)  
     Size     = [System.Drawing.Size]::new(150, 20)
     ForeColor = $script:Theme.PrimaryDark
     }
@@ -113,7 +113,7 @@ function Show-LoginView {
 
     # Status label
     $lblStatus = New-Object System.Windows.Forms.Label -Property @{
-        Location  = [System.Drawing.Point]::new(30,400)
+        Location  = [System.Drawing.Point]::new(30,410)
         Size      = [System.Drawing.Size]::new(340,30)
         ForeColor = $script:Theme.Error
         TextAlign = 'MiddleCenter'
@@ -217,15 +217,26 @@ function Handle-Login {
         $LoginButton.Text   = 'CONNECTING...'
         $LoginButton.Refresh()
 
+        # Temporarily suppress all PowerCLI output
+        $oldPref = $global:ErrorActionPreference
+        $global:ErrorActionPreference = 'SilentlyContinue'
+
         $script:username   = $UserBox.Text
         $script:Server     = $Server
-        $script:Connection = Connect-VIServer -Server $Server -Credential $psCred -ErrorAction Stop
-        $script:LoginResult = $true
+        $script:Connection = Connect-VIServer -Server $Server -Credential $psCred
         
+        # Restore error handling
+        $global:ErrorActionPreference = $oldPref
+        # Check if connection succeeded
+        if (-not $script:Connection) {
+            throw "Login failed: Invalid credentials or server unavailable"
+        }
+
+        $script:LoginResult = $true
         $Form.Close()
     }
     catch {
-        $StatusLabel.Text = "Login failed: $($_.Exception.Message)"
+        $StatusLabel.Text = $_.Exception.Message
     }
     finally {
         # Restore UI

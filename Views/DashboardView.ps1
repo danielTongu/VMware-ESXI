@@ -126,7 +126,7 @@ function New-DashboardLayout {
     $status           = New-Object System.Windows.Forms.Label
     $status.Name      = 'StatusLabel'
     $status.AutoSize  = $true
-    $status.Font      = New-Object System.Drawing.Font('Segoe UI',9)
+    $status.Font      = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $status.ForeColor = $script:Theme.Error
     $status.Text      = ''
     $footer.Controls.Add($status)

@@ -20,7 +20,7 @@ function Show-VMsView {
 
     $script:Refs = New-VMsLayout -ContentPanel $ContentPanel
 
-    $data = Get-VMsData
+     $data = Get-VMsData
 
     if ($data) {
         Update-VMData -Refs $script:Refs -Data $data
@@ -137,6 +137,7 @@ function New-VMsLayout {
         @{ Name = 'Name'; Header = 'VM Name' },
         @{ Name = 'PowerState'; Header = 'Status' },
         @{ Name = 'IP'; Header = 'IP Address' },
+        @{ Name = 'Folder'; Header = 'Folder'; Width = 80}         # New Folder Column
         @{ Name = 'CPU'; Header = 'vCPU' },
         @{ Name = 'MemoryGB'; Header = 'Memory (GB)' }
     )
@@ -190,7 +191,7 @@ function New-VMsLayout {
     $statusLabel.AutoSize = $true
     $statusLabel.Name = 'StatusLabel'
     $statusLabel.Text = 'Ready'
-    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
 
@@ -332,7 +333,36 @@ function Get-VMsData {
                }
             },
             @{ Name='CPU'      ; Expression={ $_.NumCpu } },
-            @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } }
+            @{ Name='MemoryGB' ; Expression={ [math]::Round($_.MemoryGB,2) } },
+            @{ Name='Folder'    ; Expression={ 
+                    $folder = $_.Folder
+                    $pathParts = @()
+                    
+                    # Walk up the folder hierarchy
+                    while ($folder) {
+                        $pathParts += $folder.Name
+                        $folder = $folder.Parent
+                    }
+                    
+                    # Reverse to get top-down path
+                    $fullPath = ($pathParts[-1..-($pathParts.Count)] -join '\')
+                    Write-Verbose "VM: $($_.Name) - Full Path: $fullPath"
+                    
+                    # Look for class folder (CS followed by 3 digits)
+                    if ($fullPath -match '\\(CS\d{3})\\') {
+                        return $matches[1]
+                    }
+                    # Look for other identifiable folders
+                    elseif ($fullPath -match '\\(GoldImages)\\') {
+                        return $matches[1]
+                    }
+                    # Default case
+                    else {
+                        return 'Root'
+                    }
+                }
+            }
+            
         
         Write-Verbose "Retrieved data for $($vms.Count) VMs"
         return $vms
@@ -378,6 +408,7 @@ function Update-VMData {
         $row.Cells['IP'].Value = $vm.IP
         $row.Cells['CPU'].Value = $vm.CPU
         $row.Cells['MemoryGB'].Value = $vm.MemoryGB
+        $row.Cells['Folder'].Value = $vm.Folder         # Added the folder column
 
         if ($vm.PowerState -eq 'PoweredOn') {
             $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Green

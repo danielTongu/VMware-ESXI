@@ -127,7 +127,7 @@ function New-LogsLayout {
     $statusLabel.AutoSize = $true
     $statusLabel.Name = 'StatusLabel'
     $statusLabel.Text = 'Ready'
-    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
 
