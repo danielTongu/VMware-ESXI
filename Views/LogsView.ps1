@@ -54,7 +54,7 @@ function New-LogsLayout {
 
     # ── header ──────────────────────────────────────────────────────────────
     $hdr = [System.Windows.Forms.Panel]::new()
-    $hdr.Height = 60
+    $hdr.Height = 80
     $hdr.BackColor = $script:Theme.Primary
     $hdr.Dock = 'Fill'
     $root.Controls.Add($hdr, 0, 0)
@@ -66,6 +66,16 @@ function New-LogsLayout {
     $title.AutoSize = $true
     $title.Location = [System.Drawing.Point]::new(20, 15)
     $hdr.Controls.Add($title)
+
+    # refresh label
+    $lblRefresh = New-Object System.Windows.Forms.Label
+    $lblRefresh.Name = 'LastRefreshLabel'
+    $lblRefresh.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    $lblRefresh.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $lblRefresh.ForeColor = $script:Theme.White
+    $lblRefresh.Location = [System.Drawing.Point]::new(20,50)
+    $lblRefresh.AutoSize = $true
+    $hdr.Controls.Add($lblRefresh)
 
     # ── filter row ──────────────────────────────────────────────────────────
     $flt = [System.Windows.Forms.Panel]::new()
@@ -140,6 +150,7 @@ function New-LogsLayout {
         ClearButton   = $btnClear
         OriginalLines = @()                    # cache for filter restore
         StatusLabel   = $statusLabel
+        Header        = @{ LastRefreshLabel = $lblRefresh }
     }
 }
 
@@ -157,6 +168,7 @@ function Get-LogsData {
     Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Getting events..." -Type Error
 
     $events = $null
+    $lastUpdated = Get-Date
 
     if (-not $script:Connection) { 
         Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "No Connection" -Type 'Error'
@@ -181,6 +193,9 @@ function Update-LogsWithData {
 
     [CmdletBinding()]
     param([psobject]$UiRefs, [hashtable]$Data)
+
+    # Update last refresh time first
+    $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     Set-StatusMessage -UiRefs $UiRefs -Message "Populating logs..." -Type 'Success'
 
@@ -226,7 +241,9 @@ function Update-LogsWithData {
 
     
     $UiRefs.RefreshButton.Add_Click({
-        . $PSScriptRoot\LogsView.ps1 # Dot-source the script to reload the function definitions
+        . $PSScriptRoot\LogsView.ps1
+        # Update timestamp immediately
+        $script:LogsUiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
         Show-LogsView -ContentPanel $script:LogsUiRefs.ContentPanel
     })
 }

@@ -76,7 +76,7 @@ function Show-MainView {
 
     # Username label
     $usernameLabel = New-Object System.Windows.Forms.Label
-    $usernameLabel.Text      = if ($script:Connection) { "$($script:Username)`n$($script:Server)"} else { "Not logged in" }
+    $usernameLabel.Text      = if ($script:username) { "User: $($script:username)" } else { "Not logged in" }
     $usernameLabel.Font      = New-Object System.Drawing.Font('Segoe UI',8)
     $usernameLabel.ForeColor = $script:Theme.White
     $usernameLabel.AutoSize  = $true
@@ -138,24 +138,22 @@ function Show-MainView {
     # Auth button click handler
     $script:AuthButton.Add_Click({
         if ($script:Connection) {
-            . "$scriptDir\..\VMwareUtils.ps1" # ensure the Disconnect-VMwareServer function is available
-            Disconnect-VMwareServer -Connection $script:Connection
-
-            $contentPanel.Controls.Clear()
-            $usernameLabel.Text = "Not logged in"
+            try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+            $script:Connection = $null
+            $script:username = $null
+            $script:password = $null
             $this.Text = ' Login'
             $this.FlatAppearance.BorderColor = $script:Theme.Success
-            $script:Connection = $null
-            $script:Username = $null
+            $usernameLabel.Text = "Not logged in"
+            $contentPanel.Controls.Clear()
         } else {
-            . "$scriptDir\LoginView.ps1" # ensure the Show-LoginView function is available
+            . "$scriptDir\LoginView.ps1"
 
             if (Show-LoginView) {
                 $this.Text = ' Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
-                $usernameLabel.Text =  "$($script:Username)`n$($script:Server)"
+                $usernameLabel.Text = "User: $($script:username)"
 
-                # activate the last viewed page
                 if ($script:ActiveButton) { 
                     $script:ActiveButton.PerformClick() 
                 } else { 
@@ -168,7 +166,9 @@ function Show-MainView {
     })
 
     # On load: show Dashboard
-    $script:form.Add_Load({ $btnDashboard.PerformClick() })
+    $script:form.Add_Load({
+        $btnDashboard.PerformClick()
+    })
 
     # Confirm on close
     $script:form.Add_FormClosing({

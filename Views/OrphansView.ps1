@@ -93,6 +93,16 @@ function New-OrphanLayout {
     
     $header.Controls.Add($titleLabel)
 
+    # Refresh Label
+    $lblLastRefresh = [System.Windows.Forms.Label]::new()
+    $lblLastRefresh.Name = 'LastRefreshLabel'
+    $lblLastRefresh.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    $lblLastRefresh.Font = [System.Drawing.Font]::new('Segoe UI', 9)
+    $lblLastRefresh.ForeColor = $script:Theme.White
+    $lblLastRefresh.Location = [System.Drawing.Point]::new(20,50)
+    $lblLastRefresh.AutoSize = $true
+    $header.Controls.Add($lblLastRefresh)
+
     # Filter row
     $filterPanel = [System.Windows.Forms.Panel]::new()
     $filterPanel.Dock = 'Fill'; 
@@ -231,6 +241,7 @@ function New-OrphanLayout {
         RefreshButton  = $btnRefresh
         DeleteButton   = $btnDelete
         StatusLabel    = $status
+        Header         = @{ LastRefreshLabel = $lblLastRefresh }
     }
 }
 
@@ -254,6 +265,9 @@ function Update-OrphanData {
         [Parameter(Mandatory)]
         [PSObject[]]$Orphans
     )
+
+    # Update timestamp first
+    $script:UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # Initialize OrphansData structure
     $script:OrphansData = @{
@@ -504,6 +518,7 @@ function Wire-UIEvents {
     # Refresh data
     $UiRefs.RefreshButton.Add_Click({
         . $PSScriptRoot\OrphansView.ps1
+        $script:UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
         Show-OrphansView -ContentPanel $script:uiRefs.ContentPanel 
     })
 
