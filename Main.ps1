@@ -48,7 +48,7 @@ if (-not (Show-LoginView)) {
 Show-MainView
 
 # 6) Clean up
-if ($script:Connection) { Disconnect-VIServer -Connection $script:Connection }
+if ($script:Connection) { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue }
 
 # 7) Release resources or perform any additional cleanup here if needed
 exit 0
