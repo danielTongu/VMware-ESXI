@@ -52,7 +52,7 @@ function Show-ClassesView {
             LastUpdated = Get-Date
         }
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
-        Wire-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
+        Connect-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
         Set-StatusMessage -Refs $script:Refs -Message "No connection established" -Type 'Error'
     }
@@ -790,7 +790,7 @@ function Update-ClassManagerWithData {
 }
 
 
-function Wire-UIEvents {
+function Connect-UIEvents {
     <#
     .SYNOPSIS
         Wires up event handlers for all UI controls.
@@ -1092,7 +1092,7 @@ function Wire-UIEvents {
                 throw "Please select a class folder"
             }
             
-            PowerOff-ClassVMs -classFolder $classFolder
+            Stop-ClassVMs -classFolder $classFolder
             Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off VMs for class $classFolder" -Type 'Success'
             
         } catch {
@@ -1140,7 +1140,7 @@ function Wire-UIEvents {
                 throw "Please select a server"
             }
             
-            PowerOff-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Stop-SpecificClassVMs -classFolder $classFolder -hostName $hostName
             Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $hostName for class $classFolder" -Type 'Success'
             
         } catch {
@@ -1164,7 +1164,7 @@ function Wire-UIEvents {
                 throw "Please select a server"
             }
             
-            PowerOn-SpecificClassVMs -classFolder $classFolder -hostName $hostName
+            Start-SpecificClassVMs -classFolder $classFolder -hostName $hostName
             Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $hostName for class $classFolder" -Type 'Success'
             
         } catch {
@@ -1242,7 +1242,7 @@ function Remove-Host {
     END{}
 }
 
-function PowerOff-ClassVMs {
+function Stop-ClassVMs {
     <#
     .SYNOPSIS
         Powers off all VMs in a specified class folder.
@@ -1277,7 +1277,7 @@ function PowerOff-ClassVMs {
     }
 }
 
-function PowerOff-SpecificClassVMs {
+function Stop-SpecificClassVMs {
     <#
     .SYNOPSIS
         Powers off specific VMs in a class folder.
@@ -1320,7 +1320,7 @@ function PowerOff-SpecificClassVMs {
     }
 }
 
-function PowerOn-SpecificClassVMs {
+function Start-SpecificClassVMs {
     <#
     .SYNOPSIS
         Powers on specific VMs in a class folder.
