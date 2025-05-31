@@ -478,36 +478,6 @@ function New-ClassManagerLayout {
     $cmbClass.Width = 200
     $paramsLayout.Controls.Add($cmbClass, 1, 0)
 
-    <#
-    # Start Student Number
-    $lblStart = New-Object System.Windows.Forms.Label
-    $lblStart.Text = 'Start Student:'
-    $lblStart.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $paramsLayout.Controls.Add($lblStart, 0, 1)
-    
-    $numStart = New-Object System.Windows.Forms.NumericUpDown
-    $numStart.Name = 'StartStudentNumberDel'
-    $numStart.Minimum = 1
-    $numStart.Maximum = 1000
-    $numStart.Value = 1
-    $numStart.Width = 80
-    $paramsLayout.Controls.Add($numStart, 1, 1)
-
-    # End Student Number
-    $lblEnd = New-Object System.Windows.Forms.Label
-    $lblEnd.Text = 'End Student:'
-    $lblEnd.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $paramsLayout.Controls.Add($lblEnd, 0, 2)
-
-    $numEnd = New-Object System.Windows.Forms.NumericUpDown
-    $numEnd.Name = 'EndStudentNumberDel'
-    $numEnd.Minimum = 1
-    $numEnd.Maximum = 1000
-    $numEnd.Value = 1
-    $numEnd.Width = 80
-    $paramsLayout.Controls.Add($numEnd, 1, 2)
-    #>
-
     # Host Name
     $lblHost = New-Object System.Windows.Forms.Label
     $lblHost.Text = 'Host Name:'
@@ -1093,20 +1063,21 @@ function Wire-UIEvents {
 
     # Delete Tab Events
     $UiRefs.Tabs.Delete.RemoveCourseFolderVMsButton.Add_Click({
+        # Needed for Set-StatusMessage function
+        . $PSScriptRoot\ClassesView.ps1
+
         try {
-            $classFolder = $UiRefs.Tabs.Delete.ClassComboBox.SelectedItem
-            $startNum = $UiRefs.Tabs.Delete.StartStudentNumber.Value
-            $endNum = $UiRefs.Tabs.Delete.EndStudentNumber.Value
+            $classFolder = $script:classFolder.SelectedItem
             
             if (-not $classFolder) {
                 throw "Please select a class folder"
             }
             
-            Remove-CourseFolder -classFolder $classFolder -startStudents $startNum -endStudents $endNum
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed VMs for class $classFolder" -Type 'Success'
+            Remove-CourseFolder -classFolder $classFolder
+            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error removing VMs: $_" -Type 'Error'
+            Set-StatusMessage -Refs $script:Refs -Message "Error removing $classFolder" -Type 'Error'
         }
     })
 
@@ -1210,23 +1181,18 @@ function Remove-CourseFolder {
         Deletes all student folders and VMs for a course.
     .PARAMETER classFolder
         The name of the class folder.
-    .PARAMETER startStudents
-        The starting student number.
-    .PARAMETER endStudents
-        The ending student number.
     #>
     param (
-        [string]$classFolder,
-        [int]$startStudents = 1,
-        [int]$endStudents = 1
+        [string]$classFolder
     )
 
     if (Get-Folder $classFolder -ErrorAction Ignore) {
         # Loop through for the number of students in the class
-        Remove-VMs $classFolder $startStudents $endStudents
+        Remove-VMs $classFolder
     }
     else {
-        Write-Host 'Bad class folder'
+        #Write-Host 'Bad class folder'
+        Set-StatusMessage -Refs $script:Refs -Message "Bad class folder" -Type 'Error'
     }
 }
 
@@ -1557,20 +1523,22 @@ function New-CourseVMs {
 
 function Remove-VMs {
     param( 
-        [string]$classFolder,
-        [int]$startStudents,
-        [int]$endStudents
+        [string]$classFolder
     )
     BEGIN{}
     PROCESS{
-        # Loop through for the number of students in the class
-        for ($i=$startStudents; $i -le $endStudents; $i++) {
-            $userAccount = $classFolder+'_S'+$i
 
-    
-            # set the folder name
-            $folderName = $classFolder+'_S'+$i
-    
+        # Get the Classes folder path
+        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter' -ErrorAction Stop
+        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc -ErrorAction Stop
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder -ErrorAction Stop
+        $classPath   = Get-Folder -Server $conn -Name $classFolder -Location $classesRoot -ErrorAction Stop
+
+        # Get student folder names
+        $studentFolders = Get-Folder -Server $conn -Location $classPath -ErrorAction Stop
+
+        # Loop through for the number of students in the class
+        foreach ($folderName in $studentFolders) {
             # power off the VMs
             Stop-VMs  $foldername 
     
@@ -1578,7 +1546,8 @@ function Remove-VMs {
             Get-Folder -Name $folderName | Remove-Folder -Confirm:$false -DeletePermanently
 
             # write messsage
-            Write-Host $folderName " removed"
+            # Write-Host $folderName " removed"
+            Set-StatusMessage -Refs $script:Refs -Message "$folderName removed" -Type 'Success'
 
         } 
     }
