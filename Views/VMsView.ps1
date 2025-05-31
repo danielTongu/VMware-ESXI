@@ -54,7 +54,7 @@ function New-VMsLayout {
     # ----- Header ------------------------------------------------------------
     $header = New-Object System.Windows.Forms.Panel
     $header.Dock = 'Fill'
-    $header.Height = 60
+    $header.Height = 90
     $header.BackColor = $script:Theme.Primary
     $root.Controls.Add($header, 0, 0)
 
@@ -65,6 +65,16 @@ function New-VMsLayout {
     $titleLabel.Location = New-Object System.Drawing.Point(20, 15)
     $titleLabel.AutoSize = $true
     $header.Controls.Add($titleLabel)
+
+    # Last Refresh Label
+    $refreshLabel = New-Object System.Windows.Forms.Label
+    $refreshLabel.Name = 'LastRefreshLabel'
+    $refreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    $refreshLabel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $refreshLabel.ForeColor = $script:Theme.White
+    $refreshLabel.Location = New-Object System.Drawing.Point(20, 50)  # Positioned below title
+    $refreshLabel.AutoSize = $true
+    $header.Controls.Add($refreshLabel)
 
     # ----- Main Layout --------------------------------------------------------
     $mainLayout = New-Object System.Windows.Forms.TableLayoutPanel
@@ -203,6 +213,7 @@ function New-VMsLayout {
         SearchButton  = $searchBtn
         RefreshButton = $refreshBtn
         StatusLabel   = $statusLabel
+        RefreshLabel  = $refreshLabel
         Buttons       = $btns
     }
 }
@@ -385,6 +396,9 @@ function Update-VMData {
         [Parameter(Mandatory)][psobject] $Refs,
         $Data
     )
+
+    # Update refresh time
+    $Refs.RefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     Set-StatusMessage -Refs $Refs -Message "Refreshing VM data..." -Type Info  
     
