@@ -32,7 +32,7 @@ function Initialize-Theme {
         PrimaryDarker = [System.Drawing.Color]::FromArgb( 45,  45,  48)
         LightGray     = [System.Drawing.Color]::FromArgb(192, 192, 192)
         White         = [System.Drawing.Color]::White
-        Success       = [System.Drawing.Color]::FromArgb(  0, 128,   0)
+        Success       = [System.Drawing.Color]::FromArgb(  0, 100,   0)
         Warning       = [System.Drawing.Color]::FromArgb(192,  64,   0)
         Error         = [System.Drawing.Color]::FromArgb(180,   0,   0)
     }
