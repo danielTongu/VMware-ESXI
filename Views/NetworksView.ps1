@@ -477,41 +477,37 @@ function Get-NetworksData {
         # ─── Class > Student > Networks Mapping ──────────────────────────────
         Set-StatusMessage -Refs $Refs -Message "Collecting class/student/network relationships..." -Type Info
 
+        $dc = Get-Datacenter -Server $conn -Name 'Datacenter'
+        $vmFolder = Get-Folder -Server $conn -Name 'vm' -Location $dc
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
+        $classes = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -notmatch '_' } |
+                   Select-Object -ExpandProperty Name
+
+        # 2. THEN FIND NETWORKS FOR EACH CLASS
+        $classMap = @{}
         $vmHost = Get-VMHost -Server $conn -ErrorAction SilentlyContinue 
         $portGroups = $vmHost | Get-VirtualPortGroup -Server $conn
-
-        # The data structure: classMap[Class][Student][Network]
-        $classMap = @{} 
-
-        # The data structure allNetworks[NetworkName]
-        $allNetworks = @{}
         
-        # Fill up the empty datastructure
-        foreach ($pg in $portGroups) {
-            $networkName = $pg.Name
-            $regex = '^([A-Za-z0-9]+)_S(\d{2})$' # Try to parse bulk-created networks (CLASS_S##)
-
-            if ($networkName -match $regex) {
-                $className = $matches[1]
-                $studentNumber = $matches[2]
-                
-                if (-not $classMap.ContainsKey($className)) {
-                    $classMap[$className] = @{}
+        foreach ($className in $classes) {
+            $classMap[$className] = @{}  # Initialize class entry
+            
+            # Find all networks for this class (matching "CLASS_S##" pattern)
+            $classNetworks = $portGroups | Where-Object { $_.Name -match "^${className}_S(\d+)$" }
+            
+            foreach ($pg in $classNetworks) {
+                if ($pg.Name -match "^${className}_S(\d+)$") {
+                    $studentNum = $matches[1]
+                    if (-not $classMap[$className].ContainsKey($studentNum)) {
+                        $classMap[$className][$studentNum] = @()
+                    }
+                    $classMap[$className][$studentNum] += $pg.Name
                 }
-
-                if (-not $classMap[$className].ContainsKey($studentNumber)) {
-                    $classMap[$className][$studentNumber] = @()
-                }
-                
-                $classMap[$className][$studentNumber] += $networkName
             }
-
-            # Track all networks regardless of format
-            $allNetworks[$networkName] = $true
         }
-        
+
         $data.ClassMap = $classMap
-        $data.AllNetworks = $allNetworks.Keys | Sort-Object
+        $data.AllNetworks = $portGroups.Name | Sort-Object
 
         # ─── Host Info ──────────────────────────────────────────
         Set-StatusMessage -Refs $Refs -Message "Collecting host information..." -Type Info
