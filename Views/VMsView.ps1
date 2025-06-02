@@ -144,10 +144,10 @@ function New-VMsLayout {
     $grid.Columns.Add($numCol) | Out-Null
 
     $columns = @(
+        @{ Name = 'Folder'; Header = 'Folder'; Width = 80},        # New Folder Column
         @{ Name = 'Name'; Header = 'VM Name' },
         @{ Name = 'PowerState'; Header = 'Status' },
         @{ Name = 'IP'; Header = 'IP Address' },
-        @{ Name = 'Folder'; Header = 'Folder'; Width = 80}         # New Folder Column
         @{ Name = 'CPU'; Header = 'vCPU' },
         @{ Name = 'MemoryGB'; Header = 'Memory (GB)' }
     )
@@ -326,7 +326,7 @@ function Get-VMsData {
     [CmdletBinding()] param()
 
     if (-not $script:Connection) {
-        Set-StatusMessage -Refs $script:Refs -Message "No vSphere connection available" -Type Error
+        Set-StatusMessage -Refs $script:Refs -Message "No connection to vCenter." -Type Error
         Write-Verbose "No vSphere connection available"
         return $null 
     }
