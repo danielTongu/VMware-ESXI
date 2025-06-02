@@ -23,7 +23,8 @@ function Show-LogsView {
         Set-StatusMessage -UiRefs $script:LogsUiRefs -Message 'No connection to vCenter.' -Type 'Error'
     } else {
         $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
-        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $events
+        $data =@{ Events = $events}
+        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
     }
 }
 
@@ -171,7 +172,7 @@ function Update-LogsWithData {
     $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # ---------- Store the original lines in the script scope ------
-    $script:OriginalLogLines = foreach ($ev in $Data) {
+    $script:OriginalLogLines = foreach ($ev in $Data.Events) {
         $ts = $ev.CreatedTime.ToString('G')
         $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
         "[$ts] ($usr) $($ev.FullFormattedMessage)"
@@ -179,7 +180,7 @@ function Update-LogsWithData {
 
     # ---------- Populate the textbox with the lines ----------------
     $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
-    Set-StatusMessage -UiRefs $UiRefs -Message "Latest $($Data.Count) Events" -Type 'Success'
+    Set-StatusMessage -UiRefs $UiRefs -Message "Latest $($Data.Events.Count) Events" -Type 'Success'
 
 
     # ---------- Wire User Interface Events -------------------------
