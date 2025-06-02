@@ -23,23 +23,14 @@ function Show-DashboardView {
     # 1 ─ Build the empty UI ----------------------------------------------------
     $script:uiRefs = New-DashboardLayout -ContentPanel $ContentPanel
     $script:uiRefs["ContentPanel"] = $ContentPanel
-    Set-StatusMessage -UiRefs $script:uiRefs -Message "Initializing dashboard..." -Type 'Info'
 
     # 2 ─ Gather data (may be $null when disconnected) --------------------------
-    Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading data from vSphere..." -Type 'Info'
     $data = Get-DashboardData
 
     # 3 ─ Populate or warn ------------------------------------------------------
     if ($data) {
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Rendering dashboard..." -Type 'Info'
         Update-DashboardWithData -UiRefs $script:uiRefs -Data $data
-        $ContentPanel.Refresh()
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Dashboard ready" -Type 'Success'
     }
-    else {
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "No connection to VMware server" -Type 'Error'
-    }
-
 }
 
 
@@ -50,11 +41,9 @@ function New-DashboardLayout {
     .OUTPUTS
         [hashtable] – references to frequently accessed controls.
     #>
+
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [System.Windows.Forms.Panel] $ContentPanel
-    )
+    param([Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel)
 
     $ContentPanel.Controls.Clear()
     $ContentPanel.BackColor = $script:Theme.LightGray
@@ -146,149 +135,51 @@ function Get-DashboardData {
     .OUTPUTS
         [hashtable] - Complete dashboard dataset
     #>
+
     [CmdletBinding()] 
     param()
 
-    try {
-        $conn = $script:Connection
-        if (-not $conn) { 
-            Write-Verbose "No active VMware connection"
-            return @{
-                Error = "Not connected to vSphere server"
-                Timestamp = [datetime]::Now
-            }
-        }
+    $data = @{}
+    $conn = $script:Connection
 
+    if (-not $conn) {
+        Set-StatusMessage -UiRefs $script:uiRefs -Message 'No connection to vCenter.' -Type 'Error'
+    } else {
         # Sequential data collection for compatibility
-        $data = @{}
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading host information..." -Type 'Info'
-        $data['Get-VMHost'] = Get-VMHost -Server $conn -ErrorAction SilentlyContinue
-        
+        $data.HostInfo = Get-VMHost -Server $conn -ErrorAction SilentlyContinue
+
+        Set-StatusMessage -UiRefs $script:uiRefs -Message "Analyzing network configuration..." -Type 'Info'
+        $data.PortGroups = $data.HostInfo  | Get-VirtualPortGroup
+
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading virtual machines..." -Type 'Info'
-        $data['Get-VM'] = Get-VM -Server $conn -ErrorAction SilentlyContinue
+        $data.VMs = Get-VM -Server $conn -ErrorAction SilentlyContinue
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading datastores..." -Type 'Info'
-        $data['Get-Datastore'] = Get-Datastore -Server $conn -ErrorAction SilentlyContinue
-        
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading recent events..." -Type 'Info'
-        $data['Get-VIEvent'] = Get-VIEvent -Server $conn -MaxSamples 10 -ErrorAction SilentlyContinue
+        $data.Datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue
+
+        $data.Center =  Get-Datacenter -Server $conn -Name 'Datacenter'
+        $data.VMFolder    =  Get-Folder -Server $conn -Name 'vm' -Location $data.Center
+        $data.ClassesRoot =  Get-Folder -Server $conn -Name 'Classes' -Location $data.VMFolder
+        $data.Classes =  Get-Folder -Server $conn -Location $data.ClassesRoot -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '_' } |Select-Object -ExpandProperty Name
+
+        Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
+        $data.OrphanedFiles = $data.Datastores | ForEach-Object { Find-OrphanedFiles -DatastoreName $_ }
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading network adapters..." -Type 'Info'
-        $data['Get-VMHostNetworkAdapter'] = Get-VMHostNetworkAdapter -Server $conn -ErrorAction SilentlyContinue
+        $data.Adapters  = Get-VMHostNetworkAdapter -Server $conn -ErrorAction SilentlyContinue
         
         Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading templates..." -Type 'Info'
-        $data['Get-Template'] = Get-Template -Server $conn -ErrorAction SilentlyContinue
+        $data.Templates = Get-Template -Server $conn -ErrorAction SilentlyContinue
 
-        # Add network and orphan data
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Analyzing network configuration..." -Type 'Info'
-        $data.PortGroups = $data['Get-VMHost'] | Get-VirtualPortGroup
-        
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
-        $data.OrphanedFiles = $data['Get-Datastore'] | ForEach-Object { Find-OrphanedFiles -DatastoreName $_ }
+        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading recent events..." -Type 'Info'
+        $data.Events = Get-VIEvent -Server $conn -MaxSamples 10 -ErrorAction SilentlyContinue
 
-
-        return @{
-            HostInfo     = $data['Get-VMHost']
-            VMs          = $data['Get-VM']
-            Datastores   = $data['Get-Datastore']
-            Events       = $data['Get-VIEvent']
-            Adapters     = $data['Get-VMHostNetworkAdapter']
-            Templates    = $data['Get-Template']
-            PortGroups   = $data.PortGroups
-            OrphanedFiles = $data.OrphanedFiles
-            Timestamp    = [datetime]::Now
-        }
+        Set-StatusMessage -UiRefs $script:uiRefs -Message "Connected to $($dc)" -Type 'Success'
     }
-    catch {
-        Write-Verbose "Dashboard data collection failed: $_"
-        return @{
-            Error = $_.Exception.Message
-            Timestamp = [datetime]::Now
-        }
-    }
+
+    return $data
 }
-
-function Get-VMwarePortGroups {
-    <#
-    .SYNOPSIS
-        Retrieves all port groups with their associated vSwitches
-    .OUTPUTS
-        [PSCustomObject[]] - Port group information
-    #>
-    [CmdletBinding()]
-    param()
-
-    try {
-        $portGroups = @()
-        $hostSystems = Get-VMHost | Sort-Object Name
-
-        foreach ($vmHost in $hostSystems) {
-            $networkSystem = $vmHost.ExtensionData.ConfigManager.NetworkSystem
-            $hostPgInfo = $networkSystem.NetworkInfo.Portgroup
-            
-            foreach ($pg in $hostPgInfo) {
-                $portGroups += [PSCustomObject]@{
-                    Host        = $vmHost.Name
-                    PortGroup   = $pg.Spec.Name
-                    vSwitch     = $pg.Spec.VswitchName
-                    VLAN        = $pg.Spec.VlanId
-                    HostSystem  = $vmHost
-                    Key         = "$($vmHost.Name)|$($pg.Spec.Name)"
-                }
-            }
-        }
-
-        return $portGroups | Sort-Object Host, PortGroup
-    }
-    catch {
-        Write-Warning "Failed to retrieve port groups: $_"
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Warning: Some port group data unavailable" -Type 'Warning'
-        return @()
-    }
-}
-
-
-function Get-Orphans {
-    <#
-    .SYNOPSIS
-        Wrapper function for the Find-OrphanedFiles
-    .OUTPUTS
-        formated data so the user can see on the UI
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
-        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore]$Datastore
-    )
-
-    process {
-        Write-Verbose "Scanning datastore: $($Datastore.Name)"
-
-        $orphans = Find-OrphanedFiles -DatastoreName $Datastore.Name
-
-        # Format orphaned files for UI
-        $orphansMapped = $orphans | ForEach-Object {
-            [PSCustomObject]@{
-                Name      = $_.Path
-                Type      = $_.DiskType
-                Size      = $_.SizeBytes
-                Modified  = $_.Modification
-                Owner     = $_.Owner
-                Datastore = $Datastore.Name
-                FullPath  = "$($Datastore.Name) $($_.Path)"
-                RawFile   = $_
-            }
-        }
-
-        # Output expected object
-        [PSCustomObject]@{
-            Datastore   = $Datastore.Name
-            OrphanCount = @($orphansMapped).Count
-            Orphans     = $orphansMapped
-        }
-    }
-}
-
 
 function Update-DashboardWithData {
     <#
@@ -304,13 +195,14 @@ function Update-DashboardWithData {
     # ── Statistic cards ----------------------------------------------------------
     $cardValues = @{
         HostCount     = $Data.HostInfo.Count
+        TotalClasses  = $Data.Classes.Count
         TotalVMs      = $Data.VMs.Count
         RunningVMs    = ($Data.VMs | Where-Object PowerState -eq 'PoweredOn').Count
         Datastores    = $Data.Datastores.Count
         Adapters      = $Data.Adapters.Count
         Templates     = $Data.Templates.Count
         PortGroups    = $Data.PortGroups.Count
-        OrphanedFiles = @($Data.OrphanedFiles).Count
+        OrphanedFiles = $Data.OrphanedFiles.Count
     }
 
     foreach ($key in $cardValues.Keys) {
@@ -379,7 +271,6 @@ function New-DashboardHeader {
     #>
     $panel              = New-Object System.Windows.Forms.Panel
     $panel.Dock         = 'Top'
-    $panel.Height       = 100
     $panel.BackColor    = $script:Theme.Primary
 
     $lblTitle           = New-Object System.Windows.Forms.Label
@@ -419,6 +310,7 @@ function New-DashboardStats {
 
     $cards = @(
         @{ Key='HostCount'    ; Title='TOTAL HOSTS'    ; Icon=[char]0xE774 },
+        @{ Key='TotalClasses' ; Title='TOTAL CLASSES'  ; Icon=[char]0xE8D2 },
         @{ Key='TotalVMs'     ; Title='TOTAL VMS'      ; Icon=[char]0xE8F1 },
         @{ Key='RunningVMs'   ; Title='RUNNING VMS'    ; Icon=[char]0xE768 },
         @{ Key='Datastores'   ; Title='DATASTORES'     ; Icon=[char]0xE958 },
