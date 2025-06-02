@@ -47,39 +47,53 @@ function Show-MainView {
     $sidebarLayout.Autosize    = $true
     $sidebarLayout.RowCount    = 4
     $sidebarLayout.ColumnCount = 1
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize')) 
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Autosize'))
-    $sidebarLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
     $sidebar.Controls.Add($sidebarLayout)
 
     # Title label
     $title = New-Object System.Windows.Forms.Label
+    $title.Dock = 'Fill'
+    $title.AutoSize  = $true
+    $title.TextAlign = 'MiddleCenter'
     $title.Text      = 'VMware ESXi'
     $title.Font      = New-Object System.Drawing.Font('Segoe UI',16,[System.Drawing.FontStyle]::Bold)
     $title.ForeColor = $script:Theme.White
-    $title.AutoSize  = $true
-    $title.Padding       = New-Object System.Windows.Forms.Padding(10)
+    $title.Padding   = New-Object System.Windows.Forms.Padding(10)
     $sidebarLayout.Controls.Add($title,0,0)
 
-    # Logo
-    $logo = New-Object System.Windows.Forms.PictureBox
-    $logo.Size      = New-Object System.Drawing.Size(100,100)
-    $logo.SizeMode  = 'Zoom'
+    # Logo or icon panel
+    $logoPanel = New-Object System.Windows.Forms.Panel
+    $logoPanel.Dock = 'Fill'
+    $logoPanel.BackColor = [System.Drawing.Color]::Transparent
+
     try {
+        $logo = New-Object System.Windows.Forms.PictureBox
+        $logo.Dock      = 'Fill'
+        $logo.Size      = New-Object System.Drawing.Size(100,100)
+        $logo.SizeMode  = 'Zoom'
         $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
+        $logo.Padding   = New-Object System.Windows.Forms.Padding(10)
+        $logoPanel.Controls.Add($logo)
     } catch {
-        $logo.BackColor = $script:Theme.LightGray
+        # Use Segoe MDL2 Assets person icon if image not found
+        if ($logo) { $logo.Dispose() }
+        $iconLabel = New-Object System.Windows.Forms.Label
+        $iconLabel.Text = [char]0xE77B  # Unicode for "Contact" (person) icon in Segoe MDL2 Assets
+        $iconLabel.Font = New-Object System.Drawing.Font('Segoe MDL2 Assets', 48, [System.Drawing.FontStyle]::Regular)
+        $iconLabel.ForeColor = $script:Theme.White
+        $iconLabel.TextAlign = 'MiddleCenter'
+        $iconLabel.Dock = 'Fill'
+        $logoPanel.Controls.Add($iconLabel)
     }
-    $logo.Padding       = New-Object System.Windows.Forms.Padding(10)
-    $sidebarLayout.Controls.Add($logo,0,1)
+    $sidebarLayout.Controls.Add($logoPanel,0,1)
 
     # Username label
     $usernameLabel = New-Object System.Windows.Forms.Label
-    $usernameLabel.Text      = if ($script:username) { "User: $($script:username)" } else { "Not logged in" }
+    $usernameLabel.Dock          = 'Fill'
+    $usernameLabel.AutoSize  = $true
+    $usernameLabel.TextAlign = 'MiddleCenter'
+    $usernameLabel.Text      = if ($script:Connection) { "$($script:username)`n$($script:Server)" } else { "Not logged in" }
     $usernameLabel.Font      = New-Object System.Drawing.Font('Segoe UI',8)
     $usernameLabel.ForeColor = $script:Theme.White
-    $usernameLabel.AutoSize  = $true
     $usernameLabel.Padding       = New-Object System.Windows.Forms.Padding(10)
     $sidebarLayout.Controls.Add($usernameLabel,0,2)
 
@@ -113,11 +127,13 @@ function Show-MainView {
     # -- Content panel (Panel2) -------------------------
     $contentPanel = New-Object System.Windows.Forms.Panel
     $contentPanel.Dock      = 'Fill'
-    $contentPanel.Autosize    = $true
-    $contentPanel.BackColor = $script:Theme.LightGray
+    $contentPanel.Autosize  = $true
+    $contentPanel.BackColor = $script:Theme.PrimaryDarker
+    $contentPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+    $contentPanel.Padding = [System.Windows.Forms.Padding]::Empty
     $splitContainer.Panel2.Controls.Add($contentPanel)
 
-     # Load nav buttons
+    # Load nav buttons
     $scriptDir = $PSScriptRoot
     $btnDashboard = New-NavButton -Text 'Dashboard'         -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $contentPanel
     $btnClasses   = New-NavButton -Text 'Class Manager'     -ScriptPath "$scriptDir\ClassesView.ps1"   -TargetPanel $contentPanel
@@ -138,7 +154,7 @@ function Show-MainView {
     # Auth button click handler
     $script:AuthButton.Add_Click({
         if ($script:Connection) {
-            try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+            Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue
             $script:Connection = $null
             $script:username = $null
             $script:password = $null
@@ -146,17 +162,17 @@ function Show-MainView {
             $this.FlatAppearance.BorderColor = $script:Theme.Success
             $usernameLabel.Text = "Not logged in"
             $contentPanel.Controls.Clear()
+            $contentPanel.BackColor = $script:Theme.PrimaryDark
         } else {
             . "$scriptDir\LoginView.ps1"
 
             if (Show-LoginView) {
                 $this.Text = ' Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
-                $usernameLabel.Text = "User: $($script:username)"
-
-                if ($script:ActiveButton) { 
+                $usernameLabel.Text = "$($script:username)`n$($script:Server)"
+                if ($script:ActiveButton) {  
                     $script:ActiveButton.PerformClick() 
-                } else { 
+                } else {
                     $btnDashboard.PerformClick() 
                 }
             } else {
@@ -181,7 +197,7 @@ function Show-MainView {
             $_.Cancel = $true
         } else {
             if ($script:Connection) {
-                try { Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+                Disconnect-VIServer -Server $script:Connection -Confirm:$false -ErrorAction SilentlyContinue
             }
         }
     })
