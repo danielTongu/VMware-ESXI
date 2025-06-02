@@ -22,9 +22,9 @@ function Show-OrphansView {
     # Build UI skeleton
     $script:uiRefs = New-OrphanLayout -ContentPanel $ContentPanel
 
-    . $PSScriptRoot\DashboardView.ps1 # Ensure Get-Orphans & Set-StatusMessage is available
+    . $PSScriptRoot\DashboardView.ps1 # Ensure Set-StatusMessage is available
     if(-not $script:Connection){
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "No connection to vCenter. Please connect first." -Type Error
+        Set-StatusMessage -UiRefs $script:uiRefs -Message 'No connection to vCenter.' -Type Error
         return
     }
 
@@ -311,6 +311,72 @@ function Update-OrphanData {
     }
 }
 
+function Format-FileSize {
+    <#
+    .SYNOPSIS
+        Formats a file size in bytes into a human-readable string (KB, MB, GB).
+    .DESCRIPTION
+        Converts a byte value to a string with appropriate units for display.
+    #>
+
+    param([long]$Bytes)
+    
+    if ($Bytes -ge 1GB) {
+        return "{0:N2} GB" -f ($Bytes / 1GB)
+    }
+    elseif ($Bytes -ge 1MB) {
+        return "{0:N2} MB" -f ($Bytes / 1MB)
+    }
+    elseif ($Bytes -ge 1KB) {
+        return "{0:N2} KB" -f ($Bytes / 1KB)
+    }
+    else {
+        return "$Bytes B"
+    }
+}
+
+function Get-Orphans {
+    <#
+    .SYNOPSIS
+        Wrapper function for the Find-OrphanedFiles
+    .OUTPUTS
+        formated data so the user can see on the UI
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+        [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.Datastore]$Datastore
+    )
+
+    process {
+        Write-Verbose "Scanning datastore: $($Datastore.Name)"
+
+        $orphans = Find-OrphanedFiles -DatastoreName $Datastore.Name
+
+        # Format orphaned files for UI
+        $orphansMapped = $orphans | ForEach-Object {
+            [PSCustomObject]@{
+                Name      = $_.Path
+                Type      = $_.DiskType
+                Size      = $_.SizeBytes
+                Modified  = $_.Modification
+                Owner     = $_.Owner
+                Datastore = $Datastore.Name
+                FullPath  = "$($Datastore.Name) $($_.Path)"
+                RawFile   = $_
+            }
+        }
+
+        # Output expected object
+        [PSCustomObject]@{
+            Datastore   = $Datastore.Name
+            OrphanCount = @($orphansMapped).Count
+            Orphans     = $orphansMapped
+        }
+    }
+}
+
+
 function Find-OrphanedFiles {
     <#
     .SYNOPSIS
@@ -441,30 +507,6 @@ function Find-OrphanedFiles {
             Extents      = if ($file.PSObject.Properties.Match('DiskExtents')) { ($file.DiskExtents -join ',') } else { $null }
             HWVersion    = if ($file.PSObject.Properties.Match('HardwareVersion')) { $file.HardwareVersion } else { $null }
         }
-    }
-}
-
-function Format-FileSize {
-    <#
-    .SYNOPSIS
-        Formats a file size in bytes into a human-readable string (KB, MB, GB).
-    .DESCRIPTION
-        Converts a byte value to a string with appropriate units for display.
-    #>
-
-    param([long]$Bytes)
-    
-    if ($Bytes -ge 1GB) {
-        return "{0:N2} GB" -f ($Bytes / 1GB)
-    }
-    elseif ($Bytes -ge 1MB) {
-        return "{0:N2} MB" -f ($Bytes / 1MB)
-    }
-    elseif ($Bytes -ge 1KB) {
-        return "{0:N2} KB" -f ($Bytes / 1KB)
-    }
-    else {
-        return "$Bytes B"
     }
 }
 
