@@ -468,7 +468,7 @@ function Get-NetworksData {
     try {
         $conn = $script:Connection
         if (-not $conn) { 
-            Set-StatusMessage -Refs $Refs -Message 'No connection to VMware server' -Type Error
+            Set-StatusMessage -Refs $Refs -Message 'No connection to vCenter' -Type Error
             return $null 
         }
 
