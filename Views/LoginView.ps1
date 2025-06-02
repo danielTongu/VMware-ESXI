@@ -27,134 +27,121 @@ function Show-LoginView {
     $script:LoginResult = $false
 
     # Create and configure the form
-    $form = New-Object System.Windows.Forms.Form -Property @{
-        Text            = 'VMware Management System'
-        StartPosition   = 'CenterScreen'
-        ClientSize      = [System.Drawing.Size]::new(400,500)
-        FormBorderStyle = 'FixedDialog'
-        MaximizeBox     = $false
-        MinimizeBox     = $false
-        BackColor       = $script:Theme.White
-        Font            = [System.Drawing.Font]::new('Segoe UI',10)
-        AutoScaleMode   = 'Font'
-    }
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text            = 'VMware Management System'
+    $form.StartPosition   = 'CenterScreen'
+    $form.ClientSize      = [System.Drawing.Size]::new(300,455)
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox     = $false
+    $form.MinimizeBox     = $false
+    $form.BackColor       = $script:Theme.White
+    $form.Font            = [System.Drawing.Font]::new('Segoe UI',10)
+    $form.AutoScaleMode   = 'Font'
+
+    # Shared logo/icon positioning and sizing
+    $logoSize     = [System.Drawing.Size]::new(100,100)
+    $logoLocation = [System.Drawing.Point]::new(([int](($form.ClientSize.Width - $logoSize.Width)/2)), 0)
 
     # Logo (optional)
-    $logo = New-Object System.Windows.Forms.PictureBox
-    $logo.SizeMode = 'Zoom'
-    $logo.Size     = [System.Drawing.Size]::new(130,130)
-    $logo.Location = [System.Drawing.Point]::new(135,10)
-    try { $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png") } catch {}
-    $form.Controls.Add($logo)
-
+    try {
+        $logo = New-Object System.Windows.Forms.PictureBox
+        $logo.SizeMode = 'Zoom'
+        $logo.Size     = $logoSize
+        $logo.Location = $logoLocation
+        $logo.Image = [System.Drawing.Image]::FromFile("$PSScriptRoot\..\Images\login.png")
+        $form.Controls.Add($logo)
+    } catch {
+        if ($logo) { $logo.Dispose() }
+        $icon = New-Object System.Windows.Forms.Label
+        $icon.Text = [char]0xE77B  # Unicode for "Contact" (person) icon in Segoe MDL2 Assets
+        $icon.Font = New-Object System.Drawing.Font('Segoe MDL2 Assets', 50, [System.Drawing.FontStyle]::Regular)
+        $icon.ForeColor = $script:Theme.PrimaryDarker
+        $icon.TextAlign = 'MiddleCenter'
+        $icon.Size      = $logoSize
+        $icon.Location  = $logoLocation
+        $form.Controls.Add($icon)
+    }
+    
     # Header label
     $lblHeader = New-Object System.Windows.Forms.Label
     $lblHeader.Text      = 'Sign In'
-    $lblHeader.Font      = [System.Drawing.Font]::new('Segoe UI',20,[System.Drawing.FontStyle]::Bold)
+    $lblHeader.Font      = [System.Drawing.Font]::new('Segoe UI',25,[System.Drawing.FontStyle]::Bold)
     $lblHeader.ForeColor = $script:Theme.Primary
     $lblHeader.AutoSize  = $true
-    $lblHeader.Location  = [System.Drawing.Point]::new(150,150)
-    
+    $lblHeader.Location  = [System.Drawing.Point]::new(([int](($form.ClientSize.Width - $lblHeader.PreferredWidth)/2)), 100)
+
     $form.Controls.Add($lblHeader)
 
     # Server selection
-    $lblServer = New-Object System.Windows.Forms.Label -Property @{ Text='vCenter Server'; Location=[System.Drawing.Point]::new(30,200) }
+    $lblServer = New-Object System.Windows.Forms.Label
+    $lblServer.Text     = 'vCenter Server'
+    $lblServer.Location = [System.Drawing.Point]::new(20,150)
+
     $cmbServer = New-Object System.Windows.Forms.ComboBox
     $cmbServer.Items.AddRange(@($script:Server,'vcenter2.cs.cwu.edu','Other'))
     $cmbServer.SelectedItem  = $script:Server
     $cmbServer.DropDownStyle = 'DropDownList'
-    $cmbServer.Location      = [System.Drawing.Point]::new(30,224)
-    $cmbServer.Size          = [System.Drawing.Size]::new(340,35)
+    $cmbServer.Location      = [System.Drawing.Point]::new(20,175)
+    $cmbServer.Size          = [System.Drawing.Size]::new(260,35)
     $cmbServer.Anchor        = 'Top,Left,Right'
 
     $form.Controls.AddRange(@($lblServer,$cmbServer))
 
     # Username field
-    $lblUser = New-Object System.Windows.Forms.Label -Property @{ 
-        Text = 'Username'
-        Location = [System.Drawing.Point]::new(30,270) 
-    }
+    $lblUser = New-Object System.Windows.Forms.Label
+    $lblUser.Text = 'Username'
+    $lblUser.Location = [System.Drawing.Point]::new(20,210)
 
-    $txtUser = New-Object System.Windows.Forms.TextBox -Property @{
-        Text     = $script:username
-        Location = [System.Drawing.Point]::new(30,294)
-        Size     = [System.Drawing.Size]::new(340,35)
-        Anchor   = 'Top,Left,Right'
-    }
+    $txtUser = New-Object System.Windows.Forms.TextBox
+    $txtUser.Text     = $script:username
+    $txtUser.Location = [System.Drawing.Point]::new(20,240)
+    $txtUser.Size     = [System.Drawing.Size]::new(260,35)
+    $txtUser.Anchor   = 'Top,Left,Right'
 
     $form.Controls.AddRange(@($lblUser,$txtUser))
 
     # Password field
-    $lblPass = New-Object System.Windows.Forms.Label -Property @{ 
-        Text = 'Password' 
-        Location=[System.Drawing.Point]::new(30,330) 
-    }
+    $lblPass = New-Object System.Windows.Forms.Label
+    $lblPass.Text = 'Password'
+    $lblPass.Location = [System.Drawing.Point]::new(20,270)
 
-    $txtPass = New-Object System.Windows.Forms.TextBox -Property @{
-        Text                    = $script:password
-        UseSystemPasswordChar   = $true
-        MaxLength               = 100
-        Location                = [System.Drawing.Point]::new(30,354)
-        Size                    = [System.Drawing.Size]::new(340,35) 
-        Anchor                  = 'Top,Left,Right'
-    }
+    $txtPass = New-Object System.Windows.Forms.TextBox
+    $txtPass.Text = $script:password
+    $txtPass.UseSystemPasswordChar = $true
+    $txtPass.MaxLength = 100
+    $txtPass.Location = [System.Drawing.Point]::new(20,300)
+    $txtPass.Size = [System.Drawing.Size]::new(260,35)
+    $txtPass.Anchor = 'Top,Left,Right'
 
     # Toggle button with checkbox
-    $chkShowPass = New-Object System.Windows.Forms.CheckBox -Property @{
-    Text     = "Show Password"
-    Location = [System.Drawing.Point]::new(30, 390)  
-    Size     = [System.Drawing.Size]::new(150, 20)
-    ForeColor = $script:Theme.PrimaryDark
-    }
-    $chkShowPass.Add_CheckedChanged({
-        $txtPass.UseSystemPasswordChar = -not $chkShowPass.Checked
-    })
+    $chkShowPass = New-Object System.Windows.Forms.CheckBox
+    $chkShowPass.Text      = "Show Password"
+    $chkShowPass.Location  = [System.Drawing.Point]::new(20, 330)
+    $chkShowPass.Size      = [System.Drawing.Size]::new(120, 20)
+    $chkShowPass.ForeColor = $script:Theme.PrimaryDark
+    $chkShowPass.Add_CheckedChanged({ $txtPass.UseSystemPasswordChar = -not $chkShowPass.Checked })
     $form.Controls.AddRange(@($lblPass, $txtPass, $chkShowPass))
 
-    # Status label
-    $lblStatus = New-Object System.Windows.Forms.Label -Property @{
-        Location  = [System.Drawing.Point]::new(30,410)
-        Size      = [System.Drawing.Size]::new(340,30)
-        ForeColor = $script:Theme.Error
-        TextAlign = 'MiddleCenter'
-    }
-    $form.Controls.Add($lblStatus)
-
-    # Helper: create styled button
-    function New-StyledButton {
-        [CmdletBinding()]
-        param(
-            [string]                $Text,
-            [System.Drawing.Point]  $Location,
-            [System.Drawing.Color]  $BackColor,
-            [System.Drawing.Color]  $ForeColor,
-            [int]                   $Width = 150,
-            [int]                   $Height = 40
-        )
-
-        $btn = New-Object System.Windows.Forms.Button
-        $btn.Text      = $Text
-        $btn.Location  = $Location
-        $btn.Size      = [System.Drawing.Size]::new($Width,$Height)
-        $btn.Font      = [System.Drawing.Font]::new('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
-        $btn.FlatStyle = 'Flat'
-        $btn.FlatAppearance.BorderSize = 0
-        $btn.BackColor = $BackColor
-        $btn.ForeColor = $ForeColor
-        $btn.FlatAppearance.MouseOverBackColor = $BackColor
-        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(
-            [int]($BackColor.R * 0.7), [int]($BackColor.G * 0.7), [int]($BackColor.B * 0.7)
-        )
-
-        return $btn
-    }
-
     # Create buttons
-    $btnLogin  = New-StyledButton -Text 'LOGIN'  -Location ([System.Drawing.Point]::new(30,440))  -BackColor $script:Theme.Primary     -ForeColor $script:Theme.White
-    $btnCancel = New-StyledButton -Text 'CANCEL' -Location ([System.Drawing.Point]::new(220,440)) -BackColor $script:Theme.PrimaryDark -ForeColor $script:Theme.White
+    $btnLogin  = New-StyledButton -Text 'LOGIN'  -Location ([System.Drawing.Point]::new(20,360))  -BackColor $script:Theme.Primary     -ForeColor $script:Theme.White -Width 120 -Height 40
+    $btnCancel = New-StyledButton -Text 'CANCEL' -Location ([System.Drawing.Point]::new(160,360)) -BackColor $script:Theme.PrimaryDark -ForeColor $script:Theme.White -Width 120 -Height 40
     $form.Controls.AddRange(@($btnLogin,$btnCancel))
     $form.AcceptButton = $btnLogin
     $form.CancelButton = $btnCancel
+
+    # Status label
+    $lblStatus = New-Object System.Windows.Forms.TextBox
+    $lblStatus.Location  = [System.Drawing.Point]::new(20,410)
+    $lblStatus.Size      = [System.Drawing.Size]::new(260,30)
+    $lblStatus.ForeColor = $script:Theme.Error
+    $lblStatus.BackColor = $form.BackColor
+    $lblStatus.Multiline = $true
+    $lblStatus.ScrollBars = 'Vertical'
+    $lblStatus.ReadOnly  = $true
+    $lblStatus.BorderStyle = 'None'
+    $lblStatus.WordWrap  = $true
+    $lblStatus.TextAlign = 'Center'
+    $form.Controls.Add($lblStatus)
 
     # Button event handlers
     $btnLogin.Add_Click({
@@ -162,7 +149,7 @@ function Show-LoginView {
             [Microsoft.VisualBasic.Interaction]::InputBox('Enter vCenter Server Address:','Custom Server',$cmbServer.Items[0])
         } else { $cmbServer.Text }
         
-        Handle-Login -Form $form -LoginButton $btnLogin -CancelButton $btnCancel -StatusLabel $lblStatus -UserBox $txtUser -PassBox $txtPass -Server $server
+        Handle-Login -Form $form -LoginButton $btnLogin -StatusLabel $lblStatus -UserBox $txtUser -PassBox $txtPass -Server $server
     })
     $btnCancel.Add_Click({ Handle-Cancel -Form $form })
 
@@ -178,7 +165,34 @@ function Show-LoginView {
 }
 
 
+# Helper: create styled button
+function New-StyledButton {
+    [CmdletBinding()]
+    param(
+        [string]                $Text,
+        [System.Drawing.Point]  $Location,
+        [System.Drawing.Color]  $BackColor,
+        [System.Drawing.Color]  $ForeColor,
+        [int]                   $Width = 150,
+        [int]                   $Height = 40
+    )
 
+    $btn = New-Object System.Windows.Forms.Button
+    $btn.Text      = $Text
+    $btn.Location  = $Location
+    $btn.Size      = [System.Drawing.Size]::new($Width,$Height)
+    $btn.Font      = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btn.FlatStyle = 'Flat'
+    $btn.FlatAppearance.BorderSize = 0
+    $btn.BackColor = $BackColor
+    $btn.ForeColor = $ForeColor
+    $btn.FlatAppearance.MouseOverBackColor = $BackColor
+    $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(
+        [int]($BackColor.R * 0.7), [int]($BackColor.G * 0.7), [int]($BackColor.B * 0.7)
+    )
+
+    return $btn
+}
 
 function Handle-Login {
     <#
@@ -190,8 +204,7 @@ function Handle-Login {
     param(
         [System.Windows.Forms.Form]    $Form,
         [System.Windows.Forms.Button]  $LoginButton,
-        [System.Windows.Forms.Button]  $CancelButton,
-        [System.Windows.Forms.Label]   $StatusLabel,
+        [System.Windows.Forms.TextBox]   $StatusLabel,
         [System.Windows.Forms.TextBox] $UserBox,
         [System.Windows.Forms.TextBox] $PassBox,
         [string]                       $Server
@@ -204,8 +217,6 @@ function Handle-Login {
     }
 
     # Disable UI
-    $LoginButton.Enabled = $false
-    $CancelButton.Enabled = $false
     $Form.Cursor         = [System.Windows.Forms.Cursors]::WaitCursor
     $StatusLabel.Text    = 'Authenticating...'
     $Form.Refresh()
@@ -241,8 +252,6 @@ function Handle-Login {
     finally {
         # Restore UI
         $LoginButton.Text    = 'LOGIN'
-        $LoginButton.Enabled = $true
-        $CancelButton.Enabled= $true
         $Form.Cursor         = [System.Windows.Forms.Cursors]::Default
     }
 }
