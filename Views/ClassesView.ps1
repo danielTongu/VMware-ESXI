@@ -11,6 +11,7 @@ function Show-ClassesView {
     .PARAMETER ContentPanel
         Panel to host the UI.
     #>
+    
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
@@ -21,12 +22,22 @@ function Show-ClassesView {
     $conn = $script:Connection
 
     if ($conn) {
-        Set-StatusMessage -Refs $script:Refs -Message "Connected to $($conn.Name)" -Type 'Success'
+        Set-StatusMessage -Refs $script:Refs -Message "Collecting templates..." -Type 'Info'
         $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+        Set-StatusMessage -Refs $script:Refs -Message "Collecting datastores..." -Type 'Info'
         $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+        Set-StatusMessage -Refs $script:Refs -Message "Collecting networks..." -Type 'Info'
         $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
+
+        Set-StatusMessage -Refs $script:Refs -Message "Getting data center..." -Type 'Info'
         $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
+
+        Set-StatusMessage -Refs $script:Refs -Message "Getting VMs folder..." -Type 'Info'
         $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc
+
+        Set-StatusMessage -Refs $script:Refs -Message "Collecting classes..." -Type 'Info'
         $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
         $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
                        Where-Object { $_.Name -notmatch '_' } |
@@ -36,6 +47,7 @@ function Show-ClassesView {
         $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
         $vmNames = @()
         foreach ($classFolder in $classSubFolders) {
+            Set-StatusMessage -Refs $script:Refs -Message "Collecting VMs in $($classFolder)..." -Type 'Info'
             $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
             foreach ($studentFolder in $studentFolders) {
                 $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
@@ -51,10 +63,11 @@ function Show-ClassesView {
             Servers     = $vmNames | Sort-Object -Unique
             LastUpdated = Get-Date
         }
+        Set-StatusMessage -Refs $script:Refs -Message "Collection completed." -Type 'Success'
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
         Connect-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
-        Set-StatusMessage -Refs $script:Refs -Message "No connection established" -Type 'Error'
+        Set-StatusMessage -Refs $script:Refs -Message 'No connection to vCenter.' -Type 'Error'
     }
 
 }
