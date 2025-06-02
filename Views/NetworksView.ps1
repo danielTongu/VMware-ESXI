@@ -479,15 +479,14 @@ function Get-NetworksData {
 
         $vmHost = Get-VMHost -Server $conn -ErrorAction SilentlyContinue 
         $portGroups = $vmHost | Get-VirtualPortGroup -Server $conn
-        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
-        $networkFolder = Get-Folder -Server $conn -Name 'vm' -Location $dc
 
-        # get all the classes (Not done yet - needs to be comp)
+        # The data structure: classMap[Class][Student][Network]
         $classMap = @{} 
 
-        # get all the networke
+        # The data structure allNetworks[NetworkName]
         $allNetworks = @{}
         
+        # Fill up the empty datastructure
         foreach ($pg in $portGroups) {
             $networkName = $pg.Name
             $regex = '^([A-Za-z0-9]+)_S(\d{2})$' # Try to parse bulk-created networks (CLASS_S##)
