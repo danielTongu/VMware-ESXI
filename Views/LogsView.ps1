@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 
-function global:Show-LogsView {
+function Show-LogsView {
     <#
     .SYNOPSIS
         Entry point for displaying or refreshing the Logs view.
@@ -16,12 +16,14 @@ function global:Show-LogsView {
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
 
-    # logsUiRefs return the content panel too
+    # Start with empty UI 
     $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
-    $data = Get-LogsData
 
-    if ($data) {
-        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
+    if (-not $script:Connection) { 
+        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message 'No connection to vCenter.' -Type 'Error'
+    } else {
+        $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
+        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $events
     }
 }
 
@@ -136,7 +138,7 @@ function New-LogsLayout {
     $statusLabel = New-Object System.Windows.Forms.Label
     $statusLabel.AutoSize = $true
     $statusLabel.Name = 'StatusLabel'
-    $statusLabel.Text = 'Ready'
+    $statusLabel.Text = 'No connection to vCenter.'
     $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
@@ -154,35 +156,6 @@ function New-LogsLayout {
     }
 }
 
-
-function Get-LogsData {
-    <#
-    .SYNOPSIS
-        Retrieves the 100 most recent vCenter events.
-    .OUTPUTS
-        Hashtable: @{ Events = <array>; LastUpdated = <DateTime> } or $null if unavailable.
-    #>
-
-    [CmdletBinding()] param()
-
-    Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Getting events..." -Type Error
-
-    $events = $null
-    $lastUpdated = Get-Date
-
-    if (-not $script:Connection) { 
-        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "No Connection" -Type 'Error'
-    } else {
-        try {
-            $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
-        } catch {
-            Write-Verbose "LogsView: $($_.Exception.Message)"
-        }
-    }
-    
-    return @{ Events = $events; LastUpdated = Get-Date }
-}
-
 function Update-LogsWithData {
     <#
     .SYNOPSIS
@@ -197,10 +170,8 @@ function Update-LogsWithData {
     # Update last refresh time first
     $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
-    Set-StatusMessage -UiRefs $UiRefs -Message "Populating logs..." -Type 'Success'
-
     # ---------- Store the original lines in the script scope ------
-    $script:OriginalLogLines = foreach ($ev in $Data.Events) {
+    $script:OriginalLogLines = foreach ($ev in $Data) {
         $ts = $ev.CreatedTime.ToString('G')
         $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
         "[$ts] ($usr) $($ev.FullFormattedMessage)"
@@ -208,7 +179,7 @@ function Update-LogsWithData {
 
     # ---------- Populate the textbox with the lines ----------------
     $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
-    Set-StatusMessage -UiRefs $UiRefs -Message "" -Type 'Success'
+    Set-StatusMessage -UiRefs $UiRefs -Message "Latest $($Data.Count) Events" -Type 'Success'
 
 
     # ---------- Wire User Interface Events -------------------------
