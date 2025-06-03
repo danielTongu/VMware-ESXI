@@ -294,7 +294,7 @@ function Update-OrphanData {
                     Owner        = $file.Owner
                     Datastore    = $file.Datastore
                     FullPath     = $file.FullPath
-                    RawFile      = $file
+                    RawFile      = $file.RawFile
                 }
             }
         }
@@ -587,11 +587,40 @@ function Wire-UIEvents {
             
             foreach ($row in $selectedRows) {
                 try {
-                    $fileObj = $row.DataBoundItem.RawFile
-                    Remove-DatastoreItem -Server $script:Connection -Item $fileObj.FullPath -Confirm:$false
-                    $deletedCount++
+                    # get the raw file info
+                    $fileObj = $row.DataBoundItem.RawFile -as [string]
+                    # extract folder info of the file
+                    if ($fileObj -match 'Folder=([^;]+);') {
+                        $folderPath = $matches[1].Trim()
+                        Write-Host "Extracted Folder: $folderPath"
+                        if ($folderPath -match '^\[(.+?)\]\s(.+)$') {
+                            $dsName = $matches[1]
+                            $dsPath = $matches[2]
+                            Write-Host "Datastore: $dsName"
+                            Write-Host "Path: $dsPath"
+
+                            $datastore = Get-Datastore -Name $dsName -ErrorAction Stop
+                            $dsRef = $datastore.ExtensionData.MoRef
+                            $fullPath = "[$dsName] $dsPath"
+
+                            # Get the FileManager managed object from the current vCenter connection
+                            $fileMgr = Get-View (Get-View ServiceInstance).Content.FileManager
+
+                            # Submit a deletion task for the specified file on the datastore
+                            $task = $fileMgr.DeleteDatastoreFile_Task($fullPath, $null)
+                            Write-Host "Deletion task submitted for: $fullPath"
+
+                            $deletedCount++
+                        } else {
+                            Write-Host "Could not parse datastore and path from: $folderPath"
+                        }
+                    } else {
+                        Write-Host "Could not extract Folder"
+                    }
+
                 }
                 catch {
+                    Write-Host "Exception caught: $($_.Exception.Message)"
                     $errors += "Failed to delete $($row.DataBoundItem.Name): $($_.Exception.Message)"
                 }
             }
