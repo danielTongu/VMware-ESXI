@@ -518,7 +518,7 @@ function New-ClassManagerLayout {
     # 3. Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params)
     $groupHostOps = New-Object System.Windows.Forms.GroupBox
     $groupHostOps.Dock = 'Fill'
-    $groupHostOps.Text = "Class Folder + Host Name"
+    $groupHostOps.Text = "Requires: All fields"
     $groupHostOps.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupHostOps.AutoSize = $true
     $groupHostOps.Padding = New-Object System.Windows.Forms.Padding(12)
