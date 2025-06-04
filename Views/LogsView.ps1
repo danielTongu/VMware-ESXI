@@ -18,6 +18,11 @@ function global:Show-LogsView {
 
     # logsUiRefs return the content panel too
     $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
+
+     # Show initial status
+    Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Loading event logs..." -Type 'Info'
+    [System.Windows.Forms.Application]::DoEvents() # Force UI update
+
     $data = Get-LogsData
 
     if ($data) {
@@ -165,8 +170,6 @@ function Get-LogsData {
 
     [CmdletBinding()] param()
 
-    Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Getting events..." -Type Error
-
     $events = $null
     $lastUpdated = Get-Date
 
@@ -196,8 +199,6 @@ function Update-LogsWithData {
 
     # Update last refresh time first
     $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
-
-    Set-StatusMessage -UiRefs $UiRefs -Message "Populating logs..." -Type 'Success'
 
     # ---------- Store the original lines in the script scope ------
     $script:OriginalLogLines = foreach ($ev in $Data.Events) {
