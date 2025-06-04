@@ -966,4 +966,29 @@ function Wire-UIEvents {
             Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
         }
     })
+
+    # Class Dropdown Selection Handler — Populates Students
+    $script:uiRefs.CmbClasses.Add_SelectedIndexChanged({
+        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
+        if ($selectedClass) {
+            $students = 1..20 | ForEach-Object { "{0:D2}" -f $_ }
+            $script:uiRefs.CmbStudents.Items.Clear()
+            foreach ($student in $students) {
+                $script:uiRefs.CmbStudents.Items.Add("Student $student")
+            }
+            $script:uiRefs.CmbStudentNetworks.Items.Clear()
+            $script:uiRefs.TxtNewNetwork.Text = ''
+        }
+    })
+
+    # Student Dropdown Selection Handler — Populates Network List
+    $script:uiRefs.CmbStudents.Add_SelectedIndexChanged({
+        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
+        $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ', ''
+        if ($selectedClass -and $selectedStudent) {
+            $networkName = "${selectedClass}_S$selectedStudent"
+            $script:uiRefs.CmbStudentNetworks.Items.Clear()
+            $script:uiRefs.CmbStudentNetworks.Items.Add($networkName)
+        }
+    })
 }
