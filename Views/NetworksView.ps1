@@ -792,12 +792,12 @@ function Wire-UIEvents {
                 Get-VirtualPortGroup -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualPortGroup -Confirm:$false
                 Get-VirtualSwitch -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualSwitch -Confirm:$false
                 Set-StatusMessage -Refs $script:uiRefs -Message "Network '$selectedNetwork' deleted successfully." -Type Success
-                
+
                 # Refresh the network list
                 $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
                 $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ',''
                 if ($selectedClass -and $selectedStudent) {
-                    $script:uiRefs.CmbStudents_SelectedIndexChanged($script:uiRefs.CmbStudents, $null)
+                    $script:uiRefs.CmbStudents_SelectedIndexChanged.Invoke($script:uiRefs.CmbStudents, $null)
                 }
             }
             catch {
@@ -811,19 +811,19 @@ function Wire-UIEvents {
 
     # Add Single Network Button Click
     $Refs.BtnAddNet.Add_Click({
-        $newNetworkName = $script:uiRefs.TxtNewNetwork.Text.Trim()
-        if ([string]::IsNullOrWhiteSpace($newNetworkName)) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a network name." -Type Warning
-            return
-        }
-
         $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
         $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ',''
         
-        # Suggest a name if fields are selected but textbox is empty
-        if ($newNetworkName -eq '' -and $selectedClass -and $selectedStudent) {
+        $newNetworkName = $script:uiRefs.TxtNewNetwork.Text.Trim()
+
+        if ([string]::IsNullOrWhiteSpace($newNetworkName) -and $selectedClass -and $selectedStudent) {
             $newNetworkName = "${selectedClass}_S${selectedStudent}"
             $script:uiRefs.TxtNewNetwork.Text = $newNetworkName
+        }
+
+        if ([string]::IsNullOrWhiteSpace($newNetworkName)) {
+            Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a network name." -Type Warning
+            return
         }
 
         $result = [System.Windows.Forms.MessageBox]::Show(
@@ -840,13 +840,11 @@ function Wire-UIEvents {
                 $vSwitch = New-VirtualSwitch -Name $newNetworkName -VMHost $vmHost -ErrorAction Stop
                 $vPortGroup = New-VirtualPortGroup -Name $newNetworkName -VirtualSwitch $vSwitch -ErrorAction Stop
                 Set-StatusMessage -Refs $script:uiRefs -Message "Network '$newNetworkName' added successfully." -Type Success
-                
-                # Refresh the network list
+
                 if ($selectedClass -and $selectedStudent) {
-                    $script:uiRefs.CmbStudents_SelectedIndexChanged($script:uiRefs.CmbStudents, $null)
+                    $script:uiRefs.CmbStudents_SelectedIndexChanged.Invoke($script:uiRefs.CmbStudents, $null)
                 }
-                
-                # Clear the input field
+
                 $script:uiRefs.TxtNewNetwork.Text = ''
             }
             catch {
@@ -875,7 +873,7 @@ function Wire-UIEvents {
         }
 
         $count = ($endNum - $startNum) + 1
-        $msg = "This will create $count networks from ${selectedClass}_S$startNum to ${selectedClass}_S$endNum. Continue?"
+        $msg = "This will create $count networks from ${selectedClass}_S$($startNum.ToString('00')) to ${selectedClass}_S$($endNum.ToString('00')). Continue?"
         
         $result = [System.Windows.Forms.MessageBox]::Show(
             $msg,
@@ -932,7 +930,7 @@ function Wire-UIEvents {
         }
 
         $count = ($endNum - $startNum) + 1
-        $msg = "This will delete $count networks from ${selectedClass}_S$startNum to ${selectedClass}_S$endNum. Continue?"
+        $msg = "This will delete $count networks from ${selectedClass}_S$($startNum.ToString('00')) to ${selectedClass}_S$($endNum.ToString('00')). Continue?"
         
         $result = [System.Windows.Forms.MessageBox]::Show(
             $msg,
@@ -966,6 +964,31 @@ function Wire-UIEvents {
         } 
         else {
             Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
+        }
+    })
+
+    # Class Dropdown Selection Handler — Populates Students
+    $script:uiRefs.CmbClasses.Add_SelectedIndexChanged({
+        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
+        if ($selectedClass) {
+            $students = 1..20 | ForEach-Object { "{0:D2}" -f $_ }
+            $script:uiRefs.CmbStudents.Items.Clear()
+            foreach ($student in $students) {
+                $script:uiRefs.CmbStudents.Items.Add("Student $student")
+            }
+            $script:uiRefs.CmbStudentNetworks.Items.Clear()
+            $script:uiRefs.TxtNewNetwork.Text = ''
+        }
+    })
+
+    # Student Dropdown Selection Handler — Populates Network List
+    $script:uiRefs.CmbStudents.Add_SelectedIndexChanged({
+        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
+        $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ', ''
+        if ($selectedClass -and $selectedStudent) {
+            $networkName = "${selectedClass}_S$selectedStudent"
+            $script:uiRefs.CmbStudentNetworks.Items.Clear()
+            $script:uiRefs.CmbStudentNetworks.Items.Add($networkName)
         }
     })
 }
