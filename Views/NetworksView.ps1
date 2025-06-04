@@ -970,21 +970,34 @@ function Wire-UIEvents {
     # Class Dropdown Selection Handler — Populates Students
     $script:uiRefs.CmbClasses.Add_SelectedIndexChanged({
         $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
-        if ($selectedClass) {
-            $students = 1..20 | ForEach-Object { "{0:D2}" -f $_ }
-            $script:uiRefs.CmbStudents.Items.Clear()
-            foreach ($student in $students) {
-                $script:uiRefs.CmbStudents.Items.Add("Student $student")
-            }
-            $script:uiRefs.CmbStudentNetworks.Items.Clear()
-            $script:uiRefs.TxtNewNetwork.Text = ''
+        $script:uiRefs.CmbStudents.Items.Clear()
+        $script:uiRefs.CmbStudentNetworks.Items.Clear()
+        $script:uiRefs.TxtNewNetwork.Text = ''
+
+        if ([string]::IsNullOrWhiteSpace($selectedClass)) {
+            return
         }
-    })
+
+        try {
+            $students = Get-StudentsForClass -Class $selectedClass
+
+            if ($students -and $students.Count -gt 0) {
+                foreach ($student in $students) {
+                    $script:uiRefs.CmbStudents.Items.Add($student)
+                }
+            } else {
+                Set-StatusMessage -Refs $script:uiRefs -Message "No students found for class '$selectedClass'" -Type Warning
+            }
+        } catch {
+            Set-StatusMessage -Refs $script:uiRefs -Message "Error loading students: $_" -Type Error
+        }
+})
 
     # Student Dropdown Selection Handler — Populates Network List
     $script:uiRefs.CmbStudents.Add_SelectedIndexChanged({
         $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
         $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ', ''
+
         if ($selectedClass -and $selectedStudent) {
             $networkName = "${selectedClass}_S$selectedStudent"
             $script:uiRefs.CmbStudentNetworks.Items.Clear()
