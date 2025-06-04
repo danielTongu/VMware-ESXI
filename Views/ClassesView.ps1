@@ -219,40 +219,6 @@ function New-ClassManagerLayout {
     $creatorLayout.Controls.Add($lblCreatorHeader, 0, 0)
     $creatorLayout.SetColumnSpan($lblCreatorHeader, 3)
 
-    # 1 - The start student numeric up-down control
-    $lblStartStu = New-Object System.Windows.Forms.Label
-    $lblStartStu.Text = 'Start Student Number:'
-    $lblStartStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblStartStu.AutoSize = $true
-    $creatorLayout.Controls.Add($lblStartStu, 0, 1)
-
-    $numStartStu = New-Object System.Windows.Forms.NumericUpDown
-    $numStartStu.Name = 'StartStudentNumber'
-    $numStartStu.Minimum = 1
-    $numStartStu.Maximum = 1000
-    $numStartStu.Value = 1
-    $numStartStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numStartStu.Dock = 'Fill'
-    $numStartStu.Width = 100
-    $creatorLayout.Controls.Add($numStartStu, 1, 1)
-
-    # 2 - The end student numeric up-down control
-    $lblEndStu = New-Object System.Windows.Forms.Label
-    $lblEndStu.Text = 'End Student Number:'
-    $lblEndStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblEndStu.AutoSize = $true
-    $numEndStu = New-Object System.Windows.Forms.NumericUpDown
-    $creatorLayout.Controls.Add($lblEndStu, 0, 2)
-
-    $numEndStu.Name = 'EndStudentNumber'
-    $numEndStu.Minimum = 1
-    $numEndStu.Maximum = 1000
-    $numEndStu.Value = 1
-    $numEndStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numEndStu.Dock = 'Fill'
-    $numEndStu.Width = 100
-    $creatorLayout.Controls.Add($numEndStu, 1, 2)
-
     # 3 - Course folder label and text box
     $lblClassFolder = New-Object System.Windows.Forms.Label
     $lblClassFolder.Text = 'Class Folder:'
@@ -450,7 +416,7 @@ function New-ClassManagerLayout {
 
     # ================= PARAMETERS GROUPBOX =================
     $groupParams = New-Object System.Windows.Forms.GroupBox
-    $groupParams.Text = "Parameters"
+    $groupParams.Text = "Selection"
     $groupParams.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupParams.AutoSize = $true
     $groupParams.Padding = New-Object System.Windows.Forms.Padding(15)
@@ -494,11 +460,11 @@ function New-ClassManagerLayout {
     # ================= ACTION GROUPBOXES =================
     # Grouped by parameter requirements
 
-    # 1. Remove-CourseFolder (classFolder + start/end students)
+    # 1. Remove-CourseFolder (requires classFolder)
     $groupRemoveCourse = New-Object System.Windows.Forms.GroupBox
     $groupRemoveCourse.Dock = 'Top'
     $groupRemoveCourse.AutoSize = $true
-    $groupRemoveCourse.Text = "Requires: Class Folder + Student Range"
+    $groupRemoveCourse.Text = "Requires: Class Folder"
     $groupRemoveCourse.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
     $groupRemoveCourse.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupRemoveCourse.Padding = New-Object System.Windows.Forms.Padding(12)
@@ -552,7 +518,7 @@ function New-ClassManagerLayout {
     # 3. Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params)
     $groupHostOps = New-Object System.Windows.Forms.GroupBox
     $groupHostOps.Dock = 'Fill'
-    $groupHostOps.Text = "Requires: All Parameters"
+    $groupHostOps.Text = "Class Folder + Host Name"
     $groupHostOps.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupHostOps.AutoSize = $true
     $groupHostOps.Padding = New-Object System.Windows.Forms.Padding(12)
