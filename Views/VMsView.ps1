@@ -599,7 +599,7 @@ function Wire-UIEvents {
         param($sender, $e)
         if ($e.KeyCode -eq 'Enter') {
             . $PSScriptRoot\VMsView.ps1
-            Apply-Filter -Refs Refs -Sender $sender -EventArgs $e
+            Apply-Filter -Refs $Refs -Sender $sender -EventArgs $e
         }
     })
 
