@@ -14,6 +14,7 @@ function Show-DashboardView {
     .PARAMETER ContentPanel
         The host panel into which the dashboard is drawn.
     #>
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -21,15 +22,14 @@ function Show-DashboardView {
     )
     
     # 1 ─ Build the empty UI ----------------------------------------------------
-    $script:uiRefs = New-DashboardLayout -ContentPanel $ContentPanel
-    $script:uiRefs["ContentPanel"] = $ContentPanel
+    $script:Refs = New-DashboardLayout -ContentPanel $ContentPanel
 
     # 2 ─ Gather data (may be $null when disconnected) --------------------------
     $data = Get-DashboardData
 
     # 3 ─ Populate or warn ------------------------------------------------------
     if ($data) {
-        Update-DashboardWithData -UiRefs $script:uiRefs -Data $data
+        Update-DashboardWithData -Data $data
     }
 }
 
@@ -47,6 +47,7 @@ function New-DashboardLayout {
 
     $ContentPanel.Controls.Clear()
     $ContentPanel.BackColor = $script:Theme.LightGray
+    $refs = @{ ContentPanel = $ContentPanel }
 
     # ── Root table ------------------------------------------------------------
     $root              = New-Object System.Windows.Forms.TableLayoutPanel
@@ -64,7 +65,7 @@ function New-DashboardLayout {
     $headerPanel      = New-DashboardHeader
     $root.Controls.Add($headerPanel, 0, 0)
     $lblRefresh       = $headerPanel.Controls.Find('LastRefreshLabel', $true)[0]
-    $refs             = @{ LastRefreshLabel = $lblRefresh }
+    $refs['LastRefreshLabel'] = $lblRefresh
 
     # ── Tab-control -----------------------------------------------------------
     $tabs             = New-Object System.Windows.Forms.TabControl
@@ -85,20 +86,18 @@ function New-DashboardLayout {
     # 2. Alerts ----------------------------------------------------------------
     $tabAlerts        = New-Object System.Windows.Forms.TabPage 'Recent Alerts and Events'
     $tabAlerts.BackColor = $script:Theme.White
-    $alertsTable      = New-DashboardTable `
-                            -Columns  @('Time','Severity','Message','Object') `
-                            -Name     'AlertsTable' `
-                            -Refs     ([ref]$refs)
+    $alertsTable      = New-DashboardTable  -Columns  @('Time','Severity','Message','Object') `
+                                            -Name     'AlertsTable' `
+                                            -Refs     ([ref]$refs)
     $tabAlerts.Controls.Add($alertsTable)
     $tabs.TabPages.Add($tabAlerts)
 
     # 3. Storage ---------------------------------------------------------------
     $tabStorage       = New-Object System.Windows.Forms.TabPage 'Storage Overview'
     $tabStorage.BackColor = $script:Theme.White
-    $storageTable     = New-DashboardTable `
-                            -Columns  @('Datastore','Capacity (GB)','Used (GB)','Free (GB)','Usage') `
-                            -Name     'StorageTable' `
-                            -Refs     ([ref]$refs)
+    $storageTable     = New-DashboardTable  -Columns  @('Datastore','Capacity (GB)','Used (GB)','Free (GB)','Usage') `
+                                            -Name     'StorageTable' `
+                                            -Refs     ([ref]$refs)
     $tabStorage.Controls.Add($storageTable)
     $tabs.TabPages.Add($tabStorage)
 
@@ -137,25 +136,24 @@ function Get-DashboardData {
     #>
 
     [CmdletBinding()] 
-    param()
 
     $data = @{}
     $conn = $script:Connection
 
     if (-not $conn) {
-        Set-StatusMessage -UiRefs $script:uiRefs -Message 'No connection to vCenter.' -Type 'Error'
+        Set-StatusMessage 'No Serverection to vCenter.' -Type 'Error'
     } else {
         # Sequential data collection for compatibility
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading host information..." -Type 'Info'
+        Set-StatusMessage "Loading host information..." -Type 'Info'
         $data.HostInfo = Get-VMHost -Server $conn -ErrorAction SilentlyContinue
 
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Analyzing network configuration..." -Type 'Info'
+        Set-StatusMessage "Analyzing network configuration..." -Type 'Info'
         $data.PortGroups = $data.HostInfo  | Get-VirtualPortGroup
 
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading virtual machines..." -Type 'Info'
+        Set-StatusMessage "Loading virtual machines..." -Type 'Info'
         $data.VMs = Get-VM -Server $conn -ErrorAction SilentlyContinue
         
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading datastores..." -Type 'Info'
+        Set-StatusMessage "Loading datastores..." -Type 'Info'
         $data.Datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue
 
         $data.Center =  Get-Datacenter -Server $conn -Name 'Datacenter'
@@ -163,19 +161,19 @@ function Get-DashboardData {
         $data.ClassesRoot =  Get-Folder -Server $conn -Name 'Classes' -Location $data.VMFolder
         $data.Classes =  Get-Folder -Server $conn -Location $data.ClassesRoot -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '_' } |Select-Object -ExpandProperty Name
 
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Checking for orphaned files..." -Type 'Info'
+        Set-StatusMessage "Checking for orphaned files..." -Type 'Info'
         $data.OrphanedFiles = $data.Datastores | ForEach-Object { Find-OrphanedFiles -DatastoreName $_ }
         
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading network adapters..." -Type 'Info'
+        Set-StatusMessage "Loading network adapters..." -Type 'Info'
         $data.Adapters  = Get-VMHostNetworkAdapter -Server $conn -ErrorAction SilentlyContinue
         
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading templates..." -Type 'Info'
+        Set-StatusMessage "Loading templates..." -Type 'Info'
         $data.Templates = Get-Template -Server $conn -ErrorAction SilentlyContinue
 
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading recent events..." -Type 'Info'
+        Set-StatusMessage "Loading recent events..." -Type 'Info'
         $data.Events = Get-VIEvent -Server $conn -MaxSamples 10 -ErrorAction SilentlyContinue
 
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Connected to $($dc)" -Type 'Success'
+        Set-StatusMessage "Connected to $($dc)" -Type 'Success'
     }
 
     return $data
@@ -187,10 +185,7 @@ function Update-DashboardWithData {
         Pushes all collected data sets into the corresponding UI controls.
     #>
     [CmdletBinding()]
-    param(
-        [hashtable] $UiRefs,
-        [hashtable] $Data
-    )
+    param([hashtable] $Data)
 
     # ── Statistic cards ----------------------------------------------------------
     $cardValues = @{
@@ -206,23 +201,23 @@ function Update-DashboardWithData {
     }
 
     foreach ($key in $cardValues.Keys) {
-        $label              = $UiRefs["$($key)Value"]
+        $label              = $script:Refs["$($key)Value"]
         $label.Text         = $cardValues[$key]
         $label.ForeColor    = $script:Theme.Primary
     }
 
     # ── Connection status --------------------------------------------------------
     if ($Data.HostInfo) {
-        $firstHost          = $Data.HostInfo[0]
-        $UiRefs['StatusLabel'].Text      = "CONNECTED to $($firstHost.Name) | vSphere $($firstHost.Version)"
-        $UiRefs['StatusLabel'].ForeColor = $script:Theme.Success
+        $firstHost = $Data.HostInfo[0]
+        $script:Refs['StatusLabel'].Text = "CONNECTED to vSphere $($firstHost.Version)"
+        $script:Refs['StatusLabel'].ForeColor = $script:Theme.Success
     }
 
     # ── Last-refresh -------------------------------------------------------------
-    $UiRefs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
+    $script:Refs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss')"
 
     # ── Alerts & events ----------------------------------------------------------
-    $grid = $UiRefs['AlertsTable']
+    $grid = $script:Refs['AlertsTable']
     $grid.Rows.Clear()
     foreach ($evt in $Data.Events) {
         $rowIdx = $grid.Rows.Add()
@@ -237,7 +232,7 @@ function Update-DashboardWithData {
     }
 
     # ── Storage overview ---------------------------------------------------------
-    $grid = $UiRefs['StorageTable']
+    $grid = $script:Refs['StorageTable']
     $grid.Rows.Clear()
     foreach ($ds in $Data.Datastores) {
         $capGB  = [math]::Round($ds.CapacityGB,1)
@@ -458,7 +453,7 @@ function New-DashboardActions {
     # Event handler: reload script and re-render view
     $btnRefresh.Add_Click({
         . "$PSScriptRoot\DashboardView.ps1"
-        Show-DashboardView -ContentPanel $script:uiRefs.ContentPanel
+        Show-DashboardView -ContentPanel $script:Refs.ContentPanel
     })
 
     $flow.Controls.Add($btnRefresh)
@@ -473,8 +468,6 @@ function Set-StatusMessage {
     .DESCRIPTION
         Displays user-friendly status messages in the dashboard footer while
         detailed errors are logged to the console for developers.
-    .PARAMETER UiRefs
-        Hashtable containing UI control references (must include 'StatusLabel')
     .PARAMETER Message
         The message text to display to the user
     .PARAMETER Type
@@ -482,12 +475,8 @@ function Set-StatusMessage {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [psobject] $UiRefs,
-        [Parameter(Mandatory)]
-        [string]$Message,
-        [ValidateSet('Success','Warning','Error','Info')]
-        [string]$Type = 'Info'
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('Success','Warning','Error','Info')][string]$Type = 'Info'
     )
     
     try {
@@ -495,12 +484,12 @@ function Set-StatusMessage {
         Write-Verbose "[STATUS] $Type`: $Message"
         
         # Update UI
-        $UiRefs.StatusLabel.Text = $Message
-        $UiRefs.StatusLabel.ForeColor = switch ($Type) {
+        $script:Refs.StatusLabel.Text = $Message
+        $script:Refs.StatusLabel.ForeColor = switch ($Type) {
             'Success' { $script:Theme.Success }
             'Warning' { $script:Theme.Warning }
             'Error'   { $script:Theme.Error }
-            default    { $script:Theme.PrimaryDarker }
+            default   { $script:Theme.PrimaryDarker }
         }
         
         # Force immediate UI update
