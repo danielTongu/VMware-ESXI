@@ -31,8 +31,7 @@ Initialize-Theme
 
 # 3) Declare script-scoped state for the login UI
 $script:Server      = 'csvcsa.cs.cwu.edu'  # default vCenter host
-$script:username    = ''                   # optional pre-fill
-$script:password    = ''                   # optional pre-fill
+$script:Username    = ''                   # optional pre-fill
 $script:Connection  = $null                # will hold the VI.ServerConnection
 $script:LoginResult = $false               # set by the login form
 
