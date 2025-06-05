@@ -9,24 +9,40 @@ function global:Show-LogsView {
     <#
     .SYNOPSIS
         Entry point for displaying or refreshing the Logs view.
+
     .DESCRIPTION
-        Initializes the Logs UI and populates it with the latest log data.
+        Builds (or rebuilds) the Logs UI, directly retrieves the latest
+        vCenter events, and sends them to the view. 
     #>
 
     [CmdletBinding()]
-    param([Parameter(Mandatory)][System.Windows.Forms.Panel]$ContentPanel)
+    param(
+        [Parameter(Mandatory)]
+        [System.Windows.Forms.Panel] $ContentPanel
+    )
 
-    # logsUiRefs return the content panel too
-    $script:LogsUiRefs = New-LogsLayout -ContentPanel $ContentPanel
+    # Re/-create the UI and store references.
+    $script:Refs = New-LogsLayout -ContentPanel $ContentPanel
 
-     # Show initial status
-    Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Loading event logs..." -Type 'Info'
-    [System.Windows.Forms.Application]::DoEvents() # Force UI update
+    # Tell the user we are working.
+    Set-StatusMessage -Message 'Loading event logs...' -Type 'Info'
+    [System.Windows.Forms.Application]::DoEvents()   # flush UI
 
-    $data = Get-LogsData
+    # ── Retrieve the 100 most recent vCenter events ────────────────────────
+    $script:eventCount = 100
+    $events = $null
+    if (-not $script:Connection) {
+        Set-StatusMessage -Message 'No connection to vCenter.' -Type 'Error'
+    } else {
+        $events = Get-VIEvent -Server $script:Connection -MaxSamples $eventCount -ErrorAction Stop
+        Set-StatusMessage -Message "Loaded first $script:eventCount events." -Type 'Success'
+    }
 
-    if ($data) {
-        Update-LogsWithData -UiRefs $script:LogsUiRefs -Data $data
+    # ── Display the logs ───────────────────────────────────────────────────
+    if ($events) {
+        Update-LogsWithData -Events $events
+    } else {
+        Set-StatusMessage -Message 'Weird, we have no events.' -Type 'Error'
     }
 }
 
@@ -44,6 +60,7 @@ function New-LogsLayout {
 
     $ContentPanel.Controls.Clear()
     $ContentPanel.BackColor = $script:Theme.LightGray
+    $Refs = @{ ContentPanel = $ContentPanel }
 
     # ── root ────────────────────────────────────────────────────────────────
     $root = [System.Windows.Forms.TableLayoutPanel]::new()
@@ -81,6 +98,7 @@ function New-LogsLayout {
     $lblRefresh.Location = [System.Drawing.Point]::new(20,50)
     $lblRefresh.AutoSize = $true
     $hdr.Controls.Add($lblRefresh)
+    $Refs['LastRefreshLabel'] = $lblRefresh
 
     # ── filter row ──────────────────────────────────────────────────────────
     $flt = [System.Windows.Forms.Panel]::new()
@@ -97,10 +115,12 @@ function New-LogsLayout {
     $txtFind.BackColor = $script:Theme.White
     $txtFind.ForeColor = $script:Theme.PrimaryDark
     $flt.Controls.Add($txtFind)
+    $Refs['SearchBox'] = $txtFind
 
     $btnSearch = New-FormButton -Name 'btnSearch' -Text 'SEARCH' -Size (New-Object System.Drawing.Size(100, 30))
     $btnSearch.Location = [System.Drawing.Point]::new(330, 10)
     $flt.Controls.Add($btnSearch)
+    $Refs['SearchButton'] = $btnSearch
 
     # ── log box ─────────────────────────────────────────────────────────────
     $scroll = [System.Windows.Forms.Panel]::new()
@@ -119,10 +139,14 @@ function New-LogsLayout {
     $txtLogs.ForeColor = $script:Theme.PrimaryDark
     $txtLogs.Font = [System.Drawing.Font]::new('Segoe UI', 10)
     $scroll.Controls.Add($txtLogs)
+    $Refs['LogTextBox'] = $txtLogs
 
     # ── buttons row ─────────────────────────────────────────────────────────
     $btnRefresh = New-FormButton -Name 'btnRefresh' -Text 'REFRESH'
+    $Refs['RefreshButton'] = $btnRefresh
+
     $btnClear = New-FormButton -Name 'btnClear' -Text 'CLEAR'
+    $Refs['ClearButton'] = $btnClear
 
     $ctrls = [System.Windows.Forms.FlowLayoutPanel]::new()
     $ctrls.Dock = 'Fill'
@@ -139,116 +163,106 @@ function New-LogsLayout {
     $root.Controls.Add($footer, 0, 5)
 
     $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Dock = 'Fill'
     $statusLabel.AutoSize = $true
     $statusLabel.Name = 'StatusLabel'
     $statusLabel.Text = 'Ready'
     $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
+    $Refs['StatusLabel'] =  $statusLabel
 
-    return @{
-        ContentPanel  = $ContentPanel          # needed for Refresh handler
-        LogTextBox    = $txtLogs
-        SearchBox     = $txtFind
-        SearchButton  = $btnSearch
-        RefreshButton = $btnRefresh
-        ClearButton   = $btnClear
-        OriginalLines = @()                    # cache for filter restore
-        StatusLabel   = $statusLabel
-        Header        = @{ LastRefreshLabel = $lblRefresh }
-    }
+    return $Refs
 }
 
-
-function Get-LogsData {
-    <#
-    .SYNOPSIS
-        Retrieves the 100 most recent vCenter events.
-    .OUTPUTS
-        Hashtable: @{ Events = <array>; LastUpdated = <DateTime> } or $null if unavailable.
-    #>
-
-    [CmdletBinding()] param()
-
-    $events = $null
-    $lastUpdated = Get-Date
-
-    if (-not $script:Connection) { 
-        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "No Connection" -Type 'Error'
-    } else {
-        try {
-            $events = Get-VIEvent -Server $script:Connection -MaxSamples 100 -ErrorAction Stop
-        } catch {
-            Write-Verbose "LogsView: $($_.Exception.Message)"
-        }
-    }
-    
-    return @{ Events = $events; LastUpdated = Get-Date }
-}
 
 function Update-LogsWithData {
     <#
     .SYNOPSIS
-        Populates the log box and wires SEARCH / CLEAR / REFRESH buttons.
+        Populates the Logs view and wires SEARCH / CLEAR / REFRESH buttons.
+
     .DESCRIPTION
-        Updates the log display with new data and sets up event handlers for search, clear, and refresh actions.
+        Accepts an **array of vCenter event objects** and:
+        1. Formats them into readable text lines.
+        2. Displays the lines in the multiline textbox.
+        3. Updates the “Last refresh” label.
+        4. Connects the three UI buttons (Search, Clear, Refresh).
+
+    .PARAMETER Events
+        The event objects to display (output of `Get-VIEvent`).
     #>
 
     [CmdletBinding()]
-    param([psobject]$UiRefs, [hashtable]$Data)
+    param([Parameter(Mandatory)][array]$Events)
 
-    # Update last refresh time first
-    $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    # ── Header timestamp ───────────────────────────────────────────────────
+    $script:Refs.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
-    # ---------- Store the original lines in the script scope ------
-    $script:OriginalLogLines = foreach ($ev in $Data.Events) {
-        $ts = $ev.CreatedTime.ToString('G')
+    # ── Build and cache the original log text ──────────────────────────────
+    $script:OriginalLogLines = foreach ($ev in $Events) {
+        $ts  = $ev.CreatedTime.ToString('G')
         $usr = if ($ev.UserName) { $ev.UserName } else { 'N/A' }
         "[$ts] ($usr) $($ev.FullFormattedMessage)"
     }
 
-    # ---------- Populate the textbox with the lines ----------------
-    $UiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
-    Set-StatusMessage -UiRefs $UiRefs -Message "" -Type 'Success'
+    $script:Refs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
 
+    # ───────────────────── Button Event Handlers ───────────────────────────
 
-    # ---------- Wire User Interface Events -------------------------
-    $UiRefs.SearchButton.Add_Click({
+    # When the user presses Enter while the cursor is in the Search textbox,
+    # run the SEARCH button’s click handler (and suppress the default beep).
+    $script:Refs.SearchBox.Add_KeyDown({
+        param($sender, $e)                 # $e = KeyEventArgs
+        . $PSScriptRoot\LogsView.ps1       # bring helpers into scope
+
+        if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
+            $e.SuppressKeyPress = $true    # stop the ding sound
+            $script:Refs.SearchButton.PerformClick()
+        }
+    })
+
+    # SEARCH
+    $script:Refs.SearchButton.Add_Click({
         . $PSScriptRoot\LogsView.ps1
         try {
-            $term = $script:LogsUiRefs.SearchBox.Text.Trim()
+            $term = $script:Refs.SearchBox.Text.Trim()
             if ($term) {
-                Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Showing $($term)" -Type 'Success'
-                $filteredLines = $script:OriginalLogLines | Where-Object { $_ -match [regex]::Escape($term) }
-                $script:LogsUiRefs.LogTextBox.Text = $filteredLines -join "`r`n"
-            }
-            else {
-                $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
-                Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "" -Type 'Success'
+                # Build a regex that always ignores case
+                $pattern = [regex]::Escape($term)
+                $regex   = [regex]::new( $pattern,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                $filteredLines = $script:OriginalLogLines | Where-Object { $regex.IsMatch($_) }
+                $script:Refs.LogTextBox.Text = $filteredLines -join "`r`n"
+                Set-StatusMessage -Message "Showing '$term'" -Type 'Success'
+            } else {
+                # Empty search string → restore full list
+                $script:Refs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+                Set-StatusMessage -Message "Loaded first $script:eventCount events." -Type 'Success'
             }
         }
-        catch { 
-            Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Search error: $_" -Type 'Error'
+        catch {
+            Set-StatusMessage -Message "Search error: $_" -Type 'Error'
         }
     })
 
-    
-    $UiRefs.ClearButton.Add_Click({
+
+    # CLEAR
+    $script:Refs.ClearButton.Add_Click({
         . $PSScriptRoot\LogsView.ps1
-        Set-StatusMessage -UiRefs $script:LogsUiRefs -Message "Cleared field" -Type 'Success'
-        $script:LogsUiRefs.SearchBox.Clear()
-        $script:LogsUiRefs.LogTextBox.Text = $script:OriginalLogLines -join "`r`n"
+        Set-StatusMessage -Message 'Cleared field' -Type 'Success'
+        $script:Refs.SearchBox.Clear()
+        $script:Refs.LogTextBox.Text =
+            $script:OriginalLogLines -join "`r`n"
     })
 
-    
-    $UiRefs.RefreshButton.Add_Click({
+    # REFRESH
+    $script:Refs.RefreshButton.Add_Click({
         . $PSScriptRoot\LogsView.ps1
-        # Update timestamp immediately
-        $script:LogsUiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
-        Show-LogsView -ContentPanel $script:LogsUiRefs.ContentPanel
+        # Update timestamp immediately for UI feedback
+        $script:Refs.Header.LastRefreshLabel.Text =
+            "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+        Show-LogsView -ContentPanel $script:Refs.ContentPanel
     })
 }
-
 
 
 # ------------------ Helper Functions ------------------------------------------
@@ -263,16 +277,13 @@ function Set-StatusMessage {
     #>
 
     param(
-        [Parameter(Mandatory)]
-        [psobject] $UiRefs,
-        [string] $Message,
-        [ValidateSet('Success','Warning','Error','Info')]
-        [string] $Type = 'Info'
+        [Parameter(Mandatory)][string] $Message,
+        [ValidateSet('Success','Warning','Error','Info')][string] $Type = 'Info'
     )
     
-    $UiRefs.StatusLabel.Text = $Message
+    $script:Refs.StatusLabel.Text = $Message
 
-    $UiRefs.StatusLabel.ForeColor = switch ($Type) {
+    $script:Refs.StatusLabel.ForeColor = switch ($Type) {
         'Success' { $script:Theme.Success }
         'Warning' { $script:Theme.Warning }
         'Error'   { $script:Theme.Error }
