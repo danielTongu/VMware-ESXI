@@ -7,17 +7,6 @@
 #>
 
 
-# ---------------------------------------------------------------------------
-# Load PowerCLI (if not already) and ignore SSL warnings
-# ---------------------------------------------------------------------------
-if (-not (Get-Module -Name VMware.PowerCLI)) {
-    Import-Module -Name VMware.PowerCLI -ErrorAction Stop
-}
-Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false | Out-Null
-
-
-
-
 # 1) Load Required Assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
