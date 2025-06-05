@@ -51,7 +51,7 @@ Write-Host "✅ Connected to $script:Server as $($script:Connection.UserName)"
 
 # 6) Proceed to the UI for navigating views
 . "$PSScriptRoot\Views\MainView.ps1"
-Show-MainView
+Show-AppWindow
 
 
 # 6) Clean up
