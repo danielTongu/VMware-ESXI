@@ -93,7 +93,7 @@ function Show-LoginView {
     $lblUser.Location = [System.Drawing.Point]::new(20,210)
 
     $txtUser = New-Object System.Windows.Forms.TextBox
-    $txtUser.Text     = $script:username
+    $txtUser.Text     = $script:Username
     $txtUser.Location = [System.Drawing.Point]::new(20,240)
     $txtUser.Size     = [System.Drawing.Size]::new(260,35)
     $txtUser.Anchor   = 'Top,Left,Right'
@@ -106,7 +106,6 @@ function Show-LoginView {
     $lblPass.Location = [System.Drawing.Point]::new(20,270)
 
     $txtPass = New-Object System.Windows.Forms.TextBox
-    $txtPass.Text = $script:password
     $txtPass.UseSystemPasswordChar = $true
     $txtPass.MaxLength = 100
     $txtPass.Location = [System.Drawing.Point]::new(20,300)
@@ -232,7 +231,7 @@ function Handle-Login {
         $oldPref = $global:ErrorActionPreference
         $global:ErrorActionPreference = 'SilentlyContinue'
 
-        $script:username   = $UserBox.Text
+        $script:Username   = $UserBox.Text
         $script:Server     = $Server
         $script:Connection = Connect-VIServer -Server $Server -Credential $psCred
         
