@@ -11,7 +11,6 @@ function Show-ClassesView {
     .PARAMETER ContentPanel
         Panel to host the UI.
     #>
-    
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
@@ -22,22 +21,12 @@ function Show-ClassesView {
     $conn = $script:Connection
 
     if ($conn) {
-        Set-StatusMessage -Refs $script:Refs -Message "Collecting templates..." -Type 'Info'
+        Set-StatusMessage -Refs $script:Refs -Message "Connected to $($conn.Name)" -Type 'Success'
         $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-
-        Set-StatusMessage -Refs $script:Refs -Message "Collecting datastores..." -Type 'Info'
         $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-
-        Set-StatusMessage -Refs $script:Refs -Message "Collecting networks..." -Type 'Info'
         $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
-
-        Set-StatusMessage -Refs $script:Refs -Message "Getting data center..." -Type 'Info'
         $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
-
-        Set-StatusMessage -Refs $script:Refs -Message "Getting VMs folder..." -Type 'Info'
         $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc
-
-        Set-StatusMessage -Refs $script:Refs -Message "Collecting classes..." -Type 'Info'
         $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
         $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
                        Where-Object { $_.Name -notmatch '_' } |
@@ -47,7 +36,6 @@ function Show-ClassesView {
         $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
         $vmNames = @()
         foreach ($classFolder in $classSubFolders) {
-            Set-StatusMessage -Refs $script:Refs -Message "Collecting VMs in $($classFolder)..." -Type 'Info'
             $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
             foreach ($studentFolder in $studentFolders) {
                 $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
@@ -63,11 +51,10 @@ function Show-ClassesView {
             Servers     = $vmNames | Sort-Object -Unique
             LastUpdated = Get-Date
         }
-        Set-StatusMessage -Refs $script:Refs -Message "Collection completed." -Type 'Success'
         Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
         Connect-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
     } else {
-        Set-StatusMessage -Refs $script:Refs -Message 'No connection to vCenter.' -Type 'Error'
+        Set-StatusMessage -Refs $script:Refs -Message "No connection established" -Type 'Error'
     }
 
 }
@@ -231,40 +218,6 @@ function New-ClassManagerLayout {
     $lblCreatorHeader.AutoSize = $true
     $creatorLayout.Controls.Add($lblCreatorHeader, 0, 0)
     $creatorLayout.SetColumnSpan($lblCreatorHeader, 3)
-
-    # 1 - The start student numeric up-down control
-    $lblStartStu = New-Object System.Windows.Forms.Label
-    $lblStartStu.Text = 'Start Student Number:'
-    $lblStartStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblStartStu.AutoSize = $true
-    $creatorLayout.Controls.Add($lblStartStu, 0, 1)
-
-    $numStartStu = New-Object System.Windows.Forms.NumericUpDown
-    $numStartStu.Name = 'StartStudentNumber'
-    $numStartStu.Minimum = 1
-    $numStartStu.Maximum = 1000
-    $numStartStu.Value = 1
-    $numStartStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numStartStu.Dock = 'Fill'
-    $numStartStu.Width = 100
-    $creatorLayout.Controls.Add($numStartStu, 1, 1)
-
-    # 2 - The end student numeric up-down control
-    $lblEndStu = New-Object System.Windows.Forms.Label
-    $lblEndStu.Text = 'End Student Number:'
-    $lblEndStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $lblEndStu.AutoSize = $true
-    $numEndStu = New-Object System.Windows.Forms.NumericUpDown
-    $creatorLayout.Controls.Add($lblEndStu, 0, 2)
-
-    $numEndStu.Name = 'EndStudentNumber'
-    $numEndStu.Minimum = 1
-    $numEndStu.Maximum = 1000
-    $numEndStu.Value = 1
-    $numEndStu.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $numEndStu.Dock = 'Fill'
-    $numEndStu.Width = 100
-    $creatorLayout.Controls.Add($numEndStu, 1, 2)
 
     # 3 - Course folder label and text box
     $lblClassFolder = New-Object System.Windows.Forms.Label
@@ -463,7 +416,7 @@ function New-ClassManagerLayout {
 
     # ================= PARAMETERS GROUPBOX =================
     $groupParams = New-Object System.Windows.Forms.GroupBox
-    $groupParams.Text = "Parameters"
+    $groupParams.Text = "Selection"
     $groupParams.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupParams.AutoSize = $true
     $groupParams.Padding = New-Object System.Windows.Forms.Padding(15)
@@ -507,11 +460,11 @@ function New-ClassManagerLayout {
     # ================= ACTION GROUPBOXES =================
     # Grouped by parameter requirements
 
-    # 1. Remove-CourseFolder (classFolder + start/end students)
+    # 1. Remove-CourseFolder (requires classFolder)
     $groupRemoveCourse = New-Object System.Windows.Forms.GroupBox
     $groupRemoveCourse.Dock = 'Top'
     $groupRemoveCourse.AutoSize = $true
-    $groupRemoveCourse.Text = "Requires: Class Folder + Student Range"
+    $groupRemoveCourse.Text = "Requires: Class Folder"
     $groupRemoveCourse.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
     $groupRemoveCourse.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupRemoveCourse.Padding = New-Object System.Windows.Forms.Padding(12)
@@ -565,7 +518,7 @@ function New-ClassManagerLayout {
     # 3. Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params)
     $groupHostOps = New-Object System.Windows.Forms.GroupBox
     $groupHostOps.Dock = 'Fill'
-    $groupHostOps.Text = "Requires: All Parameters"
+    $groupHostOps.Text = "Requires: All fields"
     $groupHostOps.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupHostOps.AutoSize = $true
     $groupHostOps.Padding = New-Object System.Windows.Forms.Padding(12)

@@ -89,11 +89,11 @@ function Show-MainView {
     # Username label
     $usernameLabel = New-Object System.Windows.Forms.Label
     $usernameLabel.Dock          = 'Fill'
-    $usernameLabel.AutoSize  = $true
-    $usernameLabel.TextAlign = 'MiddleCenter'
-    $usernameLabel.Text      = if ($script:Connection) { "$($script:username)`n$($script:Server)" } else { "Not logged in" }
-    $usernameLabel.Font      = New-Object System.Drawing.Font('Segoe UI',8)
-    $usernameLabel.ForeColor = $script:Theme.White
+    $usernameLabel.AutoSize      = $true
+    $usernameLabel.TextAlign     = 'MiddleCenter'
+    $usernameLabel.Text          = if ($script:Connection) { "$($script:username)`n$($script:Server)" } else { "Not logged in" }
+    $usernameLabel.Font          = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Italic)
+    $usernameLabel.ForeColor     = $script:Theme.White
     $usernameLabel.Padding       = New-Object System.Windows.Forms.Padding(10)
     $sidebarLayout.Controls.Add($usernameLabel,0,2)
 
