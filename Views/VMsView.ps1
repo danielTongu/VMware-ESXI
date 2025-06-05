@@ -19,12 +19,13 @@ function Show-VMsView {
     )
 
     $script:Refs = New-VMsLayout -ContentPanel $ContentPanel
+    [System.Windows.Forms.Application]::DoEvents()
 
-     $data = Get-VMsData
+    $data = Get-VMsData
 
     if ($data) {
-        Update-VMData -Refs $script:Refs -Data $data
-        Wire-UIEvents -Refs $script:Refs
+        Update-VMData -Data $data
+        Wire-UIEvents
     }
 }
 
@@ -33,6 +34,7 @@ function New-VMsLayout {
     <#
     .SYNOPSIS
         Builds the WinForms layout and returns references to key controls.
+        Returns the UI references.
     #>
 
     [CmdletBinding()]
@@ -40,6 +42,7 @@ function New-VMsLayout {
 
     $ContentPanel.Controls.Clear()
     $ContentPanel.BackColor = $script:Theme.LightGray
+    $Refs = @{ ContentPanel = $ContentPanel }
 
     # ----- Root TableLayoutPanel ---------------------------------------------
     $root = New-Object System.Windows.Forms.TableLayoutPanel
@@ -75,6 +78,7 @@ function New-VMsLayout {
     $refreshLabel.Location = New-Object System.Drawing.Point(20, 50)  # Positioned below title
     $refreshLabel.AutoSize = $true
     $header.Controls.Add($refreshLabel)
+    $Refs['RefreshLabel'] = $refreshLabel
 
     # ----- Main Layout --------------------------------------------------------
     $mainLayout = New-Object System.Windows.Forms.TableLayoutPanel
@@ -105,12 +109,20 @@ function New-VMsLayout {
     $searchBox.BackColor = $script:Theme.White
     $searchBox.ForeColor = $script:Theme.PrimaryDarker
     $filterPanel.Controls.Add($searchBox)
+    $Refs['SearchBox'] = $searchBox
 
     $searchBtn = New-FormButton -Name 'btnSearch' -Text 'SEARCH' -Size (New-Object System.Drawing.Size(100, 30))
     $filterPanel.Controls.Add($searchBtn)
+    $Refs['SearchButton'] = $searchBtn
+
+    $clearBtn = New-FormButton -Name 'btnClear' -Text 'CLEAR' -Size (New-Object System.Drawing.Size(100, 30))
+    $filterPanel.Controls.Add($clearBtn)
+    $Refs['ClearButton'] = $clearBtn
+
 
     $refreshBtn = New-FormButton -Name 'btnRefresh' -Text 'REFRESH' -Size (New-Object System.Drawing.Size(100, 30))
     $filterPanel.Controls.Add($refreshBtn)
+    $Refs['RefreshButton'] = $refreshBtn
 
     # ----- Main Layout - Grid ------------------------------------------------
     $gridContainer = New-Object System.Windows.Forms.Panel
@@ -134,6 +146,7 @@ function New-VMsLayout {
     $grid.BorderStyle = 'FixedSingle'
     $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $gridContainer.Controls.Add($grid)
+    $Refs['Grid'] = $grid
 
     $numCol = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
     $numCol.Name = 'No'
@@ -179,7 +192,7 @@ function New-VMsLayout {
     )
 
     New-ButtonGroup -ParentPanel $actions -GroupTitle "Selected Virtual Machine" `
-        -ButtonDefinitions $singleVMActions -ButtonsHashTable $btns
+                    -ButtonDefinitions $singleVMActions -ButtonsHashTable $btns
 
     # Multiple VM actions
     $multipleVMActions = @(
@@ -188,7 +201,9 @@ function New-VMsLayout {
     )
 
     New-ButtonGroup -ParentPanel $actions -GroupTitle "All Virtual Machines" `
-        -ButtonDefinitions $multipleVMActions -ButtonsHashTable $btns
+                    -ButtonDefinitions $multipleVMActions -ButtonsHashTable $btns
+
+    $Refs['Buttons'] = $btns
 
     # ----- Footer status label --------------------------------------------
     $footer = New-Object System.Windows.Forms.Panel
@@ -204,18 +219,10 @@ function New-VMsLayout {
     $statusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $statusLabel.ForeColor = $script:Theme.PrimaryDarker
     $footer.Controls.Add($statusLabel)
+    $Refs['StatusLabel'] =  $statusLabel
 
     # ----- Return handles ------------------------------------------------
-    return @{
-        ContentPanel  = $ContentPanel
-        Grid          = $grid
-        SearchBox     = $searchBox
-        SearchButton  = $searchBtn
-        RefreshButton = $refreshBtn
-        StatusLabel   = $statusLabel
-        RefreshLabel  = $refreshLabel
-        Buttons       = $btns
-    }
+    return $Refs
 }
 
 function Set-StatusMessage {
@@ -225,20 +232,19 @@ function Set-StatusMessage {
     #>
 
     param(
-        [Parameter(Mandatory)]
-        [psobject] $Refs,
-        [string]$Message,
-        [ValidateSet('Success','Warning','Error','Info')]
-        [string]$Type = 'Info'
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('Success','Warning','Error','Info')][string]$Type = 'Info'
     )
     
-    $Refs.StatusLabel.Text = $Message
-    $Refs.StatusLabel.ForeColor = switch ($Type) {
+    $script:Refs.StatusLabel.Text = $Message
+    $script:Refs.StatusLabel.ForeColor = switch ($Type) {
         'Success' { $script:Theme.Success }
         'Warning' { $script:Theme.Warning }
         'Error'   { $script:Theme.Error }
         default   { $script:Theme.PrimaryDarker }
     }
+
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
 
@@ -326,12 +332,13 @@ function Get-VMsData {
     [CmdletBinding()] param()
 
     if (-not $script:Connection) {
-        Set-StatusMessage -Refs $script:Refs -Message "No connection to vCenter." -Type Error
+        Set-StatusMessage -Message "No connection to vCenter." -Type Error
         Write-Verbose "No vSphere connection available"
         return $null 
     }
 
     try {
+        Set-StatusMessage -Message "Loading VMs list..." -Type Info
         $vms = Get-VM -Server $script:Connection -ErrorAction Stop | Select-Object `
             Name,
             PowerState,
@@ -374,7 +381,7 @@ function Get-VMsData {
                 }
             }
             
-        
+        Set-StatusMessage -Message "Retrieved data for $($vms.Count) VMs" -Type Success
         Write-Verbose "Retrieved data for $($vms.Count) VMs"
         return $vms
     }
@@ -392,37 +399,34 @@ function Update-VMData {
     #>
 
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][psobject] $Refs,
-        $Data
-    )
+    param([Parameter(Mandatory)]$Data)
 
     # Update refresh time
-    $Refs.RefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    $script:Refs.RefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
-    Set-StatusMessage -Refs $Refs -Message "Refreshing VM data..." -Type Info  
+    Set-StatusMessage -Message "Refreshing VM data..." -Type Info
     
     # Clear previous rows
-    $Refs.Grid.Rows.Clear()
+    $script:Refs.Grid.Rows.Clear()
 
     # Prepare for data display
     if (-not $Data) {
-        Set-StatusMessage -Refs $Refs -Message "No Data Found" -Type Error
+        Set-StatusMessage -Message "No Data Found" -Type Error
         return
     }
 
     # Insert one row per VM
     foreach ($vm in $Data) {
-        $rowIndex = $Refs.Grid.Rows.Add()
-        $row = $Refs.Grid.Rows[$rowIndex]
+        $rowIndex = $script:Refs.Grid.Rows.Add()
+        $row = $script:Refs.Grid.Rows[$rowIndex]
 
         $row.Cells['No'].Value = $rowIndex + 1
+        $row.Cells['Folder'].Value = $vm.Folder
         $row.Cells['Name'].Value = $vm.Name
         $row.Cells['PowerState'].Value = $vm.PowerState
         $row.Cells['IP'].Value = $vm.IP
         $row.Cells['CPU'].Value = $vm.CPU
         $row.Cells['MemoryGB'].Value = $vm.MemoryGB
-        $row.Cells['Folder'].Value = $vm.Folder         # Added the folder column
 
         if ($vm.PowerState -eq 'PoweredOn') {
             $row.Cells['PowerState'].Style.ForeColor = [System.Drawing.Color]::Green
@@ -433,62 +437,66 @@ function Update-VMData {
     }
 
     # Resize columns for readability
-    $Refs.Grid.AutoResizeColumns()
+    $script:Refs.Grid.AutoResizeColumns()
 
-    Set-StatusMessage -Refs $Refs -Message "$($Data.Count) VMs found" -Type Success
+    Set-StatusMessage -Message "$($Data.Count) VMs found" -Type Success
 }
 
 
 function Apply-Filter {
     <#
     .SYNOPSIS
-        Applies filter to the grid based on search text.
+        Applies filter to the grid across all VM fields (columns), case-insensitively.
     #>
 
     param(
-        [Parameter(Mandatory)]
-        [psobject] $Refs,
-        $Sender,
+        [Parameter(Mandatory)]$Sender,
         $EventArgs
     )
-    
-    # If invoked via KeyDown, bail out on non-Enter
+
+    # If triggered by key, only proceed on Enter
     if ($EventArgs -is [System.Windows.Forms.KeyEventArgs] -and $EventArgs.KeyCode -ne [System.Windows.Forms.Keys]::Enter) {
         return
     }
-    
+
     if ($EventArgs -is [System.Windows.Forms.KeyEventArgs]) {
         $EventArgs.Handled = $true
         $EventArgs.SuppressKeyPress = $true
     }
 
-    $needle = $Refs.SearchBox.Text.Trim()
+    $needle = $script:Refs.SearchBox.Text.Trim()
     $hasFilter = -not [string]::IsNullOrWhiteSpace($needle)
+    $needleLC = $needle.ToLower()
     $visibleCount = 0
 
-    foreach ($row in $Refs.Grid.Rows) {
-        $name  = $row.Cells['Name'].Value
-        $ip    = $row.Cells['IP'].Value
-        $state = $row.Cells['PowerState'].Value
+    foreach ($row in $script:Refs.Grid.Rows) {
+        $row.Visible = $false
 
-        $row.Visible = -not $hasFilter -or 
-                        ($name -like "*$needle*") -or 
-                        ($ip -like "*$needle*") -or 
-                        ($state -like "*$needle*")
-        
+        if (-not $hasFilter) {
+            $row.Visible = $true
+        } else {
+            foreach ($cell in $row.Cells) {
+                if ($cell.Value -and $cell.Value.ToString().ToLower().Contains($needleLC)) {
+                    $row.Visible = $true
+                    break
+                }
+            }
+        }
+
         if ($row.Visible) { $visibleCount++ }
     }
 
-    $total = $Refs.Grid.Rows.Count
+    $total = $script:Refs.Grid.Rows.Count
+
     if (-not $hasFilter) {
-        Set-StatusMessage -Refs $Refs -Message "Filter cleared: showing all $total VMs" -Type Success
-    }
-    else {
+        Set-StatusMessage -Message "Filter cleared: showing all $total VMs" -Type Success
+    } else {
         $message = "Filter applied: showing $visibleCount of $total VMs"
         $type = if ($visibleCount -gt 0) { 'Success' } else { 'Warning' }
-        Set-StatusMessage -Refs $Refs -Message $message -Type $type
+        Set-StatusMessage -Message $message -Type $type
     }
 }
+
 
 
 function Invoke-PowerOperation {
@@ -498,34 +506,30 @@ function Invoke-PowerOperation {
     #>
 
     param(
-        [Parameter(Mandatory)]
-        [psobject] $Refs,
-        [ValidateSet('On','Off','AllOn','AllOff','Restart')]
-        [string]$Operation,
+        [Parameter(Mandatory)][ValidateSet('On','Off','AllOn','AllOff','Restart')][string]$Operation,
         [bool]$Force = $false
     )
 
-    try {
-        # Determine target VMs
-        if ($Operation -like 'All*') {
-            $targetVMs = $Refs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Name'].Value }
-            $Operation = $Operation -replace 'All', ''
-        }
-        else {
-            $selectedRows = @($Refs.Grid.SelectedRows)
-            if ($selectedRows.Count -eq 0) {
-                Set-StatusMessage -Refs $Refs -Message "No VMs selected" -Type Warning
-                return
-            }
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
+    $result = $false
+    $targetVMs = @()
+    $successCount = 0
+
+    # Determine target VMs
+    if ($Operation -like 'All*') {
+        $targetVMs = $script:Refs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Name'].Value }
+        $Operation = $Operation -replace 'All', ''
+    } else {
+        $selectedRows = @($script:Refs.Grid.SelectedRows)
+        if ($selectedRows.Count -gt 0) {
             $targetVMs = $selectedRows | ForEach-Object { $_.Cells['Name'].Value }
         }
+    }
 
-        if (-not $targetVMs) {
-            Set-StatusMessage -Refs $Refs -Message "No VMs to operate on" -Type Warning
-            return
-        }
-
+    if ($targetVMs.Count -gt 0) {
         # Get confirmation unless forced
+        $shouldProceed = $Force
         if (-not $Force) {
             $confirmMessage = switch ($Operation) {
                 'On'     { "Power ON selected VMs?" }
@@ -533,47 +537,50 @@ function Invoke-PowerOperation {
                 'Restart'{ "RESTART selected VMs?" }
             }
 
-            $result = [System.Windows.Forms.MessageBox]::Show(
+            $dialogResult = [System.Windows.Forms.MessageBox]::Show(
                 $confirmMessage,
                 "Confirm",
                 [System.Windows.Forms.MessageBoxButtons]::YesNo,
                 [System.Windows.Forms.MessageBoxIcon]::Question
             )
 
-            if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
-                Set-StatusMessage -Refs $Refs -Message "Operation cancelled" -Type Info
-                return
-            }
+            $shouldProceed = ($dialogResult -eq [System.Windows.Forms.DialogResult]::Yes)
         }
 
-        Set-StatusMessage -Refs $Refs -Message "Performing $Operation operation..." -Type Info
+        if ($shouldProceed) {
+            Set-StatusMessage -Message "Performing $Operation operation..." -Type Info
 
-        # Execute operation
-        $successCount = 0
-        foreach ($vmName in $targetVMs) {
-            try {
-                $vm = Get-VM -Name $vmName -Server $script:Connection -ErrorAction Stop
-                switch ($Operation) {
-                    'On'     { $vm | Start-VM -Confirm:$false }
-                    'Off'    { $vm | Stop-VM -Confirm:$false -Kill:$true }
-                    'Restart' { $vm | Restart-VM -Confirm:$false -Kill:$true }
+            # Execute operation
+            foreach ($vmName in $targetVMs) {
+                try {
+                    $vm = Get-VM -Name $vmName -Server $script:Connection -ErrorAction Stop
+                    switch ($Operation) {
+                        'On'     { $vm | Start-VM -Confirm:$false }
+                        'Off'    { $vm | Stop-VM -Confirm:$false -Kill:$true }
+                        'Restart' { $vm | Restart-VM -Confirm:$false -Kill:$true }
+                    }
+                    $successCount++
+                } catch {
+                    Write-Verbose ("Failed to {0} VM {1}: {2}" -f $Operation, $vmName, $_)
                 }
-                $successCount++
             }
-            catch {
-                Write-Verbose ("Failed to {0} VM {1}: {2}" -f $Operation, $vmName, $_)
-            }
+            
+            # Simulate clicking the Refresh button to reload data and update status
+            $script:Refs.RefreshButton.PerformClick()
+            Set-StatusMessage -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
+            $result = $true
+        } else {
+            Set-StatusMessage -Message "Operation cancelled" -Type Info
         }
+    } else {
+        $message = if ($targetVMs.Count -eq 0) { "No VMs to operate on" } else { "No VMs selected" }
+        Set-StatusMessage -Message $message -Type Warning
+    }
 
-        # Refresh and show status
-        # Simulate clicking the Refresh button to reload data and update status
-        $Refs.RefreshButton.PerformClick()
-        Set-StatusMessage -Refs $Refs -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
-    }
-    catch {
-        Write-Verbose "Power operation error: $_"
-        Set-StatusMessage -Refs $Refs -Message "Error performing $Operation operation" -Type Error
-    }
+    
+    $script:Form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    return $result
 }
 
 function Wire-UIEvents {
@@ -582,56 +589,58 @@ function Wire-UIEvents {
         Hooks up all UI events with properly captured Refs.
     #>
 
-    param(
-        [Parameter(Mandatory)]
-        [psobject] $Refs
-    )
-
     # Search button click event
-    $Refs.SearchButton.Add_Click({
+    $script:Refs.SearchButton.Add_Click({
         param($sender, $e)
         . $PSScriptRoot\VMsView.ps1
-        Apply-Filter -Refs $Refs -Sender $sender -EventArgs $e
+        Apply-Filter -Sender $sender -EventArgs $e
     })
 
     # Search box key down event (Enter key)
-    $Refs.SearchBox.Add_KeyDown({
+    $script:Refs.SearchBox.Add_KeyDown({
         param($sender, $e)
         if ($e.KeyCode -eq 'Enter') {
             . $PSScriptRoot\VMsView.ps1
-            Apply-Filter -Refs $Refs -Sender $sender -EventArgs $e
+            Apply-Filter -Sender $sender -EventArgs $e
         }
     })
 
-    # Refresh button click event
-    $Refs.RefreshButton.Add_Click({
+    $script:Refs.ClearButton.Add_Click({
+        $script:Refs.SearchBox.Text = ''
         . $PSScriptRoot\VMsView.ps1
-        Show-VMsView -ContentPanel $Refs.ContentPanel
+        Apply-Filter -Sender $script:Refs.SearchBox -EventArgs $null
+    })
+
+
+    # Refresh button click event
+    $script:Refs.RefreshButton.Add_Click({
+        . $PSScriptRoot\VMsView.ps1
+        Show-VMsView -ContentPanel $script:Refs.ContentPanel
     })
 
     # Power operation buttons
-    $Refs.Buttons.PowerOn.Add_Click({
+    $script:Refs.Buttons.PowerOn.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -Refs $Refs -Operation 'On'
+        Invoke-PowerOperation -Operation 'On'
     })
 
-    $Refs.Buttons.PowerOff.Add_Click({
+    $script:Refs.Buttons.PowerOff.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -Refs $Refs -Operation 'Off'
+        Invoke-PowerOperation -Operation 'Off'
     })
 
-    $Refs.Buttons.PowerAllOn.Add_Click({
+    $script:Refs.Buttons.PowerAllOn.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -Refs $Refs -Operation 'AllOn'
+        Invoke-PowerOperation -Operation 'AllOn'
     })
 
-    $Refs.Buttons.PowerAllOff.Add_Click({
+    $script:Refs.Buttons.PowerAllOff.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -Refs $Refs -Operation 'AllOff'
+        Invoke-PowerOperation -Operation 'AllOff'
     })
 
-    $Refs.Buttons.Restart.Add_Click({
+    $script:Refs.Buttons.Restart.Add_Click({
         . $PSScriptRoot\VMsView.ps1
-        Invoke-PowerOperation -Refs $Refs -Operation 'Restart'
+        Invoke-PowerOperation -Operation 'Restart'
     })
 }

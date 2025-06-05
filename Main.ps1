@@ -7,17 +7,6 @@
 #>
 
 
-# ---------------------------------------------------------------------------
-# Load PowerCLI (if not already) and ignore SSL warnings
-# ---------------------------------------------------------------------------
-if (-not (Get-Module -Name VMware.PowerCLI)) {
-    Import-Module -Name VMware.PowerCLI -ErrorAction Stop
-}
-Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false | Out-Null
-
-
-
-
 # 1) Load Required Assemblies
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -42,8 +31,7 @@ Initialize-Theme
 
 # 3) Declare script-scoped state for the login UI
 $script:Server      = 'csvcsa.cs.cwu.edu'  # default vCenter host
-$script:username    = ''                   # optional pre-fill
-$script:password    = ''                   # optional pre-fill
+$script:Username    = ''                   # optional pre-fill
 $script:Connection  = $null                # will hold the VI.ServerConnection
 $script:LoginResult = $false               # set by the login form
 
@@ -62,7 +50,7 @@ Write-Host "✅ Connected to $script:Server as $($script:Connection.UserName)"
 
 # 6) Proceed to the UI for navigating views
 . "$PSScriptRoot\Views\MainView.ps1"
-Show-MainView
+Show-AppWindow
 
 
 # 6) Clean up
