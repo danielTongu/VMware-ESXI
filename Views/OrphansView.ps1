@@ -20,24 +20,25 @@ function Show-OrphansView {
     )
 
     # Build UI skeleton
-    $script:uiRefs = New-OrphanLayout -ContentPanel $ContentPanel
+    $script:Refs = New-OrphanLayout -ContentPanel $ContentPanel
+    [System.Windows.Forms.Application]::DoEvents()
 
     . $PSScriptRoot\DashboardView.ps1 # Ensure Set-StatusMessage is available
     if(-not $script:Connection){
-        Set-StatusMessage -UiRefs $script:uiRefs -Message 'No connection to vCenter.' -Type Error
+        Set-StatusMessage -Message 'No connection to vCenter.' -Type Error
         return
     }
 
-    Wire-UIEvents $script:uiRefs
+    Wire-UIEvents $script:Refs
 
-    Set-StatusMessage -UiRefs $script:uiRefs -Message "Loading datastores..." -Type 'Info'
+    Set-StatusMessage -Message "Loading datastores..." -Type 'Info'
     $datastores = Get-Datastore -Server $script:Connection -ErrorAction SilentlyContinue
     if ($datastores) {
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Scanning for orphaned files..." -Type 'Info'
+        Set-StatusMessage -Message "Scanning for orphaned files..." -Type 'Info'
         $orphans = $datastores | Get-Orphans
         Update-OrphanData -Datastores $datastores -Orphans $orphans
     } else {
-        Set-StatusMessage -UiRefs $script:uiRefs -Message "Failed to retrieve datastores from vCenter." -Type 'Error'
+        Set-StatusMessage -Message "Failed to retrieve datastores from vCenter." -Type 'Error'
         Update-OrphanData -Datastores @() -Orphans @()
     }
 }
@@ -103,12 +104,16 @@ function New-OrphanLayout {
     $lblLastRefresh.AutoSize = $true
     $header.Controls.Add($lblLastRefresh)
 
-    # Filter row
-    $filterPanel = [System.Windows.Forms.Panel]::new()
-    $filterPanel.Dock = 'Fill'; 
+    # Filter row as FlowLayoutPanel (scrollable, no wrap)
+    $filterPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
+    $filterPanel.Dock = 'Fill'
     $filterPanel.AutoSize = $true
+    $filterPanel.WrapContents = $false
+    $filterPanel.FlowDirection = 'LeftToRight'
+    $filterPanel.AutoScroll = $true
     $filterPanel.BackColor = $script:Theme.LightGray
-    
+    $filterPanel.Padding = [System.Windows.Forms.Padding]::new(10)
+
     $root.Controls.Add($filterPanel, 0, 1)
 
     # Datastore label
@@ -116,7 +121,6 @@ function New-OrphanLayout {
     $lblDatastore.Text = 'Datastore:'
     $lblDatastore.Font = [System.Drawing.Font]::new('Segoe UI',10)
     $lblDatastore.ForeColor = $script:Theme.PrimaryDarker
-    $lblDatastore.Location = [System.Drawing.Point]::new(20,15)
     $lblDatastore.AutoSize = $true
 
     $filterPanel.Controls.Add($lblDatastore)
@@ -126,7 +130,6 @@ function New-OrphanLayout {
     $cmbDatastores.DropDownStyle = 'DropDownList'
     $cmbDatastores.Width = 250
     $cmbDatastores.Font = [System.Drawing.Font]::new('Segoe UI',10)
-    $cmbDatastores.Location = [System.Drawing.Point]::new(100,10)
     $cmbDatastores.BackColor = $script:Theme.White
     $cmbDatastores.ForeColor = $script:Theme.PrimaryDark
 
@@ -134,9 +137,8 @@ function New-OrphanLayout {
 
     # Search field
     $txtSearch = [System.Windows.Forms.TextBox]::new()
-    $txtSearch.Width = 200; 
+    $txtSearch.Width = 200
     $txtSearch.Height = 30
-    $txtSearch.Location = [System.Drawing.Point]::new(370,10)
     $txtSearch.Font = [System.Drawing.Font]::new('Segoe UI',10)
     $txtSearch.BackColor = $script:Theme.White
     $txtSearch.ForeColor = $script:Theme.PrimaryDarker
@@ -145,15 +147,25 @@ function New-OrphanLayout {
 
     # Search button
     $btnSearch = [System.Windows.Forms.Button]::new()
-    $btnSearch.Text = 'SEARCH'; 
-    $btnSearch.Width = 100; 
+    $btnSearch.Text = 'SEARCH'
+    $btnSearch.Width = 100
     $btnSearch.Height = 30
-    $btnSearch.Location = [System.Drawing.Point]::new(580,10)
     $btnSearch.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
     $btnSearch.BackColor = $script:Theme.Primary
     $btnSearch.ForeColor = $script:Theme.White
 
     $filterPanel.Controls.Add($btnSearch)
+
+    # Clear button
+    $btnClear = [System.Windows.Forms.Button]::new()
+    $btnClear.Text = 'CLEAR'
+    $btnClear.Width = 100
+    $btnClear.Height = 30
+    $btnClear.Font = [System.Drawing.Font]::new('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnClear.BackColor = $script:Theme.Primary
+    $btnClear.ForeColor = $script:Theme.White
+
+    $filterPanel.Controls.Add($btnClear)
 
     # --------- Orphan Data grid -------------------------------------------
     $gridScroller = [System.Windows.Forms.Panel]::new()
@@ -237,6 +249,7 @@ function New-OrphanLayout {
         DatastoreCombo = $cmbDatastores
         SearchBox      = $txtSearch
         SearchButton   = $btnSearch
+        ClearButton    = $btnClear
         OrphansGrid    = $grid
         RefreshButton  = $btnRefresh
         DeleteButton   = $btnDelete
@@ -267,7 +280,7 @@ function Update-OrphanData {
     )
 
     # Update timestamp first
-    $script:UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    $script:Refs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # Initialize OrphansData structure
     $script:OrphansData = @{
@@ -276,10 +289,10 @@ function Update-OrphanData {
     }
 
     # Populate datastore dropdown filter
-    $UiRefs.DatastoreCombo.Items.Clear()
-    $UiRefs.DatastoreCombo.Items.AddRange($Datastores.Name)
+    $script:Refs.DatastoreCombo.Items.Clear()
+    $script:Refs.DatastoreCombo.Items.AddRange($Datastores.Name)
     if ($Datastores.Count -gt 0) {
-        $UiRefs.DatastoreCombo.SelectedIndex = 0
+        $script:Refs.DatastoreCombo.SelectedIndex = 0
     }
     
     # Flatten orphaned files into a displayable object array
@@ -303,11 +316,11 @@ function Update-OrphanData {
     # Calculate total orphan count for status message
     $totalOrphans = ($Orphans | Measure-Object -Property OrphanCount -Sum).Sum
     if ($totalOrphans -gt 0) {
-        Set-StatusMessage -UiRefs $UiRefs -Message "Found $totalOrphans orphaned files across $($Datastores.Count) datastores" -Type Success
+        Set-StatusMessage -Message "Found $totalOrphans orphaned files across $($Datastores.Count) datastores" -Type Success
         Update-OrphanGrid
     }
     else {
-        Set-StatusMessage -UiRefs $UiRefs -Message "No orphaned files found" -Type Info
+        Set-StatusMessage -Message "No orphaned files found" -Type Info
     }
 }
 
@@ -398,10 +411,7 @@ function Find-OrphanedFiles {
     #>
     
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$DatastoreName
-    )
+    param([Parameter(Mandatory = $true)][string]$DatastoreName)
 
     # Load the datastore object
     $ds = Get-Datastore -Name $DatastoreName
@@ -513,8 +523,8 @@ function Find-OrphanedFiles {
 
 function Update-OrphanGrid {
     # Get current filter values from UI
-    $selectedDs = $script:UiRefs.DatastoreCombo.SelectedItem
-    $searchText = $script:UiRefs.SearchBox.Text.Trim()
+    $selectedDs = $script:Refs.DatastoreCombo.SelectedItem
+    $searchText = $script:Refs.SearchBox.Text.Trim()
     
     # Apply filters
     $filteredData = $script:OrphansData.FullDataset | Where-Object {
@@ -529,7 +539,7 @@ function Update-OrphanGrid {
     }
     
     # Update grid
-    $script:UiRefs.OrphansGrid.DataSource = [System.Collections.ArrayList]@($filteredData)
+    $script:Refs.OrphansGrid.DataSource = [System.Collections.ArrayList]@($filteredData)
 }
 
 function Wire-UIEvents {
@@ -540,37 +550,52 @@ function Wire-UIEvents {
         Connects UI actions (filter, search, refresh, delete) to their respective logic.
     #>
 
-    param([Parameter(Mandatory)]$UiRefs)
-
-    # Store UI references at script scope
-    $script:UiRefs = $UiRefs
-
     # Datastore filter
-    $UiRefs.DatastoreCombo.Add_SelectedIndexChanged({
+    $script:Refs.DatastoreCombo.Add_SelectedIndexChanged({
         . $PSScriptRoot\OrphansView.ps1
         Update-OrphanGrid
     })
+
+    #Enter on-press
+    $script:Refs.SearchBox.Add_KeyDown({
+        if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
+            . $PSScriptRoot\OrphansView.ps1
+            Update-OrphanGrid
+        }
+    })
+
 
     # Search filter
-    $UiRefs.SearchButton.Add_Click({
+    $script:Refs.SearchButton.Add_Click({
         . $PSScriptRoot\OrphansView.ps1
         Update-OrphanGrid
     })
 
-    # Refresh data
-    $UiRefs.RefreshButton.Add_Click({
+    # Clear filter
+    $script:Refs.ClearButton.Add_Click({
+        $script:Refs.SearchBox.Text = ''
+        if ($script:Refs.DatastoreCombo.Items.Count -gt 0) {
+            $script:Refs.DatastoreCombo.SelectedIndex = 0
+        }
         . $PSScriptRoot\OrphansView.ps1
-        $script:UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
-        Show-OrphansView -ContentPanel $script:uiRefs.ContentPanel 
+        Update-OrphanGrid
+        Set-StatusMessage -Message "Filters cleared" -Type Info
+    })
+
+
+    # Refresh data
+    $script:Refs.RefreshButton.Add_Click({
+        . $PSScriptRoot\OrphansView.ps1
+        $script:Refs.Header.LastRefreshLabel.Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+        Show-OrphansView -ContentPanel $script:Refs.ContentPanel 
     })
 
     # In Wire-UIEvents, update the DeleteButton click handler:
-    $UiRefs.DeleteButton.Add_Click({
-        . $PSScriptRoot\DashboardView.ps1 # ensure Set-StatusMessage is available
-        $selectedRows = @($script:UiRefs.OrphansGrid.SelectedRows)
+    $script:Refs.DeleteButton.Add_Click({
+        $selectedRows = @($script:Refs.OrphansGrid.SelectedRows)
         
         if ($selectedRows.Count -eq 0) {
-            Set-StatusMessage -UiRefs $script:UiRefs -Message "No rows selected for deletion" -Type Warning
+            Set-StatusMessage -Message "No rows selected for deletion" -Type Warning
             return
         }
 
@@ -631,10 +656,32 @@ function Wire-UIEvents {
                 "Successfully deleted $deletedCount files"
             }
             
-            Set-StatusMessage -UiRefs $script:UiRefs -Message $statusMsg -Type $(if ($errors) { 'Warning' } else { 'Success' })
+            Set-StatusMessage -Message $statusMsg -Type $(if ($errors) { 'Warning' } else { 'Success' })
             
             # Refresh data after deletion
-            $script:UiRefs.RefreshButton.PerformClick()
+            $script:Refs.RefreshButton.PerformClick()
         }
     })
+}
+
+function Set-StatusMessage {
+    <#
+    .SYNOPSIS
+        Sets the status message with appropriate color coding.
+    #>
+
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('Success','Warning','Error','Info')][string]$Type = 'Info'
+    )
+    
+    $script:Refs.StatusLabel.Text = $Message
+    $script:Refs.StatusLabel.ForeColor = switch ($Type) {
+        'Success' { $script:Theme.Success }
+        'Warning' { $script:Theme.Warning }
+        'Error'   { $script:Theme.Error }
+        default   { $script:Theme.PrimaryDarker }
+    }
+
+    [System.Windows.Forms.Application]::DoEvents()
 }
