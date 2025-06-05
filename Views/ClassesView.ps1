@@ -405,7 +405,7 @@ function New-ClassManagerLayout {
 
     $txtClassFolder = New-Object System.Windows.Forms.TextBox
     $txtClassFolder.Name = 'ClassFolder'
-    $txtClassFolder.Text = 'CS370'
+    $txtClassFolder.Text = ''
     $txtClassFolder.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $txtClassFolder.Dock = 'Fill'
     $txtClassFolder.Width = 200
@@ -734,7 +734,7 @@ function Update-ClassManagerWithData {
     if ($Data.Networks) {
         foreach ($network in $Data.Networks) {
             $displayText = "$($network.Name) (vSwitch: $($network.VirtualSwitch), VLAN: $($network.VLanId))"
-            $clbAdapters.Items.Add($displayText, $true) | Out-Null
+            $clbAdapters.Items.Add($displayText, $false) | Out-Null
         }
     }
 
@@ -880,76 +880,33 @@ function Connect-UIEvents {
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
-        # --------------- Check if null before trying to update ---------------
-        if ($null -eq $script:adapters) { # Swapped in each of the input values and all have passed
-            [System.Windows.Forms.MessageBox]::Show(
-                "Error: Adapters were not initialized!", # message
-                "Initialization Error",   # title
-                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
-                [System.Windows.Forms.MessageBoxIcon]::Error # icon
-            )
-            # exit early to avoid proceeding with the rest of the code
-            return
+        # --------------- Grab the actual user input ---------------
+        # ClassName
+        $className = $script:className.Text.Trim()
+        # StudentNames
+        $students = $script:textBox.Text
+        $studentArray = $students -split "`r?`n" # store each line in an array
+        # Datastore
+        $datastore = $script:dataStore.SelectedItem
+        # ServerName
+        $serverName = $script:serverName.Text.Trim()
+        # Template
+        $templateName = $script:template.SelectedItem
+        # Customization
+        $customizationSelection = $script:customization.SelectedItem
+        if ($customizationSelection -eq 'None') {
+            $customization = $null
         } else {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Adapters were initialized!", # message
-                "Initialization Successful",   # title
-                [System.Windows.Forms.MessageBoxButtons]::OK, # buttons
-                [System.Windows.Forms.MessageBoxIcon]::Information # icon
-            )
-
-            # --------------- Grab the actual user input ---------------
-            # ClassName
-            $className = $script:className.Text.Trim()
-            # StudentNames
-            $students = $script:textBox.Text
-            $studentArray = $students -split "`r?`n" # store each line in an array
-            # Datastore
-            $datastore = $script:dataStore.SelectedItem
-            # ServerName
-            $serverName = $script:serverName.Text.Trim()
-            # Template
-            $templateName = $script:template.SelectedItem
-            # Customization
-            $customizationSelection = $script:customization.SelectedItem
-            if ($customizationSelection -eq 'None') {
-                $customization = $null
-            } else {
-                $customization = $customizationSelection
-            }
-            # Adapters
-            $adapters = $script:adapters.CheckedItems
-            $selectedAdapters = @()
-            ForEach($item in $adapters) {
-                $selectedAdapters += $item # store each checked box in an array
-            }
-            $trimmedAdapters = $selectedAdapters | ForEach-Object { $_ -replace '\s*\(.*\)$', '' }
-
-            # --------------- Print statements to test if user input was gathered correctly ---------------
-            # ClassName
-            Write-Host "Class Name: $className"
-            # StudentNames
-            ForEach($studentName in $studentArray) {
-                Write-Host "Student Name: $studentName"
-            }
-            # Datastore
-            Write-Host "DataStore: $dataStore"
-            # ServerName
-            Write-Host "Server Name: $serverName"
-            # Template
-            Write-Host "Template Name: $templateName"
-            # Customization
-            Write-Host "Customization: $customization"
-            # Adapters
-            ForEach($item in $trimmedAdapters) {
-                Write-Host "Adapter: $item"
-            }
-
-            # exit early to avoid proceeding with the rest of the code
-            # return
+            $customization = $customizationSelection
         }
+        # Adapters
+        $adapters = $script:adapters.CheckedItems
+        $selectedAdapters = @()
+        ForEach($item in $adapters) {
+            $selectedAdapters += $item # store each checked box in an array
+        }
+        $trimmedAdapters = $selectedAdapters | ForEach-Object { $_ -replace '\s*\(.*\)$', '' }
         
-
         # --------------- Try catch block used to validate inputs ---------------
         try {
             
@@ -1003,28 +960,6 @@ function Connect-UIEvents {
                 students = $studentArray    # Array of all the Students needing a folder
                 dataStore = $datastore      # Name of the DataStore
                 servers = @($serverInfo)    # Info regarding the Server
-            }
-
-            # Print statements to test if the Object was created properly and we can access the data
-            Write-Host "`n"
-
-            # Class Name
-            Write-Host "Class Name: $($courseInfo.classFolder)"
-            # Student Names
-            ForEach($studentName in $courseInfo.students) {
-                Write-Host "Student Name: $studentName"
-            }
-            # DataStore
-            Write-Host "DataStore: $($courseInfo.datastore)"
-            # ServerName
-            Write-Host "Server Name: $($courseInfo.servers.serverName)"
-            # Template
-            Write-Host "Template: $($courseInfo.servers.template)"
-            # Customization
-            Write-Host "Customization: $($courseInfo.servers.customization)"
-            # Adapters
-            ForEach($item in $courseInfo.servers.adapters) {
-                Write-Host "Adapters: $item"
             }
 
             # --------------- Call the VM creation function ---------------
@@ -1410,12 +1345,12 @@ function New-CourseVMs {
                 # Create new folder
                 $studentFolder = New-Folder -Name $userAccount -Location $classFolder 2> $null
 
-                # Commenting out the Permissions for now...
-                # $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
-                # $role = Get-VIRole -Name StudentUser 2> $null
-                # if ($account -and $role) {
-                #    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
-                # }
+                # Setup permissions using CWU accounts
+                $account = Get-VIAccount -Name $userAccount -Domain "CWU" 2> $null
+                $role = Get-VIRole -Name StudentUser 2> $null
+                if ($account -and $role) {
+                    New-VIPermission -Entity $studentFolder -Principal $account -Role $role > $null 2>&1
+                }
 
             # If this point was reached then the student folder already exists
             } else {
