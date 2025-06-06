@@ -148,6 +148,13 @@ function New-VMsLayout {
     $gridContainer.Controls.Add($grid)
     $Refs['Grid'] = $grid
 
+    # Hidden ID Column (For using VMs ID instead of their names for power operations)
+    $idCol = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+    $idCol.Name = 'Id'
+    $idCol.HeaderText = 'ID'
+    $idCol.Visible = $false 
+    $grid.Columns.Add($idCol) | Out-Null
+
     $numCol = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
     $numCol.Name = 'No'
     $numCol.HeaderText = '#'
@@ -341,6 +348,7 @@ function Get-VMsData {
         Set-StatusMessage -Message "Loading VMs list..." -Type Info
         $vms = Get-VM -Server $script:Connection -ErrorAction Stop | Select-Object `
             Name,
+            Id,
             PowerState,
             @{ Name='IP'
                Expression={
@@ -420,6 +428,7 @@ function Update-VMData {
         $rowIndex = $script:Refs.Grid.Rows.Add()
         $row = $script:Refs.Grid.Rows[$rowIndex]
 
+        $row.Cells['Id'].Value = $vm.Id
         $row.Cells['No'].Value = $rowIndex + 1
         $row.Cells['Folder'].Value = $vm.Folder
         $row.Cells['Name'].Value = $vm.Name
@@ -513,21 +522,21 @@ function Invoke-PowerOperation {
     $script:Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
 
     $result = $false
-    $targetVMs = @()
+    $targetVMIds = @()  # Changed from targetVMs to targetVMIds
     $successCount = 0
 
-    # Determine target VMs
+    # Determine target VMs by ID
     if ($Operation -like 'All*') {
-        $targetVMs = $script:Refs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Name'].Value }
+        $targetVMIds = $script:Refs.Grid.Rows | Where-Object { $_.Visible } | ForEach-Object { $_.Cells['Id'].Value }
         $Operation = $Operation -replace 'All', ''
     } else {
         $selectedRows = @($script:Refs.Grid.SelectedRows)
         if ($selectedRows.Count -gt 0) {
-            $targetVMs = $selectedRows | ForEach-Object { $_.Cells['Name'].Value }
+            $targetVMIds = $selectedRows | ForEach-Object { $_.Cells['Id'].Value }
         }
     }
 
-    if ($targetVMs.Count -gt 0) {
+    if ($targetVMIds.Count -gt 0) {
         # Get confirmation unless forced
         $shouldProceed = $Force
         if (-not $Force) {
@@ -550,30 +559,33 @@ function Invoke-PowerOperation {
         if ($shouldProceed) {
             Set-StatusMessage -Message "Performing $Operation operation..." -Type Info
 
-            # Execute operation
-            foreach ($vmName in $targetVMs) {
+            # Execute operation using VM IDs
+            foreach ($vmId in $targetVMIds) {
                 try {
-                    $vm = Get-VM -Name $vmName -Server $script:Connection -ErrorAction Stop
-                    switch ($Operation) {
-                        'On'     { $vm | Start-VM -Confirm:$false }
-                        'Off'    { $vm | Stop-VM -Confirm:$false -Kill:$true }
-                        'Restart' { $vm | Restart-VM -Confirm:$false -Kill:$true }
+                    $vm = Get-VM -Id $vmId -Server $script:Connection -ErrorAction Stop
+                    if ($vm) {
+                        switch ($Operation) {
+                            'On'     { $vm | Start-VM -Confirm:$false -ErrorAction SilentlyContinue }
+                            'Off'    { $vm | Stop-VM -Confirm:$false -Kill:$true -ErrorAction SilentlyContinue }
+                            'Restart' { $vm | Restart-VM -Confirm:$false -Kill:$true -ErrorAction SilentlyContinue }
+                        }
+                        $successCount++
                     }
-                    $successCount++
                 } catch {
-                    Write-Verbose ("Failed to {0} VM {1}: {2}" -f $Operation, $vmName, $_)
+                    Write-Verbose ("Failed to {0} VM ID {1}: {2}" -f $Operation, $vmId, $_)
                 }
             }
             
+            
             # Simulate clicking the Refresh button to reload data and update status
             $script:Refs.RefreshButton.PerformClick()
-            Set-StatusMessage -Message "Completed $Operation operation on $successCount of $($targetVMs.Count) VMs" -Type Success
+            Set-StatusMessage -Message "Completed $Operation operation on $successCount of $($targetVMIds.Count) VMs" -Type Success
             $result = $true
         } else {
             Set-StatusMessage -Message "Operation cancelled" -Type Info
         }
     } else {
-        $message = if ($targetVMs.Count -eq 0) { "No VMs to operate on" } else { "No VMs selected" }
+        $message = if ($targetVMIds.Count -eq 0) { "No VMs to operate on" } else { "No VMs selected" }
         Set-StatusMessage -Message $message -Type Warning
     }
 
