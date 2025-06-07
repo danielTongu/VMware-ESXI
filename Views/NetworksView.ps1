@@ -21,13 +21,14 @@ function Show-NetworksView {
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    $script:uiRefs = New-NetworksLayout -ContentPanel $ContentPanel
-    $data = Get-NetworksData -Refs $script:uiRefs
+    $script:Refs = New-NetworksLayout -ContentPanel $ContentPanel
+    [System.Windows.Forms.Application]::DoEvents()
+
+    $data = Get-NetworksData
 
     if ($data) {
-        $script:uiRefs['Data'] = $data  # Store the data in uiRefs for later access
-        Update-NetworksWithData -Refs $script:uiRefs -Data $data
-        Wire-UIEvents -Refs $script:uiRefs
+        Update-NetworksWithData -Data $data
+        Wire-UIEvents
     } 
 }
 
@@ -435,20 +436,21 @@ function Set-StatusMessage {
     #>
 
     param(
-        [hashtable] $Refs,
         [string]$Message,
         [ValidateSet('Success','Warning','Error','Info')][string]$Type = 'Info'
     )
     
-    if ($Refs -and $Refs.ContainsKey('StatusLabel')) {
-        $Refs.StatusLabel.Text = $Message
-        $Refs.StatusLabel.ForeColor = switch ($Type) {
+    if ($script:Refs -and $script:Refs.ContainsKey('StatusLabel')) {
+        $script:Refs.StatusLabel.Text = $Message
+        $script:Refs.StatusLabel.ForeColor = switch ($Type) {
             'Success' { $script:Theme.Success }
             'Warning' { $script:Theme.Warning }
             'Error'   { $script:Theme.Error }
             default   { $script:Theme.PrimaryDarker }
         }
     }
+
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
 
@@ -463,26 +465,22 @@ function Get-NetworksData {
         2. Manually added networks (any format)
     #>
 
-    param([hashtable] $Refs)
+    $conn = $script:Connection
 
-    try {
-        $conn = $script:Connection
-        if (-not $conn) { 
-            Set-StatusMessage -Refs $Refs -Message 'No connection to vCenter' -Type Error
-            return $null 
-        }
-
+    if (-not $conn) { 
+        Set-StatusMessage -Message 'No connection to vCenter' -Type Error
+    } else {
         $data = @{}
         
         # ─── Class > Student > Networks Mapping ──────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Collecting class/student/network relationships..." -Type Info
+        Set-StatusMessage -Message "Collecting class/student/network relationships..." -Type Info
 
         $dc = Get-Datacenter -Server $conn -Name 'Datacenter'
         $vmFolder = Get-Folder -Server $conn -Name 'vm' -Location $dc
         $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
         $classes = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
-                   Where-Object { $_.Name -notmatch '_' } |
-                   Select-Object -ExpandProperty Name
+                    Where-Object { $_.Name -notmatch '_' } |
+                    Select-Object -ExpandProperty Name
 
         # 2. THEN FIND NETWORKS FOR EACH CLASS
         $classMap = @{}
@@ -510,19 +508,19 @@ function Get-NetworksData {
         $data.AllNetworks = $portGroups.Name | Sort-Object
 
         # ─── Host Info ──────────────────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Collecting host information..." -Type Info
+        Set-StatusMessage -Message "Collecting host information..." -Type Info
         $data.HostInfo = Get-VMHost -Server $conn | Select-Object Name, 
             @{N='CPU Total (GHz)';E={[math]::Round($_.CpuTotalMhz/1000,1)}},
             @{N='Memory (GB)';E={[math]::Round($_.MemoryTotalGB,1)}},
             Model, Version, ConnectionState, PowerState
 
         # ─── Network Adapters ───────────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Collecting network adapters..." -Type Info
+        Set-StatusMessage -Message "Collecting network adapters..." -Type Info
         $data.Adapters = Get-VMHostNetworkAdapter -Server $conn | Select-Object VMHost, Name, 
             Mac, IP, SubnetMask, @{N='Speed (Gbps)';E={[math]::Round($_.SpeedMb/1000,1)}}, FullDuplex, MTU, Connected
 
         # ─── Templates ──────────────────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Collecting templates..." -Type Info
+        Set-StatusMessage -Message "Collecting templates..." -Type Info
         $data.Templates = Get-Template -Server $conn | Select-Object Name, 
             @{N='OS';E={$_.Guest}},  # Using .Guest instead of .GuestId for readability
             NumCpu, 
@@ -535,7 +533,7 @@ function Get-NetworksData {
             PersistentId
 
         # ─── Port Groups ────────────────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Collecting port groups..." -Type Info
+        Set-StatusMessage -Message "Collecting port groups..." -Type Info
         $data.PortGroups = Get-VirtualPortGroup -Server $conn | Select-Object Name, VlanId, 
             @{N='vSwitch';E={$_.VirtualSwitchName}},
             @{N='Host';E={(Get-VMHost -Id $_.VirtualSwitch.VMHostId).Name}},
@@ -547,14 +545,9 @@ function Get-NetworksData {
             @{N='Active Ports';E={($_.ExtensionData.Port | Where-Object {$_.Connected}).Count}}
         
         # ─── Set status message ─────────────────────────────────
-        Set-StatusMessage -Refs $Refs -Message "Data collection complete." -Type Success
+        Set-StatusMessage -Message "Data collection complete." -Type Success
 
         return $data
-    }
-    catch {
-        Write-Verbose "Data collection failed: $_"
-        Set-StatusMessage -Refs $Refs -Message "Data error: $($_.Exception.Message)" -Type Error
-        return $null
     }
 }
 
@@ -567,17 +560,14 @@ function Update-NetworksWithData {
         Handles both bulk and individual networks.
     #>
 
-    param(
-        [hashtable] $Refs,
-        [hashtable] $Data
-    )
+    param([hashtable] $Data)
 
     if (-not $Refs -or -not $Data) {
         Write-Verbose "Refs or Data is null"
         return
     }
 
-    Set-StatusMessage -Refs $Refs -Message "Updating UI with collected data..." -Type Info
+    Set-StatusMessage -Message "Updating UI with collected data..." -Type Info
     $Refs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
 
     # ─── Populate Class Dropdowns ───────────────────────────────
@@ -603,10 +593,10 @@ function Update-NetworksWithData {
         param($sender, $e)
         
         $selectedClass = $sender.SelectedItem
-        if (-not $selectedClass -or -not $script:uiRefs.Data.ClassMap.ContainsKey($selectedClass)) { return }
+        if (-not $selectedClass -or -not $script:Refs.Data.ClassMap.ContainsKey($selectedClass)) { return }
         
-        $studentNumbers = $script:uiRefs.Data.ClassMap[$selectedClass].Keys | Sort-Object { [int]$_ }
-        $cmbStudents = $script:uiRefs['cmbStudents']
+        $studentNumbers = $script:Refs.Data.ClassMap[$selectedClass].Keys | Sort-Object { [int]$_ }
+        $cmbStudents = $script:Refs['cmbStudents']
         $cmbStudents.Items.Clear()
         
         foreach ($studentNum in $studentNumbers) {
@@ -623,7 +613,7 @@ function Update-NetworksWithData {
     $Refs['cmbStudents'].Add_SelectedIndexChanged({
         param($sender, $e)
         
-        $selectedClass = $script:uiRefs['cmbClasses'].SelectedItem
+        $selectedClass = $script:Refs['cmbClasses'].SelectedItem
         $selectedStudent = $sender.SelectedItem -replace 'Student ',''
         
         if (-not $selectedClass -or -not $selectedStudent) { return }
@@ -633,13 +623,13 @@ function Update-NetworksWithData {
         $allNetworks = @($baseNetwork)  # Start with the base network
         
         # Add any other networks that start with the student identifier
-        foreach ($net in $script:uiRefs.Data.AllNetworks) {
+        foreach ($net in $script:Refs.Data.AllNetworks) {
             if ($net -ne $baseNetwork -and $net -like "${baseNetwork}_*") {
                 $allNetworks += $net
             }
         }
         
-        $cmbStudentNetworks = $script:uiRefs['cmbStudentNetworks']
+        $cmbStudentNetworks = $script:Refs['cmbStudentNetworks']
         $cmbStudentNetworks.Items.Clear()
         
         foreach ($net in $allNetworks) {
@@ -743,7 +733,7 @@ function Update-NetworksWithData {
         $grid.Rows.Add("No port group data available") | Out-Null
     }
 
-    Set-StatusMessage -Refs $Refs -Message "UI updated with data." -Type Success
+    Set-StatusMessage -Message "UI updated with data." -Type Success
     $Refs.ContentPanel.ScrollControlIntoView($Refs.ContentPanel.Controls[0])
     $Refs.ContentPanel.PerformLayout()
 }
@@ -753,29 +743,25 @@ function Wire-UIEvents {
     <#
     .SYNOPSIS
         Wires up UI events for the networks view.
-    .PARAMETER Refs
-        Hashtable containing references to UI controls.
     #>
 
-    param([hashtable] $Refs)
-
-    if (-not $Refs) {
+    if (-not $script:Refs) {
         Write-Error "Refs is null"
         return
     }
 
     # Refresh Button Click
-    $Refs.RefreshButton.Add_Click({
+    $script:Refs.RefreshButton.Add_Click({
         . $PSScriptRoot\NetworksView.ps1
-        Show-NetworksView -ContentPanel $script:uiRefs.ContentPanel
-        Set-StatusMessage -Refs $script:uiRefs -Message "Data refreshed." -Type Success
+        Show-NetworksView -ContentPanel $script:Refs.ContentPanel
+        Set-StatusMessage -Message "Data refreshed." -Type Success
     })
 
     # Delete Single Network Button Click
-    $Refs.BtnDelNet.Add_Click({
-        $selectedNetwork = $script:uiRefs.CmbStudentNetworks.SelectedItem
+    $script:Refs.BtnDelNet.Add_Click({
+        $selectedNetwork = $script:Refs.CmbStudentNetworks.SelectedItem
         if (-not $selectedNetwork) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Please select a network to delete." -Type Warning
+            Set-StatusMessage -Message "Please select a network to delete." -Type Warning
             return
         }
 
@@ -787,42 +773,42 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Deleting network '$selectedNetwork'..." -Type Info
+            Set-StatusMessage -Message "Deleting network '$selectedNetwork'..." -Type Info
             try {
                 Get-VirtualPortGroup -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualPortGroup -Confirm:$false
                 Get-VirtualSwitch -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualSwitch -Confirm:$false
-                Set-StatusMessage -Refs $script:uiRefs -Message "Network '$selectedNetwork' deleted successfully." -Type Success
+                Set-StatusMessage -Message "Network '$selectedNetwork' deleted successfully." -Type Success
 
                 # Refresh the network list
-                $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
-                $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ',''
+                $selectedClass = $script:Refs.CmbClasses.SelectedItem
+                $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ',''
                 if ($selectedClass -and $selectedStudent) {
-                    $script:uiRefs.CmbStudents_SelectedIndexChanged.Invoke($script:uiRefs.CmbStudents, $null)
+                    $script:Refs.CmbStudents_SelectedIndexChanged.Invoke($script:Refs.CmbStudents, $null)
                 }
             }
             catch {
-                Set-StatusMessage -Refs $script:uiRefs -Message "Failed to delete network: $_" -Type Error
+                Set-StatusMessage -Message "Failed to delete network: $_" -Type Error
             }
         } 
         else {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
+            Set-StatusMessage -Message "Delete cancelled." -Type Info
         }
     })
 
     # Add Single Network Button Click
-    $Refs.BtnAddNet.Add_Click({
-        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
-        $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ',''
+    $script:Refs.BtnAddNet.Add_Click({
+        $selectedClass = $script:Refs.CmbClasses.SelectedItem
+        $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ',''
         
-        $newNetworkName = $script:uiRefs.TxtNewNetwork.Text.Trim()
+        $newNetworkName = $script:Refs.TxtNewNetwork.Text.Trim()
 
         if ([string]::IsNullOrWhiteSpace($newNetworkName) -and $selectedClass -and $selectedStudent) {
             $newNetworkName = "${selectedClass}_S${selectedStudent}"
-            $script:uiRefs.TxtNewNetwork.Text = $newNetworkName
+            $script:Refs.TxtNewNetwork.Text = $newNetworkName
         }
 
         if ([string]::IsNullOrWhiteSpace($newNetworkName)) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Please enter a network name." -Type Warning
+            Set-StatusMessage -Message "Please enter a network name." -Type Warning
             return
         }
 
@@ -834,41 +820,41 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Adding network '$newNetworkName'..." -Type Info
+            Set-StatusMessage -Message "Adding network '$newNetworkName'..." -Type Info
             try {
                 $vmHost = Get-VMHost
                 $vSwitch = New-VirtualSwitch -Name $newNetworkName -VMHost $vmHost -ErrorAction Stop
                 $vPortGroup = New-VirtualPortGroup -Name $newNetworkName -VirtualSwitch $vSwitch -ErrorAction Stop
-                Set-StatusMessage -Refs $script:uiRefs -Message "Network '$newNetworkName' added successfully." -Type Success
+                Set-StatusMessage -Message "Network '$newNetworkName' added successfully." -Type Success
 
                 if ($selectedClass -and $selectedStudent) {
-                    $script:uiRefs.CmbStudents_SelectedIndexChanged.Invoke($script:uiRefs.CmbStudents, $null)
+                    $script:Refs.CmbStudents_SelectedIndexChanged.Invoke($script:Refs.CmbStudents, $null)
                 }
 
-                $script:uiRefs.TxtNewNetwork.Text = ''
+                $script:Refs.TxtNewNetwork.Text = ''
             }
             catch {
-                Set-StatusMessage -Refs $script:uiRefs -Message "Failed to add network: $_" -Type Error
+                Set-StatusMessage -Message "Failed to add network: $_" -Type Error
             }
         } 
         else {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Add cancelled." -Type Info
+            Set-StatusMessage -Message "Add cancelled." -Type Info
         }
     })
 
     # Add Multiple Networks Button Click
-    $Refs.BtnAddMult.Add_Click({
-        $selectedClass = $script:uiRefs.CmbMultClasses.SelectedItem
-        $startNum = [int]$script:uiRefs.InputStartNum.Value
-        $endNum = [int]$script:uiRefs.InputEndNum.Value
+    $script:Refs.BtnAddMult.Add_Click({
+        $selectedClass = $script:Refs.CmbMultClasses.SelectedItem
+        $startNum = [int]$script:Refs.InputStartNum.Value
+        $endNum = [int]$script:Refs.InputEndNum.Value
 
         if (-not $selectedClass) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Please select a class." -Type Warning
+            Set-StatusMessage -Message "Please select a class." -Type Warning
             return
         }
 
         if ($startNum -gt $endNum) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Start number must be less than or equal to end number." -Type Warning
+            Set-StatusMessage -Message "Start number must be less than or equal to end number." -Type Warning
             return
         }
 
@@ -883,7 +869,7 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Adding $count networks..." -Type Info
+            Set-StatusMessage -Message "Adding $count networks..." -Type Info
             $vmHost = Get-VMHost
             $successCount = 0
 
@@ -902,30 +888,30 @@ function Wire-UIEvents {
             }
 
             if ($successCount -gt 0) {
-                Set-StatusMessage -Refs $script:uiRefs -Message "Successfully added $successCount networks." -Type Success
+                Set-StatusMessage -Message "Successfully added $successCount networks." -Type Success
             } 
             else {
-                Set-StatusMessage -Refs $script:uiRefs -Message "No networks were added (they may already exist)." -Type Warning
+                Set-StatusMessage -Message "No networks were added (they may already exist)." -Type Warning
             }
         } 
         else {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Add cancelled." -Type Info
+            Set-StatusMessage -Message "Add cancelled." -Type Info
         }
     })
 
     # Delete Multiple Networks Button Click
-    $Refs.BtnDelMult.Add_Click({
-        $selectedClass = $script:uiRefs.CmbMultClasses.SelectedItem
-        $startNum = [int]$script:uiRefs.InputStartNum.Value
-        $endNum = [int]$script:uiRefs.InputEndNum.Value
+    $script:Refs.BtnDelMult.Add_Click({
+        $selectedClass = $script:Refs.CmbMultClasses.SelectedItem
+        $startNum = [int]$script:Refs.InputStartNum.Value
+        $endNum = [int]$script:Refs.InputEndNum.Value
 
         if (-not $selectedClass) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Please select a class." -Type Warning
+            Set-StatusMessage -Message "Please select a class." -Type Warning
             return
         }
 
         if ($startNum -gt $endNum) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Start number must be less than or equal to end number." -Type Warning
+            Set-StatusMessage -Message "Start number must be less than or equal to end number." -Type Warning
             return
         }
 
@@ -940,7 +926,7 @@ function Wire-UIEvents {
         )
 
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Deleting $count networks..." -Type Info
+            Set-StatusMessage -Message "Deleting $count networks..." -Type Info
             $deletedCount = 0
 
             for ($i = $startNum; $i -le $endNum; $i++) {
@@ -956,23 +942,23 @@ function Wire-UIEvents {
             }
 
             if ($deletedCount -gt 0) {
-                Set-StatusMessage -Refs $script:uiRefs -Message "Successfully deleted $deletedCount networks." -Type Success
+                Set-StatusMessage -Message "Successfully deleted $deletedCount networks." -Type Success
             } 
             else {
-                Set-StatusMessage -Refs $script:uiRefs -Message "No networks were deleted (they may not exist)." -Type Warning
+                Set-StatusMessage -Message "No networks were deleted (they may not exist)." -Type Warning
             }
         } 
         else {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Delete cancelled." -Type Info
+            Set-StatusMessage -Message "Delete cancelled." -Type Info
         }
     })
 
     # Class Dropdown Selection Handler — Populates Students
-    $script:uiRefs.CmbClasses.Add_SelectedIndexChanged({
-        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
-        $script:uiRefs.CmbStudents.Items.Clear()
-        $script:uiRefs.CmbStudentNetworks.Items.Clear()
-        $script:uiRefs.TxtNewNetwork.Text = ''
+    $script:Refs.CmbClasses.Add_SelectedIndexChanged({
+        $selectedClass = $script:Refs.CmbClasses.SelectedItem
+        $script:Refs.CmbStudents.Items.Clear()
+        $script:Refs.CmbStudentNetworks.Items.Clear()
+        $script:Refs.TxtNewNetwork.Text = ''
 
         if ([string]::IsNullOrWhiteSpace($selectedClass)) {
             return
@@ -983,25 +969,25 @@ function Wire-UIEvents {
 
             if ($students -and $students.Count -gt 0) {
                 foreach ($student in $students) {
-                    $script:uiRefs.CmbStudents.Items.Add($student)
+                    $script:Refs.CmbStudents.Items.Add($student)
                 }
             } else {
-                Set-StatusMessage -Refs $script:uiRefs -Message "No students found for class '$selectedClass'" -Type Warning
+                Set-StatusMessage -Message "No students found for class '$selectedClass'" -Type Warning
             }
         } catch {
-            Set-StatusMessage -Refs $script:uiRefs -Message "Error loading students: $_" -Type Error
+            Set-StatusMessage -Message "Error loading students: $_" -Type Error
         }
-})
+    })
 
     # Student Dropdown Selection Handler — Populates Network List
-    $script:uiRefs.CmbStudents.Add_SelectedIndexChanged({
-        $selectedClass = $script:uiRefs.CmbClasses.SelectedItem
-        $selectedStudent = $script:uiRefs.CmbStudents.SelectedItem -replace 'Student ', ''
+    $script:Refs.CmbStudents.Add_SelectedIndexChanged({
+        $selectedClass = $script:Refs.CmbClasses.SelectedItem
+        $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ', ''
 
         if ($selectedClass -and $selectedStudent) {
             $networkName = "${selectedClass}_S$selectedStudent"
-            $script:uiRefs.CmbStudentNetworks.Items.Clear()
-            $script:uiRefs.CmbStudentNetworks.Items.Add($networkName)
+            $script:Refs.CmbStudentNetworks.Items.Clear()
+            $script:Refs.CmbStudentNetworks.Items.Add($networkName)
         }
     })
 }

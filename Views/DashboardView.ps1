@@ -141,7 +141,7 @@ function Get-DashboardData {
     $conn = $script:Connection
 
     if (-not $conn) {
-        Set-StatusMessage 'No Serverection to vCenter.' -Type 'Error'
+        Set-StatusMessage 'No connection to vCenter.' -Type 'Error'
     } else {
         # Sequential data collection for compatibility
         Set-StatusMessage "Loading host information..." -Type 'Info'
