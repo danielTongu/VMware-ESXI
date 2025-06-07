@@ -12,52 +12,19 @@ function Show-ClassesView {
         Panel to host the UI.
     #>
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
-    )
+    param([Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel)
 
     $script:Refs = New-ClassManagerLayout -ContentPanel $ContentPanel
+    [System.Windows.Forms.Application]::DoEvents() # Force immediate UI update
 
-    $conn = $script:Connection
+    $data = Get-ClassesData
 
-    if ($conn) {
-        Set-StatusMessage -Refs $script:Refs -Message "Connected to $($conn.Name)" -Type 'Success'
-        $templates  = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-        $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
-        $networks   = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
-        $dc          = Get-Datacenter -Server $conn -Name 'Datacenter'
-        $vmFolder    = Get-Folder -Server $conn -Name 'vm' -Location $dc
-        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
-        $classes     = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
-                       Where-Object { $_.Name -notmatch '_' } |
-                       Select-Object -ExpandProperty Name
-
-        # Get all VMs inside the Classes folder
-        $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
-        $vmNames = @()
-        foreach ($classFolder in $classSubFolders) {
-            $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
-            foreach ($studentFolder in $studentFolders) {
-                $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
-                if ($vms) { $vmNames += $vms.Name }
-            }
-        }   
-
-        $data = @{
-            Templates   = $templates
-            Datastores  = $datastores
-            Networks    = $networks
-            Classes     = $classes
-            Servers     = $vmNames | Sort-Object -Unique
-            LastUpdated = Get-Date
-        }
-        Update-ClassManagerWithData -UiRefs $script:Refs -Data $data
-        Connect-UIEvents -UiRefs $script:Refs -ContentPanel $ContentPanel
-    } else {
-        Set-StatusMessage -Refs $script:Refs -Message "No connection established" -Type 'Error'
+    if ($data) {
+        Update-ClassManagerWithData -Data $data
+        Connect-UIEvents
     }
-
 }
+
 
 function Set-StatusMessage {
     <#
@@ -67,19 +34,21 @@ function Set-StatusMessage {
 
     param(
         [Parameter(Mandatory)]
-        [psobject] $Refs,
         [string]$Message,
         [ValidateSet('Success','Warning','Error','Info')]
         [string]$Type = 'Info'
     )
     
-    $Refs.StatusLabel.Text = $Message
-    $Refs.StatusLabel.ForeColor = switch ($Type) {
+    $script:Refs.StatusLabel.Text = $Message
+    $script:Refs.StatusLabel.ForeColor = switch ($Type) {
         'Success' { $script:Theme.Success }
         'Warning' { $script:Theme.Warning }
         'Error'   { $script:Theme.Error }
         default   { $script:Theme.PrimaryDarker }
     }
+
+    # Force immediate UI update
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
 
@@ -104,8 +73,9 @@ function New-ClassManagerLayout {
     # Root layout
     $root = New-Object System.Windows.Forms.TableLayoutPanel
     $root.Dock = 'Fill'
-    $root.ColumnCount = 1; $root.RowCount = 3
-    $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
+    $root.AutoSize = $true
+    $root.ColumnCount = 1
+    $root.RowCount = 3
     $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
     $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
     $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
@@ -140,7 +110,7 @@ function New-ClassManagerLayout {
     # ========== Main TabControl =======================================
     $mainPanel = New-Object System.Windows.Forms.Panel
     $mainPanel.Dock = 'Fill'
-    $mainPanel.BackColor = $script:Theme.LightGray
+    $mainPanel.AutoSize = $true
     $root.Controls.Add($mainPanel, 0, 1)
 
     $tabs = New-Object System.Windows.Forms.TabControl
@@ -150,30 +120,35 @@ function New-ClassManagerLayout {
     $mainPanel.Controls.Add($tabs)
 
 
-
-    # ---------- Overview Tab ----------------------------------------
+    #-------------------------------------------------------------------------------------------------------
+    # Overview Tab -----------------------------------------------------------------------------------------
+    #-------------------------------------------------------------------------------------------------------
     $overview = New-Object System.Windows.Forms.TabPage 'Overview'
     $overview.BackColor = $script:Theme.White
     $tabs.TabPages.Add($overview)
 
+    # Overview primary layout
+    $ovRoot = [System.Windows.Forms.TableLayoutPanel]::new()
+    $ovRoot.Dock = 'Fill'
+    $ovRoot.ColumnCount = 1
+    $ovRoot.RowCount = 2 #ovPanel (100%), refresh button (auto)
+    $ovRoot.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent,100)) # ovPanel
+    $ovRoot.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize)) # ovPanel
+    $overview.Controls.Add($ovRoot)
+
+    # Overview content layout
     $ovPanel = New-Object System.Windows.Forms.TableLayoutPanel
-    $ovPanel.Dock = 'Left'
-    $ovPanel.Width = 380
-    $ovPanel.AutoScroll = $true
-    $ovPanel.AutoSizeMode = 'GrowAndShrink'
-    $ovPanel.ColumnCount = 1
-    $ovPanel.RowCount = 2
-    $ovPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent', 100))
-    $ovPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent', 100))
-    $ovPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-    $overview.Controls.Add($ovPanel)
-
-    $tree = New-Object System.Windows.Forms.TreeView
-    $tree.Name = 'OverviewTree'
-    $tree.Font = New-Object System.Drawing.Font('Segoe UI', 11)
-    $tree.Dock = 'Fill'
-    $ovPanel.Controls.Add($tree, 0, 0)
-
+    $ovPanel.Padding = New-Object System.Windows.Forms.Padding(15)
+    $ovPanel.Dock = 'Fill'
+    $ovPanel.ColumnCount = 2
+    $ovPanel.RowCount = 3 # tree (row 0-2), label (row0), options (row1), actions (row2)
+    for ($i = 0; $i -lt $ovPanel.RowCount; $i++) {
+        $ovPanel.RowStyles.Add([System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::AutoSize))
+    }
+    $ovPanel.RowStyles[2] = [System.Windows.Forms.RowStyle]::new([System.Windows.Forms.SizeType]::Percent, 100)
+    $ovRoot.Controls.Add($ovPanel, 0,0)
+    
+    # the refresh button 
     $btnOvRefresh = New-Object System.Windows.Forms.Button
     $btnOvRefresh.Name = 'OverviewRefreshButton'
     $btnOvRefresh.Text = 'REFRESH'
@@ -182,36 +157,39 @@ function New-ClassManagerLayout {
     $btnOvRefresh.BackColor = $script:Theme.Primary
     $btnOvRefresh.ForeColor = $script:Theme.White
     $btnOvRefresh.FlatStyle = 'Flat'
-    $ovPanel.Controls.Add($btnOvRefresh, 0, 1)
+    $ovRoot.Controls.Add($btnOvRefresh, 0, 1)
 
-    
+    #  The class tree 
+    $tree = New-Object System.Windows.Forms.TreeView
+    $tree.Name = 'OverviewTree'
+    $tree.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $tree.Dock = 'Fill'
+    $tree.Width = 250
+    $tree.AutoSize = $true
+    $ovPanel.Controls.Add($tree, 0, 0) # begin from row 0
+    $ovPanel.SetRowSpan($tree,3) # end at row 2
+
     # Remove | Power options label
     $lblPowerOptions = New-Object System.Windows.Forms.Label
     $lblPowerOptions.Text = 'Remove | Power Options'
     $lblPowerOptions.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
     $lblPowerOptions.ForeColor = $script:Theme.Primary
     $lblPowerOptions.AutoSize = $true
-    $lblPowerOptions.Location = New-Object System.Drawing.Point(420, 10)
-    $overview.Controls.Add($lblPowerOptions)
+    $ovPanel.Controls.Add($lblPowerOptions,1,0)
 
-
-
-    # ================= PARAMETERS GROUPBOX =================
+    # ================= PARAMETERS GROUPBOX ================
     $groupParams = New-Object System.Windows.Forms.GroupBox
     $groupParams.Text = "Selection"
     $groupParams.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupParams.AutoSize = $true
     $groupParams.Padding = New-Object System.Windows.Forms.Padding(15)
-    $groupParams.Location = New-Object System.Drawing.Point(420, 40)
-    $overview.Controls.Add($groupParams)
+    $ovPanel.Controls.Add($groupParams,1,1)
 
     $paramsLayout = New-Object System.Windows.Forms.TableLayoutPanel
     $paramsLayout.Dock = 'Fill'
     $paramsLayout.AutoSize = $true
     $paramsLayout.ColumnCount = 2
-    $paramsLayout.RowCount = 3
-    $paramsLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
-    $paramsLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize')))
+    $paramsLayout.RowCount = 2
     $groupParams.Controls.Add($paramsLayout)
 
     # Class Folder
@@ -240,19 +218,23 @@ function New-ClassManagerLayout {
     $cmbHost.Width = 200
     $paramsLayout.Controls.Add($cmbHost, 1, 3)
 
-
-    # ================= ACTION GROUPBOXES =================
-    # Grouped by parameter requirements
+    # ============================================================================
+    # ===== Flow Layout to organize all actions groups ===========================
+    $ovGroupFlow = New-Object System.Windows.Forms.FlowLayoutPanel
+    $ovGroupFlow.Dock = 'Fill'
+    $ovGroupFlow.AutoSize = $true
+    $ovGroupFlow.AutoScroll = $true
+    $ovGroupFlow.FlowDirection = 'TopDown'
+    $ovPanel.Controls.Add($ovGroupFlow, 1,2)
     
-    # 1. Remove-CourseFolder (requires classFolder)
+    # ================= Remove-CourseFolder (requires classFolder) =================
     $groupRemoveCourse = New-Object System.Windows.Forms.GroupBox
     $groupRemoveCourse.AutoSize = $true
     $groupRemoveCourse.Text = "Requires: Class Folder"
     $groupRemoveCourse.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
     $groupRemoveCourse.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupRemoveCourse.Padding = New-Object System.Windows.Forms.Padding(12)
-    $groupRemoveCourse.Location = New-Object System.Drawing.Point(420, 150)
-    $overview.Controls.Add($groupRemoveCourse)
+    $ovGroupFlow.Controls.Add($groupRemoveCourse)
 
     $layoutRemoveCourse = New-Object System.Windows.Forms.FlowLayoutPanel
     $layoutRemoveCourse.Dock = 'Fill'
@@ -273,16 +255,14 @@ function New-ClassManagerLayout {
     $btnRemoveCourseFolderVMs.FlatStyle = 'Flat'
     $layoutRemoveCourse.Controls.Add($btnRemoveCourseFolderVMs)
 
-
-    # 2. PowerOff-ClassVMs (classFolder only)
+    # ================= PowerOff-ClassVMs (classFolder only) =================
     $groupPowerOffClass = New-Object System.Windows.Forms.GroupBox
     $groupPowerOffClass.AutoSize = $true
     $groupPowerOffClass.Text = "Requires: Class Folder"
     $groupPowerOffClass.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
     $groupPowerOffClass.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupPowerOffClass.Padding = New-Object System.Windows.Forms.Padding(12)
-    $groupPowerOffClass.Location = New-Object System.Drawing.Point(675, 150)
-    $overview.Controls.Add($groupPowerOffClass)
+    $ovGroupFlow.Controls.Add($groupPowerOffClass)
 
     $layoutPowerOffClass = New-Object System.Windows.Forms.FlowLayoutPanel
     $layoutPowerOffClass.Dock = 'Fill'
@@ -302,17 +282,15 @@ function New-ClassManagerLayout {
     $btnPowerOffClassVMs.ForeColor = $script:Theme.White
     $btnPowerOffClassVMs.FlatStyle = 'Flat'
     $layoutPowerOffClass.Controls.Add($btnPowerOffClassVMs)
-
     
-    # 3. Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params)
+    # ================= Remove-Host/PowerOff-SpecificClassVMs/PowerOn-SpecificClassVMs (all params) =================
     $groupHostOps = New-Object System.Windows.Forms.GroupBox
     $groupHostOps.AutoSize = $true
     $groupHostOps.Text = "Requires: All fields"
     $groupHostOps.AutoSizeMode = 'GrowAndShrink' # Prevent text wrapping in the GroupBox title
     $groupHostOps.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $groupHostOps.Padding = New-Object System.Windows.Forms.Padding(12)
-    $groupHostOps.Location = New-Object System.Drawing.Point(420, 235)
-    $overview.Controls.Add($groupHostOps)
+    $ovGroupFlow.Controls.Add($groupHostOps)
 
     $hostOpsLayout = New-Object System.Windows.Forms.FlowLayoutPanel
     $hostOpsLayout.Dock = 'Fill'
@@ -363,7 +341,9 @@ function New-ClassManagerLayout {
     $hostOpsLayout.Controls.Add($btnPowerOnSpecificClassVMs)
 
 
-    # ---------- Create student VMs Tab ----------------------------------------
+    #-------------------------------------------------------------------------------------------------------
+    # Create student VMs Tab -------------------------------------------------------------------------------
+    #-------------------------------------------------------------------------------------------------------
     $creatorTab = New-Object System.Windows.Forms.TabPage 'Create'
     $creatorTab.BackColor = $script:Theme.White
     $tabs.TabPages.Add($creatorTab)
@@ -445,10 +425,6 @@ function New-ClassManagerLayout {
     $groupServersLayout.RowCount = 4
     $groupServersLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('AutoSize'))) # Labels
     $groupServersLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', 50))) # Text boxes or dropdowns or group boxes
-    $groupServersLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize'))) # Server name row
-    $groupServersLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize'))) # Template row
-    $groupServersLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize'))) # customization row
-    $groupServersLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('AutoSize'))) # Adapters CheckedListBox row
     $groupServers.Controls.Add($groupServersLayout)
 
     # 5-1 - Server name label and textbox
@@ -460,6 +436,7 @@ function New-ClassManagerLayout {
 
     $txtServerName = New-Object System.Windows.Forms.TextBox
     $txtServerName.Name = 'ServerName'
+    $txtServerName.Text = $script:Server
     $txtServerName.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $txtServerName.Dock = 'Fill'
     $txtServerName.Width = 200
@@ -627,34 +604,103 @@ function New-ClassManagerLayout {
 }
 
 
+function Get-ClassesData {
+    <#
+    .SYNOPSIS
+        Retrieves all classes data
+    .OUTPUTS
+        [hashtable] - Complete dataset
+    #>
+
+    [CmdletBinding()] 
+
+    $Data = @{}
+    $conn = $script:Connection
+
+    if (-not $conn) {
+        Set-StatusMessage 'No connection to vCenter.' -Type 'Error'
+    } else {
+        # Sequential data collection for compatibility
+        # Collect templates
+        Set-StatusMessage -Message "Collecting templates..." -Type 'Info'
+        $templates = Get-Template -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+        # Get datastores
+        Set-StatusMessage -Message "Retrieving datastores..." -Type 'Info'
+        $datastores = Get-Datastore -Server $conn -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+        # Get networks
+        Set-StatusMessage -Message "Retrieving networks..." -Type 'Info'
+        $networks = Get-VirtualPortGroup -Server $conn -ErrorAction SilentlyContinue | Select-Object Name, VirtualSwitch, VLanId
+
+        # Get datacenter
+        Set-StatusMessage -Message "Locating Datacenter..." -Type 'Info'
+        $dc = Get-Datacenter -Server $conn -Name 'Datacenter'
+
+        # Get VM folder
+        Set-StatusMessage -Message "Finding 'vm' folder in Datacenter..." -Type 'Info'
+        $vmFolder = Get-Folder -Server $conn -Name 'vm' -Location $dc
+
+        # Get Classes root folder
+        Set-StatusMessage -Message "Locating 'Classes' folder within VM folder..." -Type 'Info'
+        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
+
+        # Get class folders
+        Set-StatusMessage -Message "Gathering class folders inside 'Classes'..." -Type 'Info'
+        $classes = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notmatch '_' } |
+                Select-Object -ExpandProperty Name
+
+        # Get student VM folders and VM names
+        Set-StatusMessage -Message "Enumerating VMs inside class folders..." -Type 'Info'
+        $classSubFolders = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue
+        $vmNames = @()
+        foreach ($classFolder in $classSubFolders) {
+            $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
+            foreach ($studentFolder in $studentFolders) {
+                $vms = Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
+                if ($vms) {
+                    $vmNames += $vms.Name
+                }
+            }
+        }
+
+        # Fill in the discovered data
+        $Data.Templates   = $templates
+        $Data.Datastores  = $datastores
+        $Data.Networks    = $networks
+        $Data.Classes     = $classes
+        $Data.Servers     = $vmNames | Sort-Object -Unique
+        $Data.LastUpdated = Get-Date
+
+        return $Data
+    }
+}
+
+
 function Update-ClassManagerWithData {
     <#
     .SYNOPSIS
         Updates the UI controls with the latest data.
-    .PARAMETER UiRefs
-        Hashtable of UI control references.
     .PARAMETER Data
         Hashtable containing data to bind to the UI.
     #>
     
     [CmdletBinding()]
-    param(
-        $UiRefs,
-        [hashtable]$Data
-    )
+    param([hashtable]$Data)
 
-    if (-not $UiRefs -or -not $Data) {
-        Write-Error "Invalid parameters passed to Update-ClassManagerWithData"
+    if (-not $Data) {
+        Write-Error "Invalid parameter passed to Update-ClassManagerWithData"
         return
     }
     # Ensure we have a valid connection
     $conn = $script:Connection
 
     # Update timestamp
-    $UiRefs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss tt'))"
+    $script:Refs.Header.LastRefreshLabel.Text = "Last refresh: $($Data.LastUpdated.ToString('HH:mm:ss tt'))"
 
     # Update Overview tab - Build class tree structure
-    $tree = $UiRefs.Tabs.Overview.TreeView
+    $tree = $script:Refs.Tabs.Overview.TreeView
     $tree.Nodes.Clear()
     
     if ($Data.Classes) {
@@ -720,21 +766,21 @@ function Update-ClassManagerWithData {
     }
 
     # Update Create tab dropdowns
-    $cmbTemplate = $UiRefs.Tabs.Create.ServerTemplate
+    $cmbTemplate = $script:Refs.Tabs.Create.ServerTemplate
     $cmbTemplate.Items.Clear()
     if ($Data.Templates) {
         $cmbTemplate.Items.AddRange($Data.Templates)
         if ($cmbTemplate.Items.Count -gt 0) { $cmbTemplate.SelectedIndex = 0 }
     }
 
-    $cmbDataStore = $UiRefs.Tabs.Create.DataStoreDropdown
+    $cmbDataStore = $script:Refs.Tabs.Create.DataStoreDropdown
     $cmbDataStore.Items.Clear()
     if ($Data.Datastores) {
         $cmbDataStore.Items.AddRange($Data.Datastores)
         if ($cmbDataStore.Items.Count -gt 0) { $cmbDataStore.SelectedIndex = 0 }
     }
 
-    $clbAdapters = $UiRefs.Tabs.Create.ServerAdapters
+    $clbAdapters = $script:Refs.Tabs.Create.ServerAdapters
     $clbAdapters.Items.Clear()
     if ($Data.Networks) {
         foreach ($network in $Data.Networks) {
@@ -744,7 +790,7 @@ function Update-ClassManagerWithData {
     }
 
     # Update Overview tab dropdowns
-    $cmbClass = $UiRefs.Tabs.Overview.ClassComboBox
+    $cmbClass = $script:Refs.Tabs.Overview.ClassComboBox
     $cmbClass.Items.Clear()
     if ($Data.Classes) {
         $cmbClass.Items.AddRange($Data.Classes)
@@ -754,65 +800,53 @@ function Update-ClassManagerWithData {
     }
     
 
-    if ($UiRefs.Tabs.Overview.HostComboBox) {
-        $UiRefs.Tabs.Overview.HostComboBox.Items.Clear()
+    if ($script:Refs.Tabs.Overview.HostComboBox) {
+        $script:Refs.Tabs.Overview.HostComboBox.Items.Clear()
         if ($Data.Servers) {
-            $UiRefs.Tabs.Overview.HostComboBox.Items.AddRange(@($Data.Servers))
-            if ($UiRefs.Tabs.Overview.HostComboBox.Items.Count -gt 0) { 
-                $UiRefs.Tabs.Overview.HostComboBox.SelectedIndex = 0 
+            $script:Refs.Tabs.Overview.HostComboBox.Items.AddRange(@($Data.Servers))
+            if ($script:Refs.Tabs.Overview.HostComboBox.Items.Count -gt 0) { 
+                $script:Refs.Tabs.Overview.HostComboBox.SelectedIndex = 0 
             }
         }
     }
 
     # Set status message
-    Set-StatusMessage -Refs $UiRefs -Message "UI updated with latest data" -Type 'Success'
-
-    # Ensure the UI is responsive
-    [System.Windows.Forms.Application]::DoEvents()
-    Write-Verbose "UI updated with latest data"
-
+    Set-StatusMessage -Message "Ready" -Type 'Success'
 }
 
 
 function Connect-UIEvents {
     <#
     .SYNOPSIS
-        Wires up event handlers for all UI controls.
-    .PARAMETER UiRefs
-        Hashtable of UI control references.
-    .PARAMETER ContentPanel
-        The main content panel hosting the UI.
+        Wires up event handlers for all UI controls
     #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)] $UiRefs,
-        [Parameter(Mandatory)] [System.Windows.Forms.Panel] $ContentPanel
-    )
+
+    [CmdletBinding()]param()
 
     # Overview Tab Events
-    $UiRefs.Tabs.Overview.RefreshButton.Add_Click({
+    $script:Refs.Tabs.Overview.RefreshButton.Add_Click({
         . $PSScriptRoot\ClassesView.ps1
         Show-ClassesView -ContentPanel $script:Refs.ContentPanel
-        Set-StatusMessage -Refs $script:Refs -Message "Overview refreshed" -Type 'Success'
+        Set-StatusMessage -Message "Overview refreshed" -Type 'Success'
     })
 
     #  ----------------------  Create Tab Events  ----------------------
 
     # Gather all the needed GUI components (required for Scope issues, approved by Dr. White)
-    $script:className     = $UiRefs.Tabs.Create.ClassFolder                     # Class Name
-    $script:textBox       = $UiRefs.Tabs.Create.StudentNames                    # Student Names
-    $script:dataStore     = $UiRefs.Tabs.Create.DataStoreDropdown               # DataStore
-    $script:serverName    = $UiRefs.Tabs.Create.ServerName                      # Server Name
-    $script:template      = $UiRefs.Tabs.Create.ServerTemplate                  # Template
-    $script:customization = $UiRefs.Tabs.Create.ServerCustomization             # Customization   
-    $script:adapters      = $UiRefs.Tabs.Create.ServerAdapters                  # Adapters
+    $script:className     = $script:Refs.Tabs.Create.ClassFolder                     # Class Name
+    $script:textBox       = $script:Refs.Tabs.Create.StudentNames                    # Student Names
+    $script:dataStore     = $script:Refs.Tabs.Create.DataStoreDropdown               # DataStore
+    $script:serverName    = $script:Refs.Tabs.Create.ServerName                      # Server Name
+    $script:template      = $script:Refs.Tabs.Create.ServerTemplate                  # Template
+    $script:customization = $script:Refs.Tabs.Create.ServerCustomization             # Customization   
+    $script:adapters      = $script:Refs.Tabs.Create.ServerAdapters                  # Adapters
 
     # Needed in Overview tab (Changed from Remove | Power tab)
-    $script:classFolder     = $UiRefs.Tabs.Overview.ClassComboBox
-    $script:hostName        = $UiRefs.Tabs.Overview.HostComboBox
+    $script:classFolder     = $script:Refs.Tabs.Overview.ClassComboBox
+    $script:hostName        = $script:Refs.Tabs.Overview.HostComboBox
 
     # CREATE TAB IMPORT BUTTON
-    $UiRefs.Tabs.Create.ImportButton.Add_Click({
+    $script:Refs.Tabs.Create.ImportButton.Add_Click({
 
         # create an open file dialog box object from Windows Forms  
         $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -883,7 +917,7 @@ function Connect-UIEvents {
 
 
     # CREATE TAB VMS BUTTON
-    $UiRefs.Tabs.Create.CreateVMsButton.Add_Click({
+    $script:Refs.Tabs.Create.CreateVMsButton.Add_Click({
         
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
@@ -972,16 +1006,16 @@ function Connect-UIEvents {
 
             # --------------- Call the VM creation function ---------------
             New-CourseVMs -courseInfo $courseInfo 
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully created VMs for class $className" -Type 'Success'
+            Set-StatusMessage -Message "Successfully created VMs for class $className" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error creating VMs: $_" -Type 'Error'
+            Set-StatusMessage -Message "Error creating VMs: $_" -Type 'Error'
         }
     })
 
 
     # Overview (Remove/Power Options) Events
-    $UiRefs.Tabs.Overview.RemoveCourseFolderVMsButton.Add_Click({
+    $script:Refs.Tabs.Overview.RemoveCourseFolderVMsButton.Add_Click({
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
@@ -994,14 +1028,14 @@ function Connect-UIEvents {
             
             Remove-CourseFolder -classFolder $classFolder
             Show-ClassesView -ContentPanel $script:Refs.ContentPanel # Refresh page
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed $classFolder" -Type 'Success'
+            Set-StatusMessage -Message "Successfully removed $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error removing $classFolder" -Type 'Error'
+            Set-StatusMessage -Message "Error removing $classFolder" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Overview.PowerOffClassVMsButton.Add_Click({
+    $script:Refs.Tabs.Overview.PowerOffClassVMsButton.Add_Click({
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
@@ -1014,14 +1048,14 @@ function Connect-UIEvents {
             
             Stop-ClassVMs -classFolder $classFolder
             Show-ClassesView -ContentPanel $script:Refs.ContentPanel # Refresh page
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off VMs for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Message "Successfully powered off VMs for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
+            Set-StatusMessage -Message "Error powering off VMs: $_" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Overview.RemoveHostButton.Add_Click({
+    $script:Refs.Tabs.Overview.RemoveHostButton.Add_Click({
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
@@ -1039,14 +1073,14 @@ function Connect-UIEvents {
 
             Remove-Host -classFolder $classFolder -hostName $hostName
             Show-ClassesView -ContentPanel $script:Refs.ContentPanel # Refresh page
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully removed host $hostName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Message "Successfully removed host $hostName for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error removing host: $_" -Type 'Error'
+            Set-StatusMessage -Message "Error removing host: $_" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Overview.PowerOffSpecificClassVMsButton.Add_Click({
+    $script:Refs.Tabs.Overview.PowerOffSpecificClassVMsButton.Add_Click({
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
@@ -1064,14 +1098,14 @@ function Connect-UIEvents {
             
             Stop-SpecificClassVMs -classFolder $classFolder -hostName $hostName
             Show-ClassesView -ContentPanel $script:Refs.ContentPanel # Refresh page
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered off $hostName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Message "Successfully powered off $hostName for class $classFolder" -Type 'Success'
             
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error powering off VMs: $_" -Type 'Error'
+            Set-StatusMessage -Message "Error powering off VMs: $_" -Type 'Error'
         }
     })
 
-    $UiRefs.Tabs.Overview.PowerOnSpecificClassVMsButton.Add_Click({
+    $script:Refs.Tabs.Overview.PowerOnSpecificClassVMsButton.Add_Click({
         # Needed for Set-StatusMessage function
         . $PSScriptRoot\ClassesView.ps1
 
@@ -1089,14 +1123,16 @@ function Connect-UIEvents {
             
             Start-SpecificClassVMs -classFolder $classFolder -hostName $hostName
             Show-ClassesView -ContentPanel $script:Refs.ContentPanel # Refresh page
-            Set-StatusMessage -Refs $script:Refs -Message "Successfully powered on $hostName for class $classFolder" -Type 'Success'
+            Set-StatusMessage -Message "Successfully powered on $hostName for class $classFolder" -Type 'Success'
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Error powering on VMs: $_" -Type 'Error'
+            Set-StatusMessage -Message "Error powering on VMs: $_" -Type 'Error'
         }
     })
 }
 
+
 # ----------- Functions for VM Management ----------------------------------------
+
 
 function Remove-CourseFolder {
     <#
@@ -1115,7 +1151,7 @@ function Remove-CourseFolder {
     }
     else {
         #Write-Host 'Bad class folder'
-        Set-StatusMessage -Refs $script:Refs -Message "Bad class folder" -Type 'Error'
+        Set-StatusMessage -Message "Bad class folder" -Type 'Error'
     }
 }
 
@@ -1155,10 +1191,10 @@ function Remove-Host {
 
                 Remove-VM -DeletePermanently -VM $MyVM -Confirm:$false
 
-                #Set-StatusMessage -Refs $script:Refs -Message "Removed VM $hostName from $($student.Name)" -Type 'Success'
+                #Set-StatusMessage -Message "Removed VM $hostName from $($student.Name)" -Type 'Success'
             }
         } catch {
-            Set-StatusMessage -Refs $script:Refs -Message "Failed to remove host VMs: $_" -Type 'Error'
+            Set-StatusMessage -Message "Failed to remove host VMs: $_" -Type 'Error'
         }
 
     }
@@ -1194,9 +1230,9 @@ function Stop-ClassVMs {
             }
         }
 
-        # Set-StatusMessage -Refs $script:Refs -Message "Stopped VMs from '$classFolder'" -Type 'Success'
+        # Set-StatusMessage -Message "Stopped VMs from '$classFolder'" -Type 'Success'
     } catch {
-        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+        Set-StatusMessage -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
     }
 }
 
@@ -1235,11 +1271,11 @@ function Stop-SpecificClassVMs {
             }
         
             # write messsage
-            # Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered off" -Type 'Success'
+            # Set-StatusMessage -Message "$folderName $hostName powered off" -Type 'Success'
 
         }
     } catch {
-        Set-StatusMessage -Refs $script:Refs -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
+        Set-StatusMessage -Message "Failed to stop VMs in '$classFolder'" -Type 'Error'
     }
 }
 
@@ -1277,7 +1313,7 @@ function Start-SpecificClassVMs {
         }
     
         # write messsage
-        #Set-StatusMessage -Refs $script:Refs -Message "$folderName $hostName powered on" -Type 'Success'
+        #Set-StatusMessage -Message "$folderName $hostName powered on" -Type 'Success'
 
     }
 }
@@ -1470,7 +1506,7 @@ function Remove-VMs {
 
             # write messsage
             # Write-Host $folderName " removed"
-            # Set-StatusMessage -Refs $script:Refs -Message "$folderName removed" -Type 'Success'
+            # Set-StatusMessage -Message "$folderName removed" -Type 'Success'
 
         } 
     }
