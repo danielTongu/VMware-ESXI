@@ -620,21 +620,6 @@ function New-ClassManagerLayout {
                 ImportButton         = $btnImport
                 CreateVMsButton      = $btnCreateVMs
             }
-            <#
-            Delete = @{
-                # Parameters
-                ClassComboBox        = $cmbClass
-                HostComboBox         = $cmbHost         # Changed from $cmbServer to $cmbHost
-                # Requires all parameters
-                RemoveHostButton                 = $btnRemoveHost
-                PowerOffSpecificClassVMsButton   = $btnPowerOffSpecificClassVMs     # Fixed name
-                PowerOnSpecificClassVMsButton    = $btnPowerOnSpecificClassVMs      # Fixed name
-                # Requires Class Folder + Start/End Students
-                RemoveCourseFolderVMsButton       = $btnRemoveCourseFolderVMs
-                # Requires Class Folder only
-                PowerOffClassVMsButton    = $btnPowerOffClassVMs
-            }
-            #>
         }
         StatusLabel = $lblStatus
     }
@@ -743,8 +728,11 @@ function Update-ClassManagerWithData {
     $cmbClass.Items.Clear()
     if ($Data.Classes) {
         $cmbClass.Items.AddRange($Data.Classes)
-        if ($cmbClass.Items.Count -gt 0) { $cmbClass.SelectedIndex = 0 }
-    }    
+        if ($cmbClass.Items.Count -gt 0) { 
+            $cmbClass.SelectedIndex = 0 
+        }
+    }
+    
 
     if ($UiRefs.Tabs.Overview.HostComboBox) {
         $UiRefs.Tabs.Overview.HostComboBox.Items.Clear()
