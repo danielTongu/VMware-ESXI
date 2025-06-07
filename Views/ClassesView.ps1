@@ -680,9 +680,27 @@ function Update-ClassManagerWithData {
                 $nStu = $nCls.Nodes.Add($stu)
 
                 # Retrieve student folder
-                $studentFolder = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue |
-                                 Where-Object { $_.Name -eq $stu }
+                $studentFolder = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $stu }
 
+
+                # Get VM object
+                $vms = if ($studentFolder) {
+                    Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue
+                } else { @() }
+
+                foreach ($vm in $vms) {
+                    $vmNode      = New-Object System.Windows.Forms.TreeNode
+                    $vmNode.Text = $vm.Name
+
+                    if ($vm.PowerState -eq 'PoweredOn') {
+                        $vmNode.ForeColor = [System.Drawing.Color]::Green
+                    }
+
+                    $nStu.Nodes.Add($vmNode)
+                }
+
+
+                <#
                 # Retrieve VM names
                 $vms = if ($studentFolder) {
                     Get-VM -Server $conn -Location $studentFolder -ErrorAction SilentlyContinue |
@@ -693,6 +711,8 @@ function Update-ClassManagerWithData {
                     # Add VMs as child nodes
                     $nStu.Nodes.Add($vm)
                 }
+
+                #>
             }
         }
     } else {
