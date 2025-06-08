@@ -227,6 +227,9 @@ function Handle-Login {
         $LoginButton.Text   = 'CONNECTING...'
         $LoginButton.Refresh()
 
+        # Ignore SSL certificate validation errors this session only
+        Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Scope Session -Confirm:$false | Out-Null
+
         # Temporarily suppress all PowerCLI output
         $oldPref = $global:ErrorActionPreference
         $global:ErrorActionPreference = 'SilentlyContinue'
