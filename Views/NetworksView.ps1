@@ -27,6 +27,7 @@ function Show-NetworksView {
     $data = Get-NetworksData
 
     if ($data) {
+        $script:Refs.Data = $data
         Update-NetworksWithData -Data $data
         Wire-UIEvents
     } 
@@ -51,313 +52,278 @@ function New-NetworksLayout {
         [System.Windows.Forms.Panel] $ContentPanel
     )
 
-    try {
-        $ContentPanel.Controls.Clear()
-        $ContentPanel.BackColor = $script:Theme.LightGray
-        $refs = @{ ContentPanel = $ContentPanel }
+    $ContentPanel.Controls.Clear()
+    $ContentPanel.BackColor = $script:Theme.LightGray
+    $refs = @{ ContentPanel = $ContentPanel }
 
-        # ── Root table ------------------------------------------------------------
-        $root              = New-Object System.Windows.Forms.TableLayoutPanel
-        $root.Dock         = 'Fill'
-        $root.ColumnCount  = 1
-        $root.RowCount     = 4
-        $null = $root.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',100))
-        $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
-        $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
-        $ContentPanel.Controls.Add($root)
+    $margin = New-Object System.Windows.Forms.Padding(0,5,5,10)
 
-        # ── Header ----------------------------------------------------------------
-        $headerPanel      = New-NetworksHeader
-        $root.Controls.Add($headerPanel, 0, 0)
-        $lblRefresh       = $headerPanel.Controls.Find('LastRefreshLabel', $true)[0]
-        $refs['LastRefreshLabel'] = $lblRefresh
+    # ── Root table ------------------------------------------------------------
+    $root              = New-Object System.Windows.Forms.TableLayoutPanel
+    $root.Dock         = 'Fill'
+    $root.ColumnCount  = 1
+    $root.RowCount     = 4
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $root.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $ContentPanel.Controls.Add($root)
 
-        # ── Tab-control -----------------------------------------------------------
-        $tabs             = New-Object System.Windows.Forms.TabControl
-        $tabs.Dock        = 'Fill'
-        $tabs.SizeMode    = 'Normal'
-        $tabs.Padding = New-Object System.Drawing.Point(20, 10)
-        $tabs.Font        = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $tabs.BackColor   = $script:Theme.LightGray
-        $root.Controls.Add($tabs, 0, 1)
+    # ── Header ----------------------------------------------------------------
+    $headerPanel      = New-NetworksHeader
+    $root.Controls.Add($headerPanel, 0, 0)
+    $lblRefresh       = $headerPanel.Controls.Find('LastRefreshLabel', $true)[0]
+    $refs['LastRefreshLabel'] = $lblRefresh
 
-        # 1. Networks Manager Tab ──────────────────────────────────────────────────
-        $tabManage = New-Object System.Windows.Forms.TabPage 'Manage'
-        $tabManage.BackColor = $script:Theme.White
-        
-        $manageLayout = New-Object System.Windows.Forms.TableLayoutPanel
-        $manageLayout.Dock = 'Fill'
-        $manageLayout.ColumnCount = 2
-        $manageLayout.RowCount = 2
-        $null = $manageLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
-        $null = $manageLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle 'Percent',50))
-        $tabManage.Controls.Add($manageLayout)
+    # ── Tab-control -----------------------------------------------------------
+    $tabs             = New-Object System.Windows.Forms.TabControl
+    $tabs.Dock        = 'Fill'
+    $tabs.SizeMode    = 'Normal'
+    $tabs.Padding = New-Object System.Drawing.Point(20, 10)
+    $tabs.Font        = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $tabs.BackColor   = $script:Theme.LightGray
+    $root.Controls.Add($tabs, 0, 1)
 
-        # Description
-        $tabNetDescription = New-Object System.Windows.Forms.Label
-        $tabNetDescription.Text = "Manages Standard switches and their associated port groups.`n"
-        $tabNetDescription.ForeColor = $script:Theme.PrimaryDark
-        $tabNetDescription.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-        $tabNetDescription.Anchor = 'Left'
-        $tabNetDescription.AutoSize = $true
-        $manageLayout.Controls.Add($tabNetDescription,0,0)
-        $manageLayout.SetColumnSpan($tabNetDescription,2)
+    # 1. Networks Manager Tab ──────────────────────────────────────────────────
+    $tabManage = New-Object System.Windows.Forms.TabPage 'Manage'
+    $tabManage.BackColor = $script:Theme.White
+    $tabs.TabPages.Add($tabManage)
+    
+    $manageLayout = New-Object System.Windows.Forms.TableLayoutPanel
+    $manageLayout.Dock = 'Fill'
+    $manageLayout.RowCount = 2
+    $null = $manageLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'AutoSize'))
+    $null = $manageLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle 'Percent',100))
+    $tabManage.Controls.Add($manageLayout)
 
-        #── Left Panel: Add Single Network ───────────────────────────────────────────
-        $grNetAdd = New-Object System.Windows.Forms.GroupBox
-        $grNetAdd.Text = 'Single Network'
-        $grNetAdd.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-        $grNetAdd.Dock = 'Fill'
-        $grNetAdd.Margin = New-Object System.Windows.Forms.Padding(5)
-        $grNetAdd.Padding = New-Object System.Windows.Forms.Padding(10)
+    # Description
+    $tabNetDescription = New-Object System.Windows.Forms.Label
+    $tabNetDescription.Text = "Manages Standard switches and their associated port groups.`n"
+    $tabNetDescription.ForeColor = $script:Theme.PrimaryDark
+    $tabNetDescription.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $tabNetDescription.Anchor = 'Left'
+    $tabNetDescription.AutoSize = $true
+    $tabNetDescription.Margin = New-Object System.Windows.Forms.Padding(10,10,10,5)
+    $manageLayout.Controls.Add($tabNetDescription,0,0)
 
-        $layoutNetAdd = New-Object System.Windows.Forms.TableLayoutPanel
-        $layoutNetAdd.Dock = 'Fill'
-        $layoutNetAdd.ColumnCount = 4 # label, dropdown or field, button, empty
-        $layoutNetAdd.RowCount = 5    # class, student, delete, add, empty
-        
-        $margin = New-Object System.Windows.Forms.Padding(0,5,5,10)
+    $manageFlow = New-Object System.Windows.Forms.FlowLayoutPanel
+    $manageFlow.Dock = 'Fill'
+    $manageFlow.AutoScroll = $true
+    $manageFlow.Padding = New-Object System.Windows.Forms.Padding(10)
+    $manageFlow.WrapContents = $false
+    $manageFlow.FlowDirection = 'LeftToRight'
+    $manageFlow.AutoSize = $false
+    $manageFlow.BackColor = $script:Theme.White
+    $manageLayout.Controls.Add($manageFlow,0,1)
 
-        # Select class
-        $lblClass = New-Object System.Windows.Forms.Label
-        $lblClass.Text = "Class:"
-        $lblClass.Anchor = 'Right'
-        $lblClass.TextAlign = 'MiddleRight'
-        $layoutNetAdd.Controls.Add($lblClass, 0, 0)
+    #── Left Panel: Add Single Network ───────────────────────────────────────────
+    $grNetAdd = New-Object System.Windows.Forms.GroupBox
+    $grNetAdd.Text = 'Single Network'
+    $grNetAdd.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $grNetAdd.Margin = New-Object System.Windows.Forms.Padding(10)
+    $grNetAdd.Padding = New-Object System.Windows.Forms.Padding(10)
+    $grNetAdd.Width = 300
+    $grNetAdd.AutoSize = $true
+    $manageFlow.Controls.Add($grNetAdd)
 
-        $cmbClasses = New-Object System.Windows.Forms.ComboBox
-        $cmbClasses.DropDownStyle = 'DropDownList'
-        $cmbClasses.Margin = $margin
-        $layoutNetAdd.Controls.Add($cmbClasses, 1, 0)
-        $layoutNetAdd.SetColumnSpan($cmbClasses, 2)
-        $refs['CmbClasses'] = $cmbClasses
+    $grNetAddLayout = New-Object System.Windows.Forms.TableLayoutPanel
+    $grNetAddLayout.ColumnCount = 4
+    $grNetAddLayout.RowCount = 2 
+    $grNetAddLayout.Dock = 'Fill'
+    $grNetAddLayout.AutoSize = $true
+    $grNetAdd.Controls.Add($grNetAddLayout)
 
-        # Select Student
-        $lblStudent = New-Object System.Windows.Forms.Label
-        $lblStudent.Text = "Student:"
-        $lblStudent.Anchor = 'Right'
-        $lblStudent.TextAlign = 'MiddleRight'
-        $layoutNetAdd.Controls.Add($lblStudent, 0, 1)
+    # Network name
+    $lblAddNet = New-Object System.Windows.Forms.Label
+    $lblAddNet.Dock = 'Top'
+    $lblAddNet.Text = "Network Name:"
+    $lblAddNet.Anchor = 'Right'
+    $lblAddNet.TextAlign = 'MiddleRight'
+    $grNetAddLayout.Controls.Add($lblAddNet, 0, 0)
 
-        $cmbStudents = New-Object System.Windows.Forms.ComboBox
-        $cmbStudents.DropDownStyle = 'DropDownList'
-        $cmbStudents.Margin = $margin
-        $layoutNetAdd.Controls.Add($cmbStudents, 1, 1)
-        $layoutNetAdd.SetColumnSpan($cmbStudents, 2)
-        $refs['CmbStudents'] = $cmbStudents
+    $txtNewNetwork = New-Object System.Windows.Forms.TextBox
+    $txtNewNetwork.Dock = 'Fill'
+    $txtNewNetwork.AutoSize = $true
+    $txtNewNetwork.Margin = $margin
+    $grNetAddLayout.Controls.Add($txtNewNetwork, 1, 0)
+    $grNetAddLayout.SetColumnSpan($txtNewNetwork,2)
+    $refs["TxtNetwork"] = $txtNewNetwork
 
-        # Delete Network
-        $lblDeleteNet = New-Object System.Windows.Forms.Label
-        $lblDeleteNet.Text = "Delete Network:"
-        $lblDeleteNet.Anchor = 'Right'
-        $lblDeleteNet.TextAlign = 'MiddleRight'
-        $layoutNetAdd.Controls.Add($lblDeleteNet, 0, 2)
+    # Delete button
+    $btnDelNet = New-Object System.Windows.Forms.Button
+    $btnDelNet.Text = "Delete"
+    $btnDelNet.Dock = 'Top'
+    $btnDelNet.AutoSize = $true
+    $btnDelNet.Margin = $margin
+    $btnDelNet.BackColor = $script:Theme.Error
+    $btnDelNet.ForeColor = $script:Theme.White
+    $grNetAddLayout.Controls.Add($btnDelNet, 1, 1)
+    $refs['BtnDelNet'] = $btnDelNet
 
-        $cmbStudentNetworks = New-Object System.Windows.Forms.ComboBox
-        $cmbStudentNetworks.Dock = 'Fill'
-        $cmbStudentNetworks.AutoSize = $true
-        $cmbStudentNetworks.Margin = $margin
-        $cmbStudentNetworks.DropDownStyle = 'DropDownList'
-        $layoutNetAdd.Controls.Add($cmbStudentNetworks, 1, 2)
-        $refs['CmbStudentNetworks'] = $cmbStudentNetworks
+    # Add button
+    $btnAddNet = New-Object System.Windows.Forms.Button
+    $btnAddNet.Text = "Add"
+    $btnAddNet.Dock = 'Top'
+    $btnAddNet.AutoSize = $true
+    $btnAddNet.Margin = $margin
+    $btnAddNet.BackColor = $script:Theme.Primary
+    $btnAddNet.ForeColor = $script:Theme.White
+    $grNetAddLayout.Controls.Add($btnAddNet, 2, 1)
+    $refs['BtnAddNet'] = $btnAddNet
+    
+    #── Right Panel: Multiple Networks ────────────────────────────────────
+    $grMult = New-Object System.Windows.Forms.GroupBox
+    $grMult.Text = 'Multiple Networks'
+    $grMult.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $grMult.Margin = New-Object System.Windows.Forms.Padding(10)
+    $grMult.Padding = New-Object System.Windows.Forms.Padding(10)
+    $grMult.Width = 400
+    $grMult.AutoSize = $true
+    $manageFlow.Controls.Add($grMult)
 
-        $btnDelNet = New-Object System.Windows.Forms.Button
-        $btnDelNet.Text = "Delete"
-        $btnDelNet.Dock = 'Top'
-        $btnDelNet.AutoSize = $true
-        $btnDelNet.Margin =$margin
-        $btnDelNet.BackColor = $script:Theme.Error
-        $btnDelNet.ForeColor = $script:Theme.White
-        $layoutNetAdd.Controls.Add($btnDelNet, 2, 2)
-        $refs['BtnDelNet'] = $btnDelNet
+    $layoutMult = New-Object System.Windows.Forms.TableLayoutPanel
+    $layoutMult.Dock = 'Fill'
+    $layoutMult.ColumnCount = 4
+    $layoutMult.RowCount = 5
+    $layoutMult.AutoSize = $true
+    $grMult.Controls.Add($layoutMult)
 
-        # Add Network
-        $lblAddNet = New-Object System.Windows.Forms.Label
-        $lblAddNet.Dock = 'Top'
-        $lblAddNet.Text = "Add Network:"
-        $lblAddNet.Anchor = 'Right'
-        $lblAddNet.TextAlign = 'MiddleRight'
-        $layoutNetAdd.Controls.Add($lblAddNet, 0, 3)
+    # Select class label
+    $lblMultClass = New-Object System.Windows.Forms.Label
+    $lblMultClass.Text = "Class:"
+    $lblMultClass.Anchor = 'Right'
+    $lblMultClass.TextAlign = 'MiddleRight'
+    $layoutMult.Controls.Add($lblMultClass, 0, 0)
 
-        $txtNewNetwork = New-Object System.Windows.Forms.TextBox
-        $txtNewNetwork.Dock = 'Fill'
-        $txtNewNetwork.AutoSize = $true
-        $txtNewNetwork.Margin = $margin
-        $layoutNetAdd.Controls.Add($txtNewNetwork, 1, 3)
+    # Select class dropdown
+    $cmbMultClasses = New-Object System.Windows.Forms.ComboBox
+    $cmbMultClasses.Margin = $margin
+    $cmbMultClasses.DropDownStyle = 'DropDownList'
+    $layoutMult.Controls.Add($cmbMultClasses, 1, 0)
+    $layoutMult.SetColumnSpan($cmbMultClasses, 3)
+    $refs['CmbMultClasses'] = $cmbMultClasses
 
-        $btnAddNet = New-Object System.Windows.Forms.Button
-        $btnAddNet.Text = "Add"
-        $btnAddNet.Dock = 'Fill'
-        $btnAddNet.AutoSize = $true
-        $btnAddNet.Margin = $margin
-        $btnAddNet.BackColor = $script:Theme.Primary
-        $btnAddNet.ForeColor = $script:Theme.White
-        $layoutNetAdd.Controls.Add($btnAddNet, 2, 3)
-        $refs['BtnAddNet'] = $btnAddNet
-        
-        $grNetAdd.Controls.Add($layoutNetAdd)
-        $manageLayout.Controls.Add($grNetAdd, 0, 1)
-        
-        #── Right Panel: Multiple Networks ────────────────────────────────────
-        $grMult = New-Object System.Windows.Forms.GroupBox
-        $grMult.Text = 'Multiple Networks'
-        $grMult.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-        $grMult.Dock = 'Fill'
-        $grMult.Margin = New-Object System.Windows.Forms.Padding(5)
-        $grMult.Padding = New-Object System.Windows.Forms.Padding(10)
+     # Start student number
+    $labelStartNum = New-Object System.Windows.Forms.Label
+    $labelStartNum.Text = "Start Student:"
+    $labelStartNum.AutoSize = $true
+    $labelStartNum.Anchor = 'Right'
+    $labelStartNum.TextAlign = 'MiddleRight'
+    $layoutMult.Controls.Add($labelStartNum, 0, 1)
 
-        $layoutMult = New-Object System.Windows.Forms.TableLayoutPanel
-        $layoutMult.Dock = 'Fill'
-        $layoutMult.ColumnCount = 4 # label, dropdown or field or NumericUpDown, NumericUpDown or button, empty
-        $layoutMult.RowCount = 5 # class, start, end, empty
+    $inputStartNum = New-Object System.Windows.Forms.NumericUpDown
+    $inputStartNum.Margin = $margin
+    $inputStartNum.Minimum = 1
+    $inputStartNum.Maximum = 1000
+    $layoutMult.Controls.Add($inputStartNum, 1, 1)
+    $refs['InputStartNum'] = $inputStartNum
 
-        # Select class label
-        $lblMultClass = New-Object System.Windows.Forms.Label
-        $lblMultClass.Text = "Class:"
-        $lblMultClass.Anchor = 'Right'
-        $lblMultClass.TextAlign = 'MiddleRight'
-        $layoutMult.Controls.Add($lblMultClass, 0, 0)
+     # End Student number
+    $labelEndNum = New-Object System.Windows.Forms.Label
+    $labelEndNum.Text = "End Student:"
+    $labelEndNum.AutoSize = $true
+    $labelEndNum.Anchor = 'Right'
+    $labelEndNum.TextAlign = 'MiddleRight'
+    $layoutMult.Controls.Add($labelEndNum, 0, 2)
 
-        # Select class dropdown
-        $cmbMultClasses = New-Object System.Windows.Forms.ComboBox
-        $cmbMultClasses.Margin = $margin
-        $cmbMultClasses.DropDownStyle = 'DropDownList'
-        $layoutMult.Controls.Add($cmbMultClasses, 1, 0)
-        $layoutMult.SetColumnSpan($cmbMultClasses, 3)
-        $refs['CmbMultClasses'] = $cmbMultClasses
+    $inputEndNum = New-Object System.Windows.Forms.NumericUpDown
+    $inputEndNum.Margin = $margin
+    $inputEndNum.Minimum = 1
+    $inputEndNum.Maximum = 1000
+    $layoutMult.Controls.Add($inputEndNum, 1, 2)
+    $refs['InputEndNum'] = $inputEndNum
 
-        # Range label start
-        $labelStartNum = New-Object System.Windows.Forms.Label
-        $labelStartNum.Text = "Start Student:"
-        $labelStartNum.AutoSize = $true
-        $labelStartNum.Anchor = 'Right'
-        $labelStartNum.TextAlign = 'MiddleRight'
-        $layoutMult.Controls.Add($labelStartNum, 0, 1)
+    # Delete selected class network button
+    $btnDelMult = New-Object System.Windows.Forms.Button
+    $btnDelMult.Margin = $margin
+    $btnDelMult.Dock = 'Fill'
+    $btnDelMult.Text = "Delete Networks"
+    $btnDelMult.AutoSize = $true
+    $btnDelMult.BackColor = $script:Theme.Error
+    $btnDelMult.ForeColor = $script:Theme.White
+    $layoutMult.Controls.Add($btnDelMult, 1, 3)
+    $refs['BtnDelMult'] = $btnDelMult
 
-        # Start NumericUpDown
-        $inputStartNum = New-Object System.Windows.Forms.NumericUpDown
-        $inputStartNum.Margin = $margin
-        $inputStartNum.Minimum = 1
-        $inputStartNum.Maximum = 1000
-        $layoutMult.Controls.Add($inputStartNum, 1, 1)
-        $refs['InputStartNum'] = $inputStartNum
+    # Add class network button
+    $btnAddMult = New-Object System.Windows.Forms.Button
+    $btnAddMult.Margin = $margin
+    $btnAddMult.Text = "Add Networks"
+    $btnAddMult.Dock = 'Fill'
+    $btnAddMult.AutoSize = $true
+    $btnAddMult.BackColor = $script:Theme.Primary
+    $btnAddMult.ForeColor = $script:Theme.White
+    $layoutMult.Controls.Add($btnAddMult, 2, 3)
+    $refs['BtnAddMult'] = $btnAddMult
 
-        # Range label end
-        $labelEndNum = New-Object System.Windows.Forms.Label
-        $labelEndNum.Text = "End Student:"
-        $labelEndNum.AutoSize = $true
-        $labelEndNum.Anchor = 'Right'
-        $labelEndNum.TextAlign = 'MiddleRight'
-        $layoutMult.Controls.Add($labelEndNum, 0, 2)
+    # 2. Hosts -----------------------------------------------------------------
+    $tabHosts = New-Object System.Windows.Forms.TabPage 'Hosts'
+    $tabHosts.BackColor = $script:Theme.White
+    $hostsTable = New-NetworksTable -Name 'HostsTable' -Refs ([ref]$refs)
+    $tabHosts.Controls.Add($hostsTable)
+    $tabs.TabPages.Add($tabHosts)
 
-        # End NumericUpDown
-        $inputEndNum = New-Object System.Windows.Forms.NumericUpDown
-        $inputEndNum.Margin = $margin
-        $inputEndNum.Minimum = 1
-        $inputEndNum.Maximum = 1000
-        $layoutMult.Controls.Add($inputEndNum, 1, 2)
-        $refs['InputEndNum'] = $inputEndNum
+    # 3. Network Adapters ------------------------------------------------------
+    $tabNics = New-Object System.Windows.Forms.TabPage 'Adapters'
+    $tabNics.BackColor = $script:Theme.White
+    $nicsTable = New-NetworksTable -Name 'NicsTable' -Refs ([ref]$refs)
+    $tabNics.Controls.Add($nicsTable)
+    $tabs.TabPages.Add($tabNics)
 
-        # Delete selected class network button
-        $btnDelMult = New-Object System.Windows.Forms.Button
-        $btnDelMult.Margin = $margin
-        $btnDelMult.Dock = 'Fill'
-        $btnDelMult.Text = "Delete Networks"
-        $btnDelMult.AutoSize = $true
-        $btnDelMult.BackColor = $script:Theme.Error
-        $btnDelMult.ForeColor = $script:Theme.White
-        $layoutMult.Controls.Add($btnDelMult, 1, 3)
-        $refs['BtnDelMult'] = $btnDelMult
+    # 4. Templates -------------------------------------------------------------
+    $tabTpl = New-Object System.Windows.Forms.TabPage 'Templates'
+    $tabTpl.BackColor = $script:Theme.White
+    $tplTable = New-NetworksTable -Name 'TemplatesTable' -Refs ([ref]$refs)
+    $tabTpl.Controls.Add($tplTable)
+    $tabs.TabPages.Add($tabTpl)
 
-        # Add class network button
-        $btnAddMult = New-Object System.Windows.Forms.Button
-        $btnAddMult.Margin = $margin
-        $btnAddMult.Text = "Add Networks"
-        $btnAddMult.Dock = 'Fill'
-        $btnAddMult.AutoSize = $true
-        $btnAddMult.BackColor = $script:Theme.Primary
-        $btnAddMult.ForeColor = $script:Theme.White
-        $layoutMult.Controls.Add($btnAddMult, 2, 3)
-        $refs['BtnAddMult'] = $btnAddMult
-        
-        $grMult.Controls.Add($layoutMult)
-        $manageLayout.Controls.Add($grMult, 1, 1)
-        $tabs.TabPages.Add($tabManage)
+    # 5. Port Groups -----------------------------------------------------------
+    $tabPg = New-Object System.Windows.Forms.TabPage 'Port Groups'
+    $tabPg.BackColor = $script:Theme.White
+    $pgTable = New-NetworksTable -Name 'PortGroupsTable' -Refs ([ref]$refs)
+    $tabPg.Controls.Add($pgTable)
+    $tabs.TabPages.Add($tabPg)
 
-        # 2. Hosts -----------------------------------------------------------------
-        $tabHosts = New-Object System.Windows.Forms.TabPage 'Hosts'
-        $tabHosts.BackColor = $script:Theme.White
-        $hostsTable = New-NetworksTable -Name 'HostsTable' -Refs ([ref]$refs)
-        $tabHosts.Controls.Add($hostsTable)
-        $tabs.TabPages.Add($tabHosts)
+    # ── Actions bar -----------------------------------------------------------
+    $actionsPanel                     = New-Object System.Windows.Forms.FlowLayoutPanel
+    $actionsPanel.Dock                = 'Fill'
+    $actionsPanel.Padding             = 10
+    $actionsPanel.AutoSize            = $true
+    $actionsPanel.BackColor           = $script:Theme.LightGray
 
-        # 3. Network Adapters ------------------------------------------------------
-        $tabNics = New-Object System.Windows.Forms.TabPage 'Adapters'
-        $tabNics.BackColor = $script:Theme.White
-        $nicsTable = New-NetworksTable -Name 'NicsTable' -Refs ([ref]$refs)
-        $tabNics.Controls.Add($nicsTable)
-        $tabs.TabPages.Add($tabNics)
+    $root.Controls.Add($actionsPanel, 0, 2)
 
-        # 4. Templates -------------------------------------------------------------
-        $tabTpl = New-Object System.Windows.Forms.TabPage 'Templates'
-        $tabTpl.BackColor = $script:Theme.White
-        $tplTable = New-NetworksTable -Name 'TemplatesTable' -Refs ([ref]$refs)
-        $tabTpl.Controls.Add($tplTable)
-        $tabs.TabPages.Add($tabTpl)
+    $btnRefresh               = New-Object System.Windows.Forms.Button
+    $btnRefresh.Text          = 'REFRESH'
+    $btnRefresh.Font          = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
+    $btnRefresh.Size          = New-Object System.Drawing.Size(120,35)
+    $btnRefresh.BackColor     = $script:Theme.Primary
+    $btnRefresh.ForeColor     = $script:Theme.White
+    $btnRefresh.FlatStyle     = 'Flat'
 
-        # 5. Port Groups -----------------------------------------------------------
-        $tabPg = New-Object System.Windows.Forms.TabPage 'Port Groups'
-        $tabPg.BackColor = $script:Theme.White
-        $pgTable = New-NetworksTable -Name 'PortGroupsTable' -Refs ([ref]$refs)
-        $tabPg.Controls.Add($pgTable)
-        $tabs.TabPages.Add($tabPg)
+    $refs['RefreshButton'] = $btnRefresh
+    $actionsPanel.Controls.Add($btnRefresh)
 
-        # ── Actions bar -----------------------------------------------------------
-        $actionsPanel                     = New-Object System.Windows.Forms.FlowLayoutPanel
-        $actionsPanel.Dock                = 'Fill'
-        $actionsPanel.Padding             = 10
-        $actionsPanel.AutoSize            = $true
-        $actionsPanel.BackColor           = $script:Theme.LightGray
+    # ── Footer ----------------------------------------------------------------
+    $footer           = New-Object System.Windows.Forms.Panel
+    $footer.Dock      = 'Fill'
+    $footer.AutoSize  = $true
+    $footer.Height    = 30
+    $footer.BackColor = $script:Theme.LightGray
 
-        $root.Controls.Add($actionsPanel, 0, 2)
+    $status           = New-Object System.Windows.Forms.Label
+    $status.Name      = 'StatusLabel'
+    $status.AutoSize  = $true
+    $status.Font      = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+    $status.ForeColor = $script:Theme.Error
+    $status.Text      = '---'
+    $footer.Controls.Add($status)
 
-        $btnRefresh               = New-Object System.Windows.Forms.Button
-        $btnRefresh.Text          = 'REFRESH'
-        $btnRefresh.Font          = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-        $btnRefresh.Size          = New-Object System.Drawing.Size(120,35)
-        $btnRefresh.BackColor     = $script:Theme.Primary
-        $btnRefresh.ForeColor     = $script:Theme.White
-        $btnRefresh.FlatStyle     = 'Flat'
+    $root.Controls.Add($footer, 0, 3)
+    $refs['StatusLabel'] = $status
 
-        $refs['RefreshButton'] = $btnRefresh
-        $actionsPanel.Controls.Add($btnRefresh)
-
-        # ── Footer ----------------------------------------------------------------
-        $footer           = New-Object System.Windows.Forms.Panel
-        $footer.Dock      = 'Fill'
-        $footer.AutoSize  = $true
-        $footer.Height    = 30
-        $footer.BackColor = $script:Theme.LightGray
-
-        $status           = New-Object System.Windows.Forms.Label
-        $status.Name      = 'StatusLabel'
-        $status.AutoSize  = $true
-        $status.Font      = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
-        $status.ForeColor = $script:Theme.Error
-        $status.Text      = '---'
-        $footer.Controls.Add($status)
-
-        $root.Controls.Add($footer, 0, 3)
-        $refs['StatusLabel'] = $status
-
-        return $refs
-    }
-    finally {
-        $ContentPanel.ResumeLayout($true)
-    }
+    return $refs
 }
+
 
 function New-NetworksHeader {
     <#
@@ -391,6 +357,7 @@ function New-NetworksHeader {
 
     return $panel
 }
+
 
 function New-NetworksTable {
     <#
@@ -454,540 +421,534 @@ function Set-StatusMessage {
 }
 
 
-
-# ─────────────────────────  Data collection  ─────────────────────────────────
 function Get-NetworksData {
     <#
     .SYNOPSIS
-        Collects data from vSphere for the networks view including class/student/network relationships.
-        Handles both:
-        1. Bulk-created networks (CLASS_S##)
-        2. Manually added networks (any format)
+        Collects vSphere network data .\s
     #>
 
-    $conn = $script:Connection
-
-    if (-not $conn) { 
+    [CmdletBinding()]
+    param()
+    
+    # 1. Ensure connection
+    if (-not $script:Connection) {
         Set-StatusMessage -Message 'No connection to vCenter' -Type Error
-    } else {
-        $data = @{}
-        
-        # ─── Class > Student > Networks Mapping ──────────────────────────────
-        Set-StatusMessage -Message "Collecting class/student/network relationships..." -Type Info
+        return $null
+    }
 
-        $dc = Get-Datacenter -Server $conn -Name 'Datacenter'
-        $vmFolder = Get-Folder -Server $conn -Name 'vm' -Location $dc
-        $classesRoot = Get-Folder -Server $conn -Name 'Classes' -Location $vmFolder
-        $classes = Get-Folder -Server $conn -Location $classesRoot -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -notmatch '_' } |
-                    Select-Object -ExpandProperty Name
+    $data = @{}
 
-        # 2. THEN FIND NETWORKS FOR EACH CLASS
-        $classMap = @{}
-        $vmHost = Get-VMHost -Server $conn -ErrorAction SilentlyContinue 
-        $portGroups = $vmHost | Get-VirtualPortGroup -Server $conn
-        
-        foreach ($className in $classes) {
-            $classMap[$className] = @{}  # Initialize class entry
-            
-            # Find all networks for this class (matching "CLASS_S##" pattern)
-            $classNetworks = $portGroups | Where-Object { $_.Name -match "^${className}_S(\d+)$" }
-            
-            foreach ($pg in $classNetworks) {
-                if ($pg.Name -match "^${className}_S(\d+)$") {
-                    $studentNum = $matches[1]
-                    if (-not $classMap[$className].ContainsKey($studentNum)) {
-                        $classMap[$className][$studentNum] = @()
-                    }
-                    $classMap[$className][$studentNum] += $pg.Name
-                }
-            }
+    # 2. Find all classes
+    Set-StatusMessage -Message "Discovering classes..." -Type Info
+    $dc          = Get-Datacenter  -Server $script:Connection -Name 'Datacenter'
+    $vmFolder    = Get-Folder      -Server $script:Connection -Name 'vm'        -Location $dc
+    $classesRoot = Get-Folder      -Server $script:Connection -Name 'Classes'   -Location $vmFolder
+
+    $classFolders = Get-Folder -Server $script:Connection -Location $classesRoot -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -notmatch '_' }
+
+    # Create a mapping of classes to student counts
+    $classStudentCount = @{}
+    
+    foreach ($classFolder in $classFolders) {
+        $className = $classFolder.Name
+        $studentFolders = Get-Folder -Server $conn -Location $classFolder -ErrorAction SilentlyContinue
+        $stuCount = 0
+        if($studentFolders) { $stuCount = $studentFolders.Count }
+        $classStudentCount[$className] = $stuCount
+        Set-StatusMessage -Message "$className - $stuCount students" -Type Info
+    }
+
+    $data.Classes = $classFolders
+    $data.ClassStudentCount = $classStudentCount
+
+    # 3. Retrieve all port-groups
+    Set-StatusMessage -Message "Collecting port groups from hosts..." -Type Info
+    $vmHosts    = Get-VMHost -Server $script:Connection -ErrorAction SilentlyContinue
+    $portGroups = $vmHosts | Get-VirtualPortGroup -Server $script:Connection
+    $data.AllNetworks = $portGroups.Name | Sort-Object
+
+    # 4. Build StudentsMap
+    $studentsMap = @{}
+    foreach ($cls in $classes) {
+        $nums = @()
+        if ($classMap.ContainsKey($cls)) {
+            $nums = $classMap[$cls].Keys | Sort-Object {[int]$_}
         }
+        $studentsMap[$cls] = $nums | ForEach-Object { "Student $_" }
+    }
+    $data.StudentsMap = $studentsMap
 
-        $data.ClassMap = $classMap
-        $data.AllNetworks = $portGroups.Name | Sort-Object
-
-        # ─── Host Info ──────────────────────────────────────────
-        Set-StatusMessage -Message "Collecting host information..." -Type Info
-        $data.HostInfo = Get-VMHost -Server $conn | Select-Object Name, 
+    # 5. Host Info
+    Set-StatusMessage -Message "Collecting host information..." -Type Info
+    $data.HostInfo = Get-VMHost -Server $script:Connection |
+        Select-Object Name,
             @{N='CPU Total (GHz)';E={[math]::Round($_.CpuTotalMhz/1000,1)}},
-            @{N='Memory (GB)';E={[math]::Round($_.MemoryTotalGB,1)}},
+            @{N='Memory (GB)';    E={[math]::Round($_.MemoryTotalGB,1)}},
             Model, Version, ConnectionState, PowerState
 
-        # ─── Network Adapters ───────────────────────────────────
-        Set-StatusMessage -Message "Collecting network adapters..." -Type Info
-        $data.Adapters = Get-VMHostNetworkAdapter -Server $conn | Select-Object VMHost, Name, 
-            Mac, IP, SubnetMask, @{N='Speed (Gbps)';E={[math]::Round($_.SpeedMb/1000,1)}}, FullDuplex, MTU, Connected
+    # 6. Adapters
+    Set-StatusMessage -Message "Collecting network adapters..." -Type Info
+    $data.Adapters = Get-VMHostNetworkAdapter -Server $script:Connection |
+        Select-Object VMHost, Name, Mac, IP, SubnetMask,
+            @{N='Speed (Gbps)';E={[math]::Round($_.SpeedMb/1000,1)}},
+            FullDuplex, MTU, Connected
 
-        # ─── Templates ──────────────────────────────────────────
-        Set-StatusMessage -Message "Collecting templates..." -Type Info
-        $data.Templates = Get-Template -Server $conn | Select-Object Name, 
-            @{N='OS';E={$_.Guest}},  # Using .Guest instead of .GuestId for readability
-            NumCpu, 
-            @{N='Memory (GB)';E={$_.MemoryGB}},
+    # 7. Templates
+    Set-StatusMessage -Message "Collecting VM templates..." -Type Info
+    $data.Templates = Get-Template -Server $script:Connection |
+        Select-Object Name,
+            @{N='OS';           E={$_.Guest}},
+            NumCpu,
+            @{N='Memory (GB)';  E={$_.MemoryGB}},
             @{N='Provisioned (GB)';E={[math]::Round($_.ProvisionedSpaceGB,1)}},
-            @{N='Used (GB)';E={[math]::Round($_.UsedSpaceGB,1)}},
+            @{N='Used (GB)';    E={[math]::Round($_.UsedSpaceGB,1)}},
             Version,
-            @{N='Folder';E={$_.Folder.Name}},
+            @{N='Folder';       E={$_.Folder.Name}},
             Notes,
             PersistentId
 
-        # ─── Port Groups ────────────────────────────────────────
-        Set-StatusMessage -Message "Collecting port groups..." -Type Info
-        $data.PortGroups = Get-VirtualPortGroup -Server $conn | Select-Object Name, VlanId, 
-            @{N='vSwitch';E={$_.VirtualSwitchName}},
-            @{N='Host';E={(Get-VMHost -Id $_.VirtualSwitch.VMHostId).Name}},
-            @{N='Security Policy';E={
-                "Promiscuous:$($_.SecurityPolicy.AllowPromiscuous), " +
-                "MAC:$($_.SecurityPolicy.MacChanges), " +
-                "Forged:$($_.SecurityPolicy.ForgedTransmits)"
+    # 8. Port Groups detail
+    Set-StatusMessage -Message "Collecting port group details..." -Type Info
+    $data.PortGroups = $portGroups |
+        Select-Object Name, VlanId,
+            @{N='vSwitch';         E={$_.VirtualSwitchName}},
+            @{N='Host';            E={(Get-VMHost -Id $_.VirtualSwitch.VMHostId).Name}},
+            @{N='Security Policy'; E={
+                "Promiscuous:$($_.SecurityPolicy.AllowPromiscuous)," +
+                " MAC:$($_.SecurityPolicy.MacChanges)," +
+                " Forged:$($_.SecurityPolicy.ForgedTransmits)"
             }},
-            @{N='Active Ports';E={($_.ExtensionData.Port | Where-Object {$_.Connected}).Count}}
-        
-        # ─── Set status message ─────────────────────────────────
-        Set-StatusMessage -Message "Data collection complete." -Type Success
+            @{N='Active Ports';    E={($_.ExtensionData.Port | Where-Object {$_.Connected}).Count}}
 
-        return $data
-    }
+    Set-StatusMessage -Message "Data collection complete." -Type Success
+    return $data
 }
 
 
-# ─────────────────────────  Data-to-UI binder  ───────────────────────────────
 function Update-NetworksWithData {
     <#
     .SYNOPSIS
-        Updates the UI with collected data including populating dropdowns.
-        Handles both bulk and individual networks.
+        Updates the entire UI after data-refresh.
+    .DESCRIPTION
+        - Fills the "Multiple Networks" class dropdown.
+        - Clears the single‐network textbox.
+        - Resets numeric inputs.
+        - Populates all four DataGridViews (Hosts, Adapters, Templates, Port Groups).
+    .PARAMETER Data
+        Hashtable from Get-NetworksData.
     #>
 
-    param([hashtable] $Data)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable] $Data
+    )
 
-    if (-not $Refs -or -not $Data) {
-        Write-Verbose "Refs or Data is null"
+    if (-not $script:Refs -or -not $Data) {
+        Write-Verbose "Refs or Data missing, skipping UI update."
         return
     }
 
-    Set-StatusMessage -Message "Updating UI with collected data..." -Type Info
-    $Refs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    # Refresh timestamp
+    $script:Refs['LastRefreshLabel'].Text = "Last refresh: $(Get-Date -Format 'HH:mm:ss tt')"
+    Set-StatusMessage -Message 'Updating UI with data...' -Type Info
 
-    # ─── Populate Class Dropdowns ───────────────────────────────
-    if ($Data.ClassMap) {
-        $classNames = $Data.ClassMap.Keys | Sort-Object
-        $Refs['cmbClasses'].Items.Clear()
-        $Refs['cmbMultClasses'].Items.Clear()
-        
-        foreach ($className in $classNames) {
-            $Refs['cmbClasses'].Items.Add($className)
-            $Refs['cmbMultClasses'].Items.Add($className)
-        }
+    # ─── Multiple Networks: Classes dropdown ────────────────────────
+    $cmbMult = $script:Refs['CmbMultClasses']
+    $cmbMult.Items.Clear()
+    foreach ($cls in ($Data.Classes | Sort-Object)) { $cmbMult.Items.Add($cls) | Out-Null }
+    if ($cmbMult.Items.Count -gt 0) { $cmbMult.SelectedIndex = 0 }
 
-        if ($classNames.Count -gt 0) {
-            $Refs['cmbClasses'].SelectedIndex = 0
-            $Refs['cmbMultClasses'].SelectedIndex = 0
-        }
-    }
-    
+    # ─── Single Network: clear textbox ────────────────────────────
+    $script:Refs['TxtNetwork'].Text = ''
 
-    # ─── Wire Class Selection Change Events ─────────────────────
-    $Refs['cmbClasses'].Add_SelectedIndexChanged({
-        param($sender, $e)
-        
-        $selectedClass = $sender.SelectedItem
-        if (-not $selectedClass -or -not $script:Refs.Data.ClassMap.ContainsKey($selectedClass)) { return }
-        
-        $studentNumbers = $script:Refs.Data.ClassMap[$selectedClass].Keys | Sort-Object { [int]$_ }
-        $cmbStudents = $script:Refs['cmbStudents']
-        $cmbStudents.Items.Clear()
-        
-        foreach ($studentNum in $studentNumbers) {
-            $cmbStudents.Items.Add("Student $studentNum")
-        }
-        
-        if ($studentNumbers.Count -gt 0) {
-            $cmbStudents.SelectedIndex = 0
-        }
-    })
+    # ─── Multiple Networks: reset numeric range ───────────────────
+    $script:Refs['InputStartNum'].Value = $script:Refs['InputStartNum'].Minimum
+    $script:Refs['InputEndNum'].Value   = $script:Refs['InputStartNum'].Minimum
 
+    foreach ($cls in ($Data.ClassStudentCount.Keys | Sort-Object)) { $cmbMult.Items.Add($cls) | Out-Null }
 
-    # ─── Update Network List When Student Changes ────────────────
-    $Refs['cmbStudents'].Add_SelectedIndexChanged({
-        param($sender, $e)
-        
-        $selectedClass = $script:Refs['cmbClasses'].SelectedItem
-        $selectedStudent = $sender.SelectedItem -replace 'Student ',''
-        
-        if (-not $selectedClass -or -not $selectedStudent) { return }
-        
-        # Get both the automatically created network and any additional ones
-        $baseNetwork = "${selectedClass}_S${selectedStudent}"
-        $allNetworks = @($baseNetwork)  # Start with the base network
-        
-        # Add any other networks that start with the student identifier
-        foreach ($net in $script:Refs.Data.AllNetworks) {
-            if ($net -ne $baseNetwork -and $net -like "${baseNetwork}_*") {
-                $allNetworks += $net
-            }
-        }
-        
-        $cmbStudentNetworks = $script:Refs['cmbStudentNetworks']
-        $cmbStudentNetworks.Items.Clear()
-        
-        foreach ($net in $allNetworks) {
-            $cmbStudentNetworks.Items.Add($net)
-        }
-        
-        if ($allNetworks.Count -gt 0) {
-            $cmbStudentNetworks.SelectedIndex = 0
-        }
-    })
-
-    # ─── Hosts Tab ──────────────────────────────────────────────
-    $grid = $Refs['HostsTable']
-    $grid.Rows.Clear()
-    $grid.Columns.Clear()
-
+    # ─── Hosts Table ──────────────────────────────────────────────
+    $grid = $script:Refs['HostsTable']
+    $grid.Rows.Clear(); $grid.Columns.Clear()
     if ($Data.HostInfo) {
-        $Data.HostInfo[0].PSObject.Properties.Name | ForEach-Object {
-            $grid.Columns.Add($_, $_) | Out-Null
+        $first = $Data.HostInfo[0]
+        foreach ($prop in $first.PSObject.Properties.Name) {
+            $grid.Columns.Add($prop, $prop) | Out-Null
         }
-
-        foreach ($info in $Data.HostInfo) {
-            $row = $grid.Rows.Add()
-            foreach ($prop in $info.PSObject.Properties.Name) {
-                $grid.Rows[$row].Cells[$prop].Value = $info.$prop
+        foreach ($rowObj in $Data.HostInfo) {
+            $r = $grid.Rows.Add()
+            foreach ($prop in $rowObj.PSObject.Properties.Name) {
+                $grid.Rows[$r].Cells[$prop].Value = $rowObj.$prop
             }
         }
-    }
-    else {
-        $grid.Columns.Add('Status', 'Status') | Out-Null
-        $grid.Rows.Add("No host data available") | Out-Null
+    } else {
+        $grid.Columns.Add('Status','Status') | Out-Null
+        $grid.Rows.Add('No host data available') | Out-Null
     }
 
-    # ─── Adapters Tab ───────────────────────────────────────────
-    $grid = $Refs['NicsTable']
-    $grid.Rows.Clear()
-    $grid.Columns.Clear()
-
+    # ─── Adapters Table ───────────────────────────────────────────
+    $grid = $script:Refs['NicsTable']
+    $grid.Rows.Clear(); $grid.Columns.Clear()
     if ($Data.Adapters) {
-        $Data.Adapters[0].PSObject.Properties.Name | ForEach-Object {
-            $grid.Columns.Add($_, $_) | Out-Null
+        $first = $Data.Adapters[0]
+        foreach ($prop in $first.PSObject.Properties.Name) {
+            $grid.Columns.Add($prop, $prop) | Out-Null
         }
-
-        foreach ($nic in $Data.Adapters) {
-            $row = $grid.Rows.Add()
-            foreach ($prop in $nic.PSObject.Properties.Name) {
-                $grid.Rows[$row].Cells[$prop].Value = $nic.$prop
+        foreach ($rowObj in $Data.Adapters) {
+            $r = $grid.Rows.Add()
+            foreach ($prop in $rowObj.PSObject.Properties.Name) {
+                $grid.Rows[$r].Cells[$prop].Value = $rowObj.$prop
             }
-            
-            if (-not $nic.Connected) {
-                $grid.Rows[$row].DefaultCellStyle.ForeColor = 'Red'
+            if (-not $rowObj.Connected) {
+                $grid.Rows[$r].DefaultCellStyle.ForeColor = 'Red'
             }
         }
-    }
-    else {
-        $grid.Columns.Add('Status', 'Status') | Out-Null
-        $grid.Rows.Add("No adapter data available") | Out-Null
+    } else {
+        $grid.Columns.Add('Status','Status') | Out-Null
+        $grid.Rows.Add('No adapter data available') | Out-Null
     }
 
-    # ─── Templates Tab ──────────────────────────────────────────
-    $grid = $Refs['TemplatesTable']
-    $grid.Rows.Clear()
-    $grid.Columns.Clear()
-
+    # ─── Templates Table ──────────────────────────────────────────
+    $grid = $script:Refs['TemplatesTable']
+    $grid.Rows.Clear(); $grid.Columns.Clear()
     if ($Data.Templates) {
-        $Data.Templates[0].PSObject.Properties.Name | ForEach-Object {
-            $grid.Columns.Add($_, $_) | Out-Null
+        $first = $Data.Templates[0]
+        foreach ($prop in $first.PSObject.Properties.Name) {
+            $grid.Columns.Add($prop, $prop) | Out-Null
         }
-
-        foreach ($tpl in $Data.Templates) {
-            $row = $grid.Rows.Add()
-            foreach ($prop in $tpl.PSObject.Properties.Name) {
-                $grid.Rows[$row].Cells[$prop].Value = $tpl.$prop
+        foreach ($rowObj in $Data.Templates) {
+            $r = $grid.Rows.Add()
+            foreach ($prop in $rowObj.PSObject.Properties.Name) {
+                $grid.Rows[$r].Cells[$prop].Value = $rowObj.$prop
             }
         }
-    }
-    else {
-        $grid.Columns.Add('Status', 'Status') | Out-Null
-        $grid.Rows.Add("No template data available") | Out-Null
+    } else {
+        $grid.Columns.Add('Status','Status') | Out-Null
+        $grid.Rows.Add('No template data available') | Out-Null
     }
 
-    # ─── Port Groups Tab ────────────────────────────────────────
-    $grid = $Refs['PortGroupsTable']
-    $grid.Rows.Clear()
-    $grid.Columns.Clear()
-
+    # ─── Port Groups Table ────────────────────────────────────────
+    $grid = $script:Refs['PortGroupsTable']
+    $grid.Rows.Clear(); $grid.Columns.Clear()
     if ($Data.PortGroups) {
-        $Data.PortGroups[0].PSObject.Properties.Name | ForEach-Object {
-            $grid.Columns.Add($_, $_) | Out-Null
+        $first = $Data.PortGroups[0]
+        foreach ($prop in $first.PSObject.Properties.Name) {
+            $grid.Columns.Add($prop, $prop) | Out-Null
         }
-
-        foreach ($pg in $Data.PortGroups) {
-            $row = $grid.Rows.Add()
-            foreach ($prop in $pg.PSObject.Properties.Name) {
-                $grid.Rows[$row].Cells[$prop].Value = $pg.$prop
+        foreach ($rowObj in $Data.PortGroups) {
+            $r = $grid.Rows.Add()
+            foreach ($prop in $rowObj.PSObject.Properties.Name) {
+                $grid.Rows[$r].Cells[$prop].Value = $rowObj.$prop
             }
         }
-    }
-    else {
-        $grid.Columns.Add('Status', 'Status') | Out-Null
-        $grid.Rows.Add("No port group data available") | Out-Null
+    } else {
+        $grid.Columns.Add('Status','Status') | Out-Null
+        $grid.Rows.Add('No port group data available') | Out-Null
     }
 
-    Set-StatusMessage -Message "UI updated with data." -Type Success
-    $Refs.ContentPanel.ScrollControlIntoView($Refs.ContentPanel.Controls[0])
-    $Refs.ContentPanel.PerformLayout()
+    Set-StatusMessage -Message 'UI updated with data.' -Type Success
 }
+
 
 
 function Wire-UIEvents {
     <#
     .SYNOPSIS
-        Wires up UI events for the networks view.
+        Hooks up all button‐click handlers based on the updated single-network UI.
     #>
 
     if (-not $script:Refs) {
-        Write-Error "Refs is null"
-        return
+        Write-Error "Refs is null"; return
     }
 
-    # Refresh Button Click
-    $script:Refs.RefreshButton.Add_Click({
+
+    # ── Refresh ───────────────────────────────────────────────────────
+    $script:Refs['RefreshButton'].Add_Click({
         . $PSScriptRoot\NetworksView.ps1
         Show-NetworksView -ContentPanel $script:Refs.ContentPanel
         Set-StatusMessage -Message "Data refreshed." -Type Success
     })
 
-    # Delete Single Network Button Click
-    $script:Refs.BtnDelNet.Add_Click({
-        $selectedNetwork = $script:Refs.CmbStudentNetworks.SelectedItem
-        if (-not $selectedNetwork) {
-            Set-StatusMessage -Message "Please select a network to delete." -Type Warning
-            return
-        }
 
-        $result = [System.Windows.Forms.MessageBox]::Show(
-            "Are you sure you want to delete the network '$selectedNetwork' and its associated switch?",
-            "Confirm Delete",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
+    # ── Add Single Network ───────────────────────────────────────────
+    $script:Refs['BtnAddNet'].Add_Click({
+        param($sender,$e)
 
-        if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Message "Deleting network '$selectedNetwork'..." -Type Info
-            try {
-                Get-VirtualPortGroup -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualPortGroup -Confirm:$false
-                Get-VirtualSwitch -Name $selectedNetwork -ErrorAction Stop | Remove-VirtualSwitch -Confirm:$false
-                Set-StatusMessage -Message "Network '$selectedNetwork' deleted successfully." -Type Success
+        . $PSScriptRoot\NetworksView.ps1
 
-                # Refresh the network list
-                $selectedClass = $script:Refs.CmbClasses.SelectedItem
-                $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ',''
-                if ($selectedClass -and $selectedStudent) {
-                    $script:Refs.CmbStudents_SelectedIndexChanged.Invoke($script:Refs.CmbStudents, $null)
-                }
-            }
-            catch {
-                Set-StatusMessage -Message "Failed to delete network: $_" -Type Error
-            }
-        } 
-        else {
-            Set-StatusMessage -Message "Delete cancelled." -Type Info
-        }
-    })
-
-    # Add Single Network Button Click
-    $script:Refs.BtnAddNet.Add_Click({
-        $selectedClass = $script:Refs.CmbClasses.SelectedItem
-        $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ',''
-        
-        $newNetworkName = $script:Refs.TxtNewNetwork.Text.Trim()
-
-        if ([string]::IsNullOrWhiteSpace($newNetworkName) -and $selectedClass -and $selectedStudent) {
-            $newNetworkName = "${selectedClass}_S${selectedStudent}"
-            $script:Refs.TxtNewNetwork.Text = $newNetworkName
-        }
-
-        if ([string]::IsNullOrWhiteSpace($newNetworkName)) {
+        $name = $script:Refs['TxtNetwork'].Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
             Set-StatusMessage -Message "Please enter a network name." -Type Warning
             return
         }
 
-        $result = [System.Windows.Forms.MessageBox]::Show(
-            "Are you sure you want to add the network '$newNetworkName'?",
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            "Are you sure you want to add network '$name'?",
             "Confirm Add",
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
-
-        if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Message "Adding network '$newNetworkName'..." -Type Info
-            try {
-                $vmHost = Get-VMHost
-                $vSwitch = New-VirtualSwitch -Name $newNetworkName -VMHost $vmHost -ErrorAction Stop
-                $vPortGroup = New-VirtualPortGroup -Name $newNetworkName -VirtualSwitch $vSwitch -ErrorAction Stop
-                Set-StatusMessage -Message "Network '$newNetworkName' added successfully." -Type Success
-
-                if ($selectedClass -and $selectedStudent) {
-                    $script:Refs.CmbStudents_SelectedIndexChanged.Invoke($script:Refs.CmbStudents, $null)
-                }
-
-                $script:Refs.TxtNewNetwork.Text = ''
-            }
-            catch {
-                Set-StatusMessage -Message "Failed to add network: $_" -Type Error
-            }
-        } 
-        else {
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
             Set-StatusMessage -Message "Add cancelled." -Type Info
+            return
+        }
+
+        Set-StatusMessage -Message "Adding network '$name'..." -Type Info
+        try {
+            addNetwork -networkName $name
+            Set-StatusMessage -Message "Network '$name' added." -Type Success
+        } catch {
+            Set-StatusMessage -Message "Failed to add network: $_" -Type Error
+        }
+
+        # Refresh data/UI
+        $data = Get-NetworksData
+        if ($data) {
+            $script:Refs.Data = $data
+            Update-NetworksWithData -Data $data
+            Wire-UIEvents
         }
     })
 
-    # Add Multiple Networks Button Click
-    $script:Refs.BtnAddMult.Add_Click({
-        $selectedClass = $script:Refs.CmbMultClasses.SelectedItem
-        $startNum = [int]$script:Refs.InputStartNum.Value
-        $endNum = [int]$script:Refs.InputEndNum.Value
 
-        if (-not $selectedClass) {
-            Set-StatusMessage -Message "Please select a class." -Type Warning
+    # ── Delete Single Network ────────────────────────────────────────
+    $script:Refs['BtnDelNet'].Add_Click({
+        param($sender,$e)
+
+        . $PSScriptRoot\NetworksView.ps1
+
+        $name = $script:Refs['TxtNetwork'].Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            Set-StatusMessage -Message "Please enter a network name to delete." -Type Warning
             return
         }
 
-        if ($startNum -gt $endNum) {
-            Set-StatusMessage -Message "Start number must be less than or equal to end number." -Type Warning
-            return
-        }
-
-        $count = ($endNum - $startNum) + 1
-        $msg = "This will create $count networks from ${selectedClass}_S$($startNum.ToString('00')) to ${selectedClass}_S$($endNum.ToString('00')). Continue?"
-        
-        $result = [System.Windows.Forms.MessageBox]::Show(
-            $msg,
-            "Confirm Add Multiple",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
-
-        if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Message "Adding $count networks..." -Type Info
-            $vmHost = Get-VMHost
-            $successCount = 0
-
-            for ($i = $startNum; $i -le $endNum; $i++) {
-                $networkName = "${selectedClass}_S$($i.ToString('00'))"
-                try {
-                    if (-not (Get-VirtualSwitch -Name $networkName -ErrorAction SilentlyContinue)) {
-                        $vSwitch = New-VirtualSwitch -Name $networkName -VMHost $vmHost -ErrorAction Stop
-                        $vPortGroup = New-VirtualPortGroup -Name $networkName -VirtualSwitch $vSwitch -ErrorAction Stop
-                        $successCount++
-                    }
-                }
-                catch {
-                    Write-Warning "Failed to create network '$networkName': $_"
-                }
-            }
-
-            if ($successCount -gt 0) {
-                Set-StatusMessage -Message "Successfully added $successCount networks." -Type Success
-            } 
-            else {
-                Set-StatusMessage -Message "No networks were added (they may already exist)." -Type Warning
-            }
-        } 
-        else {
-            Set-StatusMessage -Message "Add cancelled." -Type Info
-        }
-    })
-
-    # Delete Multiple Networks Button Click
-    $script:Refs.BtnDelMult.Add_Click({
-        $selectedClass = $script:Refs.CmbMultClasses.SelectedItem
-        $startNum = [int]$script:Refs.InputStartNum.Value
-        $endNum = [int]$script:Refs.InputEndNum.Value
-
-        if (-not $selectedClass) {
-            Set-StatusMessage -Message "Please select a class." -Type Warning
-            return
-        }
-
-        if ($startNum -gt $endNum) {
-            Set-StatusMessage -Message "Start number must be less than or equal to end number." -Type Warning
-            return
-        }
-
-        $count = ($endNum - $startNum) + 1
-        $msg = "This will delete $count networks from ${selectedClass}_S$($startNum.ToString('00')) to ${selectedClass}_S$($endNum.ToString('00')). Continue?"
-        
-        $result = [System.Windows.Forms.MessageBox]::Show(
-            $msg,
-            "Confirm Delete Multiple",
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            "Are you sure you want to delete network '$name'?",
+            "Confirm Delete",
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         )
-
-        if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Set-StatusMessage -Message "Deleting $count networks..." -Type Info
-            $deletedCount = 0
-
-            for ($i = $startNum; $i -le $endNum; $i++) {
-                $networkName = "${selectedClass}_S$($i.ToString('00'))"
-                try {
-                    Get-VirtualPortGroup -Name $networkName -ErrorAction Stop | Remove-VirtualPortGroup -Confirm:$false
-                    Get-VirtualSwitch -Name $networkName -ErrorAction Stop | Remove-VirtualSwitch -Confirm:$false
-                    $deletedCount++
-                }
-                catch {
-                    Write-Warning "Failed to delete network '$networkName': $_"
-                }
-            }
-
-            if ($deletedCount -gt 0) {
-                Set-StatusMessage -Message "Successfully deleted $deletedCount networks." -Type Success
-            } 
-            else {
-                Set-StatusMessage -Message "No networks were deleted (they may not exist)." -Type Warning
-            }
-        } 
-        else {
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
             Set-StatusMessage -Message "Delete cancelled." -Type Info
-        }
-    })
-
-    # Class Dropdown Selection Handler — Populates Students
-    $script:Refs.CmbClasses.Add_SelectedIndexChanged({
-        $selectedClass = $script:Refs.CmbClasses.SelectedItem
-        $script:Refs.CmbStudents.Items.Clear()
-        $script:Refs.CmbStudentNetworks.Items.Clear()
-        $script:Refs.TxtNewNetwork.Text = ''
-
-        if ([string]::IsNullOrWhiteSpace($selectedClass)) {
             return
         }
 
+        Set-StatusMessage -Message "Deleting network '$name'..." -Type Info
         try {
-            $students = Get-StudentsForClass -Class $selectedClass
-
-            if ($students -and $students.Count -gt 0) {
-                foreach ($student in $students) {
-                    $script:Refs.CmbStudents.Items.Add($student)
-                }
-            } else {
-                Set-StatusMessage -Message "No students found for class '$selectedClass'" -Type Warning
-            }
+            deleteNetwork -networkName $name
+            Set-StatusMessage -Message "Network '$name' deleted." -Type Success
         } catch {
-            Set-StatusMessage -Message "Error loading students: $_" -Type Error
+            Set-StatusMessage -Message "Failed to delete network: $_" -Type Error
+        }
+
+        # Refresh data/UI
+        $data = Get-NetworksData
+        if ($data) {
+            $script:Refs.Data = $data
+            Update-NetworksWithData -Data $data
+            Wire-UIEvents
         }
     })
 
-    # Student Dropdown Selection Handler — Populates Network List
-    $script:Refs.CmbStudents.Add_SelectedIndexChanged({
-        $selectedClass = $script:Refs.CmbClasses.SelectedItem
-        $selectedStudent = $script:Refs.CmbStudents.SelectedItem -replace 'Student ', ''
 
-        if ($selectedClass -and $selectedStudent) {
-            $networkName = "${selectedClass}_S$selectedStudent"
-            $script:Refs.CmbStudentNetworks.Items.Clear()
-            $script:Refs.CmbStudentNetworks.Items.Add($networkName)
+    # ── Class selector for Multiple Networks ─────────────────────────────────────
+    $script:Refs['CmbMultClasses'].Add_SelectedIndexChanged({
+        param($sender, $e)
+
+        . $PSScriptRoot\NetworksView.ps1
+
+        $class = $sender.SelectedItem
+        if ($class) {
+            [int] $studentCount = $script:Refs.Data.ClassStudentCount[$class]
+            
+            # Update the NumericUpDown controls
+            $maxStudents = [math]::Max(1, $studentCount)  # Ensure at least 1
+            $script:Refs['InputStartNum'].Maximum = $maxStudents
+            $script:Refs['InputEndNum'].Maximum = $maxStudents
+            $script:Refs['InputStartNum'].Value = 1
+            $script:Refs['InputEndNum'].Value = $maxStudents
+            
+            # Update status message
+            Set-StatusMessage -Message "Selected class '$($class)' with $studentCount students" -Type Info
+        } else {
+            # Reset to defaults if no valid selection
+            $script:Refs['InputStartNum'].Maximum = 1
+            $script:Refs['InputEndNum'].Maximum = 1
+            $script:Refs['InputStartNum'].Value = 1
+            $script:Refs['InputEndNum'].Value = 1
         }
     })
+
+
+     # ── Add Multiple Networks ────────────────────────────────────────
+    $script:Refs['BtnAddMult'].Add_Click({
+        param($sender,$e)
+
+        . $PSScriptRoot\NetworksView.ps1
+
+        $class    = $script:Refs['CmbMultClasses'].SelectedItem
+        $startNum = [int]$script:Refs['InputStartNum'].Value
+        $endNum   = [int]$script:Refs['InputEndNum'].Value
+
+        if (-not $class) {
+            Set-StatusMessage -Message "Please select a class." -Type Warning; return
+        }
+        if ($startNum -gt $endNum) {
+            Set-StatusMessage -Message "Start must be ≤ end." -Type Warning; return
+        }
+        
+        # Get the maximum allowed student number for this class
+        $maxStudent = $script:Refs['InputEndNum'].Maximum
+        if ($endNum -gt $maxStudent) {
+            Set-StatusMessage -Message "End student cannot exceed $maxStudent for this class." -Type Warning; return
+        }
+
+        $count = ($endNum - $startNum) + 1
+        $msg   = "Create $count networks from ${class}_S$('{0:00}' -f $startNum) to ${class}_S$('{0:00}' -f $endNum)?"
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            $msg, "Confirm Add Multiple",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question
+        )
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Set-StatusMessage -Message "Add cancelled." -Type Info; return
+        }
+
+        Set-StatusMessage -Message "Adding $count networks..." -Type Info
+        try {
+            addNetworks -courseNumber $class -startStudents $startNum -endStudents $endNum
+            Set-StatusMessage -Message "Added $count networks." -Type Success
+        } catch {
+            Set-StatusMessage -Message "Failed to add networks: $_" -Type Error
+        }
+        
+        # Refresh the data to update the maximum student numbers
+        $data = Get-NetworksData
+        if ($data) {
+            $script:Refs.Data = $data
+            Update-NetworksWithData -Data $data
+            Wire-UIEvents
+        }
+    })
+
+
+    # ── Delete Multiple Networks ─────────────────────────────────────
+    $script:Refs['BtnDelMult'].Add_Click({
+        param($sender,$e)
+
+        . $PSScriptRoot\NetworksView.ps1
+
+        $class    = $script:Refs['CmbMultClasses'].SelectedItem
+        $startNum = [int]$script:Refs['InputStartNum'].Value
+        $endNum   = [int]$script:Refs['InputEndNum'].Value
+
+        if (-not $class) {
+            Set-StatusMessage -Message "Please select a class." -Type Warning; return
+        }
+        if ($startNum -gt $endNum) {
+            Set-StatusMessage -Message "Start must be ≤ end." -Type Warning; return
+        }
+
+        $count = ($endNum - $startNum) + 1
+        $msg   = "Delete $count networks from ${class}_S$('{0:00}' -f $startNum) to ${class}_S$('{0:00}' -f $endNum)?"
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            $msg, "Confirm Delete Multiple",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Set-StatusMessage -Message "Delete cancelled." -Type Info; return
+        }
+
+        Set-StatusMessage -Message "Deleting $count networks..." -Type Info
+        try {
+            deleteNetworks -courseNumber $class -startStudents $startNum -endStudents $endNum
+            Set-StatusMessage -Message "Deleted $count networks." -Type Success
+        } catch {
+            Set-StatusMessage -Message "Failed to delete networks: $_" -Type Error
+        }
+    })
+
 }
+
+
+
+
+function deleteNetwork {
+    param ([string]$networkName)
+    # remove the port group
+    Get-VirtualPortGroup -VMHost (Get-VMHost) -Name $networkName | Remove-VirtualPortGroup  -Confirm:$false
+    # remove the switch
+    Get-VirtualSwitch -Name $networkName | Remove-VirtualSwitch -Confirm:$false
+}
+
+
+function deleteNetworks {
+    param(
+        [int]$startStudents,
+        [int]$endStudents,
+        [string]$courseNumber
+    )
+    BEGIN{}
+    PROCESS{
+        # Get the VM host name
+        $vmHost = Get-VMHost 
+            
+        # loop through each student
+        for ($i=$startStudents; $i -le $endStudents; $i++) {
+            # set the adapter name
+            $adapterName = $courseNumber+'_S'+$i
+            # remove the port group
+            Get-VirtualPortGroup -VMHost $vmHost -Name $adapterName | Remove-VirtualPortGroup  -Confirm:$false
+            # remove the switch
+            Get-VirtualSwitch -Name $adapterName | Remove-VirtualSwitch -Confirm:$false
+        }
+    }
+    END{}
+}
+
+
+function addNetwork {
+    param (
+        [string]$networkName
+    )
+     # Get the VM host name
+    $vmHost = Get-VMHost 
+    # create the virtual switch for this user
+    $vSwitch = New-VirtualSwitch -Name $networkName -VMHost $vmHost
+    # create the virtual port group for this user
+    $vPortGroup = New-VirtualPortGroup -Name $networkName -VirtualSwitch $vSwitch 
+}
+
+
+function addNetworks {
+    param(
+        [string]$courseNumber,
+        [int]$startStudents,
+        [int]$endStudents
+    )
+    BEGIN{}
+    PROCESS{
+        # Get the VM host name
+        $vmHost = Get-VMHost 
+
+        # loop through each student
+        for ($i=$startStudents; $i -le $endStudents; $i++) {
+            $adapterName=$courseNumber+"_S"+$i
+
+            if (Get-VirtualSwitch -Name $adapterName 2> $null) {
+                Write-Host 'adapter exists'
+            } else {
+                # create the virtual switch for this user
+                $vSwitch = New-VirtualSwitch -Name $adapterName -VMHost $vmHost
+                # create the virtual port group for this user
+                $vPortGroup = New-VirtualPortGroup -Name $adapterName -VirtualSwitch $vSwitch 
+            } 
+        }
+    }
+    END{}
+}
+
