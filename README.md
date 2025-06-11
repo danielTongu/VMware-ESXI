@@ -12,8 +12,10 @@ VMware-ESXI/
 ├── Images/                    # UI assets
 │   ├── login.png              # Login dialog background
 │   └── ... 
-├── Views/                     # PowerShell WinForms UI views
+├── Controllers/
 │   ├── MainView.ps1           # Shell: navigation menu + content panel
+│   └── ... 
+├── Views/                     # PowerShell WinForms UI views
 │   ├── LoginView.ps1          # Login dialog
 │   ├── DashboardView.ps1      # Host, VM, and network summary stats
 │   ├── ClassesView.ps1        # UI for managing class VMs
@@ -93,7 +95,7 @@ cd VMware-ESXI
 
 1. Create `Views/YourFeatureView.ps1`.
 2. Export a `Show-YourFeatureView -ContentPanel $panel` function.
-3. Wire it into `MainView.ps1` navigation buttons and `Load-ViewIntoPanel` command list.
+3. Wire it into `Controllers/MainView.ps1` navigation buttons and `Load-ViewIntoPanel` command list.
 
 ---
 
