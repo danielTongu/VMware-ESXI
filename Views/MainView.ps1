@@ -172,7 +172,13 @@ function New-AppWindow {
             $script:ContentPanel.Controls.Clear()
             $script:ContentPanel.BackColor = $script:Theme.PrimaryDark
         } else {
-            . "$scriptDir\LoginView.ps1"
+            $loginPath = Join-Path $PSScriptRoot 'LoginView.ps1'
+            if (-not (Test-Path $loginPath)) {
+                Write-Error "Login view script not found: $loginPath"
+                return
+            }
+            
+            . $loginPath # Load the login view script
 
             if (Show-LoginView) {
                 $this.Text = ' Logout'
@@ -205,6 +211,11 @@ function New-AppWindow {
             }
         }
     })
+
+    return $script:Form
+    # The main application window is now ready to be shown.
+    # You can call Show-AppWindow to display it.
+    # Example: Show-AppWindow
 }
 
 function Load-ViewIntoPanel {
