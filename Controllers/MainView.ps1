@@ -172,7 +172,13 @@ function New-AppWindow {
             $script:ContentPanel.Controls.Clear()
             $script:ContentPanel.BackColor = $script:Theme.PrimaryDark
         } else {
-            . "$scriptDir\LoginView.ps1"
+
+            $loginPath       = Join-Path $PSScriptRoot '..\Views\LoginView.ps1'
+            if (-not (Test-Path $loginPath)) {
+                throw "Login view script not found: $loginPath"
+            }
+
+            . $loginPath # Load the login view script
 
             if (Show-LoginView) {
                 $this.Text = ' Logout'
