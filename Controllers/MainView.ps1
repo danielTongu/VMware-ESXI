@@ -142,7 +142,7 @@ function New-AppWindow {
     $script:ContentPanel.Padding = [System.Windows.Forms.Padding]::Empty
     $splitContainer.Panel2.Controls.Add($script:ContentPanel)
 
-    $scriptDir = $PSScriptRoot
+    $scriptDir = "$PSScriptRoot\..\Views"
     $script:DashboardButton = New-NavButton -Text 'Dashboard' -ScriptPath "$scriptDir\DashboardView.ps1" -TargetPanel $script:ContentPanel
     $script:ClassesButton = New-NavButton -Text 'Class Manager' -ScriptPath "$scriptDir\ClassesView.ps1" -TargetPanel $script:ContentPanel
     $script:VMsButton = New-NavButton -Text 'Virtual Machines' -ScriptPath "$scriptDir\VMsView.ps1" -TargetPanel $script:ContentPanel
