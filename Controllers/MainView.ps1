@@ -205,6 +205,11 @@ function New-AppWindow {
             }
         }
     })
+
+    return $script:Form
+    # The form is stored in $script:Form for global access
+    # The content panel is stored in $script:ContentPanel for loading views
+    # The sidebar navigation buttons are stored in $script:<ButtonName> for global access
 }
 
 function Load-ViewIntoPanel {
