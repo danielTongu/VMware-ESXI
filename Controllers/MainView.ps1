@@ -179,7 +179,7 @@ function New-AppWindow {
             }
 
             . $loginPath # Load the login view script
-
+            
             if (Show-LoginView) {
                 $this.Text = ' Logout'
                 $this.FlatAppearance.BorderColor = $script:Theme.Error
