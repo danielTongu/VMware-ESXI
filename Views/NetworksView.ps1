@@ -116,9 +116,9 @@ function New-NetworksLayout {
     $manageFlow.BackColor = $script:Theme.White
     $manageLayout.Controls.Add($manageFlow,0,1)
 
-    #── Left Panel: Add Single Network ───────────────────────────────────────────
+    #── Left Panel: Add Add Network to the Server ───────────────────────────────────────────
     $grNetAdd = New-Object System.Windows.Forms.GroupBox
-    $grNetAdd.Text = 'Single Network'
+    $grNetAdd.Text = 'Add Network to the Server'
     $grNetAdd.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $grNetAdd.Margin = New-Object System.Windows.Forms.Padding(10)
     $grNetAdd.Padding = New-Object System.Windows.Forms.Padding(10)
@@ -171,9 +171,9 @@ function New-NetworksLayout {
     $grNetAddLayout.Controls.Add($btnAddNet, 2, 1)
     $refs['BtnAddNet'] = $btnAddNet
     
-    #── Right Panel: Multiple Networks ────────────────────────────────────
+    #── Right Panel: Add Networks for Singular or Multiple Students ────────────────────────────────────
     $grMult = New-Object System.Windows.Forms.GroupBox
-    $grMult.Text = 'Multiple Networks'
+    $grMult.Text = 'Add Networks for Singular or Multiple Students'
     $grMult.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $grMult.Margin = New-Object System.Windows.Forms.Padding(10)
     $grMult.Padding = New-Object System.Windows.Forms.Padding(10)
@@ -407,14 +407,12 @@ function Set-StatusMessage {
         [ValidateSet('Success','Warning','Error','Info')][string]$Type = 'Info'
     )
     
-    if ($script:Refs -and $script:Refs.ContainsKey('StatusLabel')) {
-        $script:Refs.StatusLabel.Text = $Message
-        $script:Refs.StatusLabel.ForeColor = switch ($Type) {
-            'Success' { $script:Theme.Success }
-            'Warning' { $script:Theme.Warning }
-            'Error'   { $script:Theme.Error }
-            default   { $script:Theme.PrimaryDarker }
-        }
+    $script:Refs.StatusLabel.Text = $Message
+    $script:Refs.StatusLabel.ForeColor = switch ($Type) {
+        'Success' { $script:Theme.Success }
+        'Warning' { $script:Theme.Warning }
+        'Error'   { $script:Theme.Error }
+        default   { $script:Theme.PrimaryDarker }
     }
 
     [System.Windows.Forms.Application]::DoEvents()

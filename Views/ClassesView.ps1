@@ -436,7 +436,7 @@ function New-ClassManagerLayout {
 
     $txtServerName = New-Object System.Windows.Forms.TextBox
     $txtServerName.Name = 'ServerName'
-    $txtServerName.Text = $script:Server
+    $txtServerName.Text = ''
     $txtServerName.Font = New-Object System.Drawing.Font('Segoe UI', 9)
     $txtServerName.Dock = 'Fill'
     $txtServerName.Width = 200
@@ -1335,13 +1335,6 @@ function New-CourseVMs {
     BEGIN { }
     PROCESS {
 
-        # Believe these aren't necessary
-
-        # import common functions
-        # Import-Module $HOME'\Google Drive\VMware Scripts\VmFunctions.psm1'
-        # Connect to the server
-        # ConnectTo-VMServer
-
         # Get the VM host
         $vmHost = Get-VMHost 2> $null
 
@@ -1351,7 +1344,7 @@ function New-CourseVMs {
         $normalizedPortGroups = $availablePortGroups | ForEach-Object { $_.Trim().ToLower() }
 
         # Print the available Port Groups
-        Write-Host "Available Port Groups on host: $($availablePortGroups -join ', ')"
+        #Write-Host "Available Port Groups on host: $($availablePortGroups -join ', ')"
         
         # Exit early for testing
         # return
@@ -1362,8 +1355,8 @@ function New-CourseVMs {
         # Get the class folder and check if the folder doesn't exist
         $classFolder = Get-Folder -Name $courseInfo.classFolder -ErrorAction SilentlyContinue
         if (-not $classFolder) {
-            # Print statement
-            Write-Host "Class Folder: $($courseInfo.classFolder) doesn't exist. Will begin creating it now..."
+            # Update Status Message
+            Set-StatusMessage -Message "Class Folder: $($courseInfo.classFolder) doesn't exist. Will begin creating it now..." -Type 'Success' 
             # Create new folder
             $classFolder = New-Folder -Name $courseInfo.classFolder -Location $classesRoot 2> $null
             # Check now if the folder (we just created) doesn't exists
@@ -1372,8 +1365,8 @@ function New-CourseVMs {
             }
         # If this point is reached then it already exists
         } else {
-            # Print statement
-            Write-Host "Class Folder: $($courseInfo.classFolder) already exists."
+            # Update Status Message
+            Set-StatusMessage -Message "Class Folder: $($courseInfo.classFolder) already exists." -Type 'Success' 
         }
 
         # Loop through each student in the array of names
@@ -1384,8 +1377,9 @@ function New-CourseVMs {
             # Try to get folder and check if student folder doesn't exists
             $studentFolder = Get-Folder -Name $userAccount 2> $null
             if (-not $studentFolder) {
-                # Print statement
-                Write-Host "Creating folder for $userAccount"
+                # Update Status Message
+                Set-StatusMessage -Message "Creating folder for $userAccount" -Type 'Success' 
+        
                 # Create new folder
                 $studentFolder = New-Folder -Name $userAccount -Location $classFolder 2> $null
 
@@ -1398,16 +1392,16 @@ function New-CourseVMs {
 
             # If this point was reached then the student folder already exists
             } else {
-                # Print statement
-                Write-Host "Folder for $userAccount exists"
+                # Update Status Message
+                Set-StatusMessage -Message "Folder for $userAccount exists" -Type 'Success' 
             }
 
             # Loop over every VM that was declared to create each VM for the student
             foreach ($server in $courseInfo.servers) {
                 # Set up how each student VM will be referenced with the VM name appended
-                $studentVMName = "$student" + "_" + "$($server.serverName)"
-                # Print statement
-                Write-Host "Building VM $studentVMName"
+                $studentVMName = $courseInfo.classFolder + "_" + $student.ToLower() + "_" + $($server.serverName)
+                # Update Status Message
+                Set-StatusMessage -Message "Building VM $studentVMName" -Type 'Success' 
                 
                 # Try catch to check creation of VM
                 try {
@@ -1416,15 +1410,14 @@ function New-CourseVMs {
                     } else {
                         New-VM -Name $studentVMName -Datastore $courseInfo.dataStore -VMHost $vmHost -Template $server.template -Location $studentFolder -ErrorAction Stop
                     }
-                    # Print statement
-                    Write-Host "Success in creating $studentVMName"
+                    # Update Status Message
+                    Set-StatusMessage -Message "Success in creating $studentVMName" -Type 'Success'
                 
                     # Allow time for the VM inventory to update
                     Start-Sleep -Seconds 10
                 } catch {
-                    # Warning Statements
-                    Write-Warning "Failed to create $studentVMName"
-                    Write-Warning $_.Exception.Message
+                    # Update Status Message
+                    Set-StatusMessage -Message "Failed to create $studentVMName" -Type 'Error'
                     continue
                 }
 
@@ -1442,19 +1435,20 @@ function New-CourseVMs {
                     if ($normalizedPortGroups -contains $normalizedAdapterName) {
                         # Try catch to check connection between VM and Port
                         try {
-                            # Print statement
-                            Write-Host "Connecting $networkAdapterName on $studentVMName to port group $adapterName"
+                            # Update Status Message
+                            Set-StatusMessage -Message "Connecting $networkAdapterName on $studentVMName to port group $adapterName" -Type 'Success'
+                
                             Get-VM -Name $studentVMName -Location $studentFolder |
                                 Get-NetworkAdapter -Name $networkAdapterName |
                                 Set-NetworkAdapter -PortGroup $adapterName -Confirm:$false -ErrorAction Stop
                         } catch {
-                            # Warning statements
-                            Write-Warning "Failed to connect $networkAdapterName on $studentVMName to port group $adapterName"
-                            Write-Warning $_.Exception.Message
+                            # Update Status Message
+                            Set-StatusMessage -Message "Failed to connect $networkAdapterName on $studentVMName to port group $adapterName" -Type 'Error'
                         }
                     # If this point was reached then the Port Group doesn't exist on the host.
                     } else {
-                        Write-Warning "Port group $adapterName doesn't exist on host. Will skip $networkAdapterName for $studentVMName"
+                        # Update Status Message
+                        Set-StatusMessage -Message "Port group $adapterName doesn't exist on host. Will skip $networkAdapterName for $studentVMName" -Type 'Success'
                     }
 
                     # Increment the counter
@@ -1463,18 +1457,19 @@ function New-CourseVMs {
 
                 # Try catch to check powering on the VM
                 try {
-                    # Print statement
-                    Write-Host "Powering on $studentVMName"
+
+                    # Update Status Message
+                    Set-StatusMessage -Message "Powering on $studentVMName" -Type 'Success'
+                   
                     Get-VM -Name $studentVMName -Location $studentFolder | Start-VM -Confirm:$false -ErrorAction Stop
                 } catch {
-                    # Warning statements
-                    Write-Warning "Failed to power on VM $studentVMName"
-                    Write-Warning $_.Exception.Message
+                    # Update Status Message
+                    Set-StatusMessage -Message "Failed to power on VM $studentVMName" -Type 'Error'
                 }
             }
 
-            # Final print statement
-            Write-Host "Finished processing student: $student`n"
+            # Update Status Message
+            Set-StatusMessage -Message "Finished processing student: $student" -Type 'Success'
         }
     }
     END { }
